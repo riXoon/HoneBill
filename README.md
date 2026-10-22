@@ -1,411 +1,47 @@
+# HoneBill
 
-<br />
-<div align="left">
-  <img align="left" width="140" height="140" alt="Pijin Logo" src="https://github.com/user-attachments/assets/9af6a61f-d587-446a-ab2b-6a5245b11d50" />
+![Status: in development](https://img.shields.io/badge/status-in_development-orange)
 
-  
-  <br />
-  <h3>&nbsp;&nbsp;Pijin</h3>
-  <p>&nbsp;&nbsp;<b><i>Bringing digital money within reach, even offline.</i></b></p>
-</div>
-<br clear="left"/>
- 
-<p align="center">
-  <img src="https://img.shields.io/badge/Network-Stellar_Testnet-blue?style=for-the-badge&logo=stellar" alt="Stellar Testnet">
-  <img src="https://img.shields.io/badge/Smart_Contract-Soroban-orange?style=for-the-badge&logo=rust" alt="Soroban">
-</p>
+> HoneBill is in early development. The product description, branding and mobile UI are being redefined, so everything here may change.
 
+## Repository layout
 
-## ⭐️ Hackathon Track 
-
-**Local Finance & Real World Access** - Build applications that connect real-world assets to blockchain infrastructure. 
-
----
-
-## 🧩 Problem
-
-Many people in rural areas, remote communities, and provincial towns have limited, unreliable, or zero access to 4G/WiFi. Because of this, they are often excluded from using e-wallets and digital transactions that require a constant broadband internet connection. This affects small merchants, everyday users wanting to send money to family, transportation operators, and anyone who wants to participate in digital payments but cannot rely on online systems.
-
-Our problem is: **How can people continue to access secure, real-time digital peer-to-peer (P2P) payments in zero-data areas without requiring users to buy expensive hardware or assume the risk of delayed settlement?**
-
-
-## 💡 Solution
-
-Pijin is a Web2.5 data-free unified payment system that bridges cutting-edge blockchain cryptography with ubiquitous cellular infrastructure (GSM/SMS). The system enables seamless peer-to-peer (P2P) transfers regardless of geographic distance or internet availability.
-
-Users fund their wallets online via regulated Stellar Anchors (SEP-24) and secure those funds in an on-chain escrow vault.  To ensure a frictionless user experience, the system relies on an offline-first architecture using a high-performance local database (Drizzle ORM) on the phone. This guarantees immediate UI updates locally while the heavy lifting of blockchain communication is offloaded to the cellular network.
-
-When transitioning to a zero-data environment, Pijin lets users choose an SMS-based transport path based on whether they can send a text themselves. To initiate a transfer, the sender captures the receiver's ShortID—either by scanning a static QR code or entering it manually—and the app securely signs a compact payment voucher offline. If the sender has cellular load, Pijin opens the phone's native SMS composer with the signed payload and gateway number prefilled. If the sender has no load, the app generates a dynamic Payload QR code that a bystander can scan and forward by SMS without being able to alter the signed payment details. The inbound SMS is authenticated by our Zero-API Gateway and queued for a cloud relayer, which submits the payment to the Soroban smart contract. The contract verifies the sender's registered offline signature, rejects previously settled nonces, resolves the receiver's ShortID, and atomically updates the on-chain vault balances once the transaction is confirmed.
-
-
-## 🌟 Vision
-
-Pijin aims to make digital transactions more inclusive by providing universal Web3 liquidity powered by cellular networks. We want e-transactions to be available not only to people in cities with stable internet, but also to people in rural and underserved areas relying on basic cell towers. A future where digital payments are within reach for everyone, regardless of internet reliability.
-
-
-## 🎯 Purpose
-
-The fundamental purpose of Pijin is to decouple decentralized finance from broadband internet dependency. We aim to empower unbanked, offline, and remote communities to participate in real-time digital economies without being forced to upgrade their hardware or rely on continuous cellular data. By transforming legacy telecommunication bands (like standard GSM/SMS and low-power RF) into trustless cryptographic transport layers, Pijin ensures that true financial inclusion—where users retain absolute sovereignty over their funds—can reach the most infrastructure-limited regions on the globe.
-
-
-## 👥 Target Users
-
-Pijin is designed as a universal digital cash app for communities and users who experience unreliable mobile data but have basic GSM cellular coverage.
-<br>
-
-Our target users include:
-- Everyday users sending P2P remittances to family and friends.
-- Small retail store owners and wet market vendors.
-- Tricycle drivers and transport operators.
-- Rural households and island communities.
-- LGUs and NGOs that need data-free aid distribution systems.
-<br>
-
-The app uses familiar, **non-technical** labels:
-- Online Balance
-- Offline Cash Vault
-- Send Money
-- Receive Money
-
-## ✨ Pijin Features
-
-- **Non-Custodial Offline Cryptography:** Pijin generates local private keys on the device. Transactions are mathematically signed and sealed completely offline, guaranteeing that central servers act only as "dumb pipes" and cannot intercept or alter user funds.
-- **Dynamic Zero-Data Routing:** Intelligent transport switching that instantly defaults to compressed SMS transmission the moment the device loses internet connectivity.
-- **Bystander "Dumb-Pipe" Relay (Payload QR):** A novel fallback mechanism allowing users with zero cellular load to generate a signed "Payload QR." Any bystander with a text promo can scan and broadcast the transaction on their behalf without compromising the sender's security.
-- **Deterministic Mathematical Compression:** A proprietary local compression engine that maps massive Web3 variables into Base62 encodings and unpadded Base64 strings, shrinking 294-character ledger intents into 152-character payloads that fit perfectly inside a single SMS frame.
-- **On-Chain State Resolution:** Eliminates the need for backend state synchronization. The Soroban smart contract independently resolves 6-character ShortIDs into 56-character public keys via an on-chain admin registry, solving the "cold start" problem for offline mobile nodes.
-- **Seamless Fiat On-Ramp (SEP-24):** Direct integration with regulated Stellar Anchors allowing users to easily convert physical cash into highly liquid, fiat-backed stablecoins (e.g., PHPC) via interactive, KYC-compliant webviews.
-- **Dual Wallet and Offline Vault Architecture:** Pijin separates online wallet funds from an offline spending vault. Users can move funds between both balances, with offline funds explicitly restricted to face-to-face payments.
-- **Automatic Offline Payment Queue and Reconciliation:** Offline payments are stored locally in SQLite, queued while disconnected, and automatically submitted when connectivity returns. The app reconciles nonces against backend settlements, prevents duplicate settlement, and retries failures.
-- **Durable Message Queue Settlement Pipeline:** Authenticated SMS webhooks validate and buffer signed payment payloads through Upstash QStash before settlement. Deduplication IDs make repeated deliveries idempotent, while broker retries isolate mobile and SMS clients from temporary database or Stellar RPC failures.
-- **Distributed API Rate Limiting:** Upstash Redis sliding-window limits protect SMS ingress, OTP delivery, wallet balances, and transaction-history APIs. Limits are scoped by sender phone number or client IP, reducing SMS abuse, bot traffic, and unnecessary backend or blockchain load.
-- **Local-First Transaction History:** Transaction history is persisted in SQLite and synchronized with backend records using upsert logic. The app supports separate Wallet, Offline Funds, and combined transaction views.
-- **SEP-10 Authentication for SEP-24:** The anchor flow authenticates the user by fetching a challenge, signing it with the wallet key, and exchanging it for a short-lived authorization token before starting deposits or withdrawals.
-- **SMS Transaction Receipts:** After successful offline settlement, the backend can send a receipt notification to the sender and receiver through the configured SMS gateway.
-
-## Judges: Start Here - Demo Walkthrough
-
-> [!IMPORTANT]
-> Please use a desktop browser for the best experience. The simulator displays two phones side by side and performs real settlement on the Stellar Testnet.
->
-> The Pijin mobile app is not yet published on the Google Play Store. Therefore, the browser-based simulator is the official way for judges to test the application's core features hands-on. The demo video on our website shows the actual Android application and its complete user experience.
-
-### 1. Watch the demo video
-
-1. Visit the **[Pijin website](https://pijin.live)** and explore the project. *(Ctrl/Cmd + Click to open in new tab)*
-2. Watch the product demo video on the website before selecting **Simulate App**. This provides context for the complete Pijin flow before you test the focused simulation.
-
-### 2. Open the simulator
-1. Select **Simulate App** on the website, or open the <a href="https://pijin.live/demo-split" target="_blank"><strong>Pijin App Simulator</a></strong> directly. *(Ctrl/Cmd + Click to open in new tab)*
-2. Read all onboarding slides and select **Continue** after each one.
-3. On the final slide, confirm that you are using a desktop view, then select **Enter the Demo Environment**.
-4. Wait while the sandbox initializes and prepares two isolated Stellar Testnet accounts. Do not refresh or close the page during initialization.
-
-### 3. Prepare Phone 1 for an offline payment
-
-1. On **Phone 1**, remain on the **Online** tab and select **Top-Up**.
-2. Follow the prompts to add PHPC to its Online Wallet, then return to the dashboard.
-3. Select **Load Offline** and transfer some PHPC from the Online Wallet to the Offline Wallet.
-4. Wait for the load operation to complete and return to the dashboard.
-
-### 4. Send PHPC from Phone 1 to Phone 2
-
-1. Note the case-sensitive **ID** shown at the top of the **Phone 2** dashboard. This is the receiver's Short ID.
-2. On **Phone 1**, select the **Offline** tab, then select **Send**.
-3. Enter Phone 2's Short ID in **Receiver Short ID** and specify an amount. Keep enough offline funds available for the displayed protocol fee.
-4. Select **Compress & Send SMS** to submit the simulated offline transaction.
-5. Wait for the cryptographic processing and settlement flow to finish. The result will change to **Transaction Settled** after confirmation on Stellar Testnet.
-
-### 5. Verify the result
-
-1. Under **Transaction Hash**, select the linked hash to open the transaction in **Stellar Expert** and inspect the on-chain Testnet settlement.
-2. On **Phone 2**, select the **Offline** tab and confirm that its Offline Wallet balance increased by the transferred amount.
-3. If the updated balance is not immediately visible, wait a few seconds and return to the Phone 2 dashboard to trigger a refresh.
-
-> [!NOTE]
-> The public simulator reproduces the offline signing, compression, webhook, queue, and on-chain settlement flow. Live carrier SMS is intentionally replaced by a safe simulated dispatch in this judge environment.
-
-## 🏛️ Pijin Architecture
-
-```mermaid
-sequenceDiagram
-    autonumber
-    
-    actor Sender as Sender (Offline, No Load)
-    actor Receiver as Receiver (Offline)
-    actor Relayer as Relaying Agent (Receiver or Bystander)
-    participant Gateway as Inbound SMS Gateway
-    participant RelayerNode as Cloud Relayer (Vercel)
-    participant Blockchain as Soroban Smart Contract
-
-    Note over Sender, Receiver: Phase 1: Identification & Offline Signing
-    
-    alt In-Person Transfer
-        Receiver->>Sender: Displays Static ShortID QR
-        Sender->>Sender: Scans QR to capture ShortID
-    else Remote Transfer
-        Sender->>Sender: Manually types Receiver's ShortID into app
-    end
-    
-    Sender->>Sender: Inputs Amount & Signs ShortID Payload (Ed25519)
-    Sender->>Sender: Generates Dynamic Payload QR
-    
-    Note over Sender, Relayer: Phase 2: The Trustless "Dumb-Pipe" Relay
-    Sender->>Relayer: Shows Payload QR (Pays bounty OR Merchant scans for payment)
-    Relayer->>Relayer: Scans Payload QR via Pijin App
-    
-    Note over Relayer, Blockchain: Phase 3: Cellular Transport & Settlement
-    Relayer->>Gateway: Broadcasts Compressed Payload via Standard SMS
-    Gateway->>Gateway: Generates SHA-256 HMAC Token
-    Gateway->>RelayerNode: HTTP POST Webhook (with X-Pijin-Signature)
-    
-    RelayerNode->>RelayerNode: Verifies HMAC Authentication
-    RelayerNode->>RelayerNode: Restores Base64 Padding (Preserves ShortIDs)
-    RelayerNode->>RelayerNode: Assembles XDR Meta-Transaction & Sponsors Gas
-    RelayerNode->>Blockchain: Submits Reconstructed Envelope to Ledger
-    
-    Blockchain->>Blockchain: Queries On-Chain Admin Registry (ShortID -> 56-Char PubKey)
-    Blockchain->>Blockchain: ed25519_verify(Unpadded Signature against ShortID)
-    Blockchain->>Blockchain: Verifies Nonce (Replay Protection)
-    Blockchain->>Blockchain: Executes Atomic 2-Way Split (Amount + Toll)
-    
-    Blockchain-->>RelayerNode: Settlement Success Receipt
-    RelayerNode-->>Gateway: Trigger Confirmation Webhooks
-    Gateway-->>Sender: SMS/RF Receipt: Transfer Successful
-    Gateway-->>Receiver: SMS/RF Receipt: Funds Received
-```
-    
-
-## 🌍 Stellar Ecosystem Proposal(SEP) Protocol Integration
-- SEP-1 (Stellar Info File)
-- SEP-10 (Stellar Web Authentication)
-- SEP-24 (Hosted Deposit and Withdrawal)
-
-## 📃 Smart Contract Functions - Pijin Smart Contract
-
-- **Initialization & Upgrades**
-  - `__constructor(env, admin, treasury)`: Protocol 22 initialization that sets the privileged Admin and Treasury addresses. Starts with the Admin as the default Registrar.
-  - `upgrade(env, new_wasm_hash)`: Allows the Admin to upgrade the contract's WASM hash to a newer version.
-    
-- **User Vault Management**
-  - `deposit(env, sender, token, pubkey, amount)`: Transfers ERC-20 equivalent tokens (Stellar assets or Soroban tokens) from the user's wallet to the contract, locking them in a multi-token vault and registering the user's Ed25519 offline signing key.
-  - `withdraw(env, sender, token, amount)`: Unlocks tokens from the sender's vault, transferring them back to their Stellar wallet. Supports partial or full withdrawals (cleaning up storage rent for full withdrawals).
-  - `get_vault(env, user, token)`: Read-only helper to check the vault balance for a specific user and token.
-
-- **Offline Payment Engine (Data-Free Transport)**
-  - `spend_offline(env, gateway, sender, token, receiver_short_id, amount, protocol_toll, nonce, signature)`: The core offline settlement engine. Executed by a whitelisted gateway relayer. Cryptographically verifies a payload signed by the sender’s `offline_key`, prevents replay attacks via persistent nonces, dynamically resolves the receiver's `short_id`, and executes the vault-to-vault transfer alongside the protocol toll routing.
-  - `set_offline_key(env, sender, pubkey)`: Allows vault owners to rotate their registered offline signing device without depositing tokens.
-  - `get_offline_key(env, sender)`: Read-only check for clients to verify a device is still the active registered signer before generating vouchers.
-
-- **Recipient Identity Registry (Short-ID Mapping)**
-  - `set_registrar(env, admin, registrar)`: Admin control to assign a narrowly-scoped backend signer responsible for managing short-ID mappings.
-  - `register_recipient(env, registrar, short_id, receiver)`: Registrar-only function to map a canonical 6-byte Base62 `short_id` to a Stellar address (wallet). Idempotent on identical mappings.
-  - `update_recipient(env, registrar, short_id, receiver)`: Registrar-only function to explicitly rotate an existing `short_id` mapping to a new wallet address.
-  - `get_recipient(env, short_id)`: Read-only lookup to resolve a short ID to its canonical Stellar address.
-
-- **Gateway Access Control**
-  - `register_gateway(env, admin, gateway)`: Whitelists a new relayer address permitted to submit `spend_offline` transactions.
-  - `remove_gateway(env, admin, gateway)`: Revokes a gateway's submission permissions.
-
-## 🛠️ Tech Stack
-
-- **Frontend (Mobile App)**
-  - **Framework:** React Native (Expo)
-  - **Local Database:** SQLite with Drizzle ORM
-  - **Key Features:** Offline QR Generation & Compression, Offline Ed25519 Key Management
-
-- **Backend (API)**
-  - **Framework:** Next.js (API Routes)
-  - **Database & ORM:** PostgreSQL (Neon Serverless) and Prisma ORM
-  - **Key Features:** Interactive SEP-24 Webviews, Transaction Simulation, API Documentation (Swagger)
-
-- **Infrastructure & Smart Contracts**
-  - **Blockchain:** Stellar / Soroban Smart Contracts (Rust)
-  - **Message Queues:** Upstash QStash (Serverless Background Jobs & Webhook Deliveries)
-  
-- **Other Tools & Integrations**
-  - **SMS Gateway:** Textbee (Zero-API SMS Gateway for offline payloads)
-  - **Cryptography:** Node.js Crypto / `@stellar/stellar-sdk` (Ed25519 Signature Verification & XDR encoding)
-  - **Wallet Integration:** Stellar Demo Wallet (for SEP-24 Auth & Testing)
-
-## 📚 API Documentation
-
-The Pijin backend is powered by Next.js API Routes and serves as the bridge between the mobile app, the Soroban smart contracts, and the Stellar ecosystem. 
-<br>
-
-For detailed request/response schemas, testing, and OpenAPI specifications, <br> visit our interactive Swagger documentation:
-👉 **[View Interactive API Docs](https://pijin.live/api-docs)**
-
-### Core Services
-
-**Authentication & Onboarding (SEP-10 & OTP)**
-- `POST /api/auth` — Initiates and verifies the SEP-10 Stellar Web Authentication flow to issue a session JWT.
-- `POST /api/otp/send` — Triggers a 6-digit OTP SMS via the gateway for phone verification.
-- `POST /api/otp/verify` — Validates the OTP during user registration.
-- `POST /api/register` — Registers a new user's device and maps their short ID.
-
-**Offline Settlement Engine**
-- `POST /api/engine/settle` — The core relayer endpoint. Receives compressed, offline-signed payloads (via SMS webhooks or direct sync), unpacks the XDR, and submits the `spend_offline` Soroban transaction to the network.
-- `POST /api/sms` — Ingress webhook for the Textbee zero-API SMS gateway.
-
-**Wallet & History**
-- `GET /api/wallet/history` — Aggregates unified transaction history (merging Soroban settlements and SEP-24 anchor transactions).
-- `GET /api/wallet/balance` — Fetches the user's current on-chain vault balances.
-
-**Fiat On/Off Ramps (SEP-24 Anchor)**
-- `GET /api/sep24/info` — Advertises supported deposit/withdrawal assets and fees (SEP-24 capabilities).
-- `POST /api/sep24/transactions/deposit/interactive` — Initiates a fiat deposit and returns the interactive webview URL.
-- `POST /api/sep24/transactions/withdraw/interactive` — Initiates a fiat withdrawal and returns the interactive webview URL.
-- `GET /api/sep24/transaction` — Polls the real-time status of an ongoing fiat transaction.
-
-## 🔄 Changes made after idea submission
-
-| What We Planned | What We Built (And Why) |
+| Path | What it is |
 |---|---|
-| Identify recipients through familiar user details. | **An on-chain ShortID registry** that maps compact, 6-character Base62 IDs to Stellar addresses without using phone numbers for settlement. |
+| `apps/mobile` | Expo / React Native app (Expo SDK 57, React Native 0.86) |
+| `apps/backend` | Next.js backend with Prisma |
+| `contracts` | Soroban smart contract (Rust) |
+| `packages/pijin_core` | Shared TypeScript code |
+| `docs` | Project notes, including the UI rebuild plan in `docs/ui-rebuild` |
 
-## Pijin Treasury Portal
+## Getting started
 
-The **Pijin Treasury Portal** serves as the central command center for network administrators. Built parallel to the offline mobile app and relay infrastructure, it provides real-time visibility, smart contract administration, gateway node orchestration, and liquidity management across the Stellar Network.
+Requires Node 20.19.4 or newer.
 
-- [Pijin Treasury Portal Repository](https://github.com/Kaido147/Pijin_Treasury_Portal)
-- [Pijin Treasury Portal](https://pijin-treasury-portal.vercel.app) 
+```bash
+npm ci                     # install all workspaces
+```
 
-## 📸 Screenshots
+**Mobile**
 
-Every screen and sub-screen of the live Pijin mobile app, captured from the deployed Android build. All screenshot are in [`screenshots/`](screenshots/).
+```bash
+cp apps/mobile/.env.example apps/mobile/.env
+cd apps/mobile
+npx expo start -c
+```
 
-<details open>
-<summary><strong>Onboarding and secure access</strong> (mobile)</summary>
+**Backend**
 
-<br />
+```bash
+cp apps/backend/.env.example apps/backend/.env
+npm run dev --workspace=backend
+```
 
-<table>
-<tr>
-<td align="center"><img src="screenshots/1-on-boarding.jpg" width="200" alt="Welcome to Pijin" /><br /><sub>Welcome to Pijin</sub></td>
-<td align="center"><img src="screenshots/2-on-boarding.jpg" width="200" alt="Enter phone number" /><br /><sub>Enter phone number</sub></td>
-<td align="center"><img src="screenshots/3-on-boarding.jpg" width="200" alt="Select country" /><br /><sub>Select country</sub></td>
-<td align="center"><img src="screenshots/4-on-boarding.jpg" width="200" alt="Verify OTP" /><br /><sub>Verify OTP</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="screenshots/5-on-boarding-if-existing-user.jpg" width="200" alt="Restore wallet" /><br /><sub>Restore wallet</sub></td>
-<td align="center"><img src="screenshots/6-mpin.jpg" width="200" alt="MPIN sign-in" /><br /><sub>MPIN sign-in</sub></td>
-<td></td>
-<td></td>
-</tr>
-</table>
+## Status
 
-</details>
+- The mobile UI is being rebuilt from scratch. The previous UI is preserved at the git tag `legacy-ui-v1`.
+- Some internal names (storage keys, package id, hosts) still use an earlier project name. See `docs/ui-rebuild/02-clean-slate.md`.
 
-<details open>
-<summary><strong>Wallet, activity, and QR tools</strong> (mobile)</summary>
+## License
 
-<br />
-
-<table>
-<tr>
-<td align="center"><img src="screenshots/7-online-wallet.jpg" width="200" alt="Online wallet" /><br /><sub>Online wallet</sub></td>
-<td align="center"><img src="screenshots/8-offline-wallet.jpg" width="200" alt="Offline vault" /><br /><sub>Offline vault</sub></td>
-<td align="center"><img src="screenshots/9-notification.jpg" width="200" alt="Notifications" /><br /><sub>Notifications</sub></td>
-<td align="center"><img src="screenshots/10-transactions.jpg" width="200" alt="Transaction history" /><br /><sub>Transaction history</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="screenshots/11-profile.jpg" width="200" alt="Profile" /><br /><sub>Profile</sub></td>
-<td align="center"><img src="screenshots/12-qr-scanner-generator.jpg" width="200" alt="QR scanner" /><br /><sub>QR scanner</sub></td>
-<td align="center"><img src="screenshots/12-qr-scanner-generator%281%29.jpg" width="200" alt="QR scanner camera permission" /><br /><sub>Camera permission</sub></td>
-<td align="center"><img src="screenshots/13-qr-receiver.jpg" width="200" alt="Receive money QR code" /><br /><sub>Receive money QR</sub></td>
-</tr>
-</table>
-
-</details>
-
-<details open>
-<summary><strong>Offline payment flow</strong> (signed voucher → SMS or QR relay)</summary>
-
-<br />
-
-<table>
-<tr>
-<td align="center"><img src="screenshots/14-send-funds.jpg" width="200" alt="Send money" /><br /><sub>Send money</sub></td>
-<td align="center"><img src="screenshots/15-send-funds-confirmation.jpg" width="200" alt="Review and authorize offline payment" /><br /><sub>Review and authorize</sub></td>
-<td align="center"><img src="screenshots/16-send-fund-receipt.jpg" width="200" alt="Offline voucher created" /><br /><sub>Offline voucher created</sub></td>
-<td align="center"><img src="screenshots/17-send-fund-method.jpg" width="200" alt="Select SMS or offline relay" /><br /><sub>Select dispatch method</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="screenshots/18-relaying-method.jpg" width="200" alt="Relay transaction QR code" /><br /><sub>Relay transaction QR</sub></td>
-<td></td>
-<td></td>
-<td></td>
-</tr>
-</table>
-
-</details>
-
-<details open>
-<summary><strong>Wallet funding and balance movement</strong> (mobile)</summary>
-
-<br />
-
-<table>
-<tr>
-<td align="center"><img src="screenshots/19-online-to-offline-wallet.jpg" width="200" alt="Move online wallet balance to offline funds" /><br /><sub>Online wallet → offline funds</sub></td>
-<td align="center"><img src="screenshots/20-offline-to-online-wallet.jpg" width="200" alt="Move offline vault balance to online wallet" /><br /><sub>Offline vault → online wallet</sub></td>
-<td align="center"><img src="screenshots/21-top-up-wallet.jpg" width="200" alt="Deposit PHPC through GCash" /><br /><sub>Deposit PHPC via GCash</sub></td>
-<td align="center"><img src="screenshots/22-cash-out-wallet.jpg" width="200" alt="Cash out PHPC to GCash" /><br /><sub>Cash out PHPC to GCash</sub></td>
-</tr>
-</table>
-
-</details>
-
-## 🌐 Deployment
-
-### Testnet
-- **Smart Contract Address:** `CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX` [view it on stellar.expert](https://stellar.expert/explorer/testnet/contract/CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX)
-- **Minted PHPC Token Address:** `CD26OANM4I4GF2GBC47UYTSP3FUBZRQ7WGMGECEQHMZ2D6QV2LXJTNIS` [view it on stellar.expert](https://stellar.expert/explorer/testnet/asset/PHPC-GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY-1)
-- **PHPC Issuer Public Key:** `GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY`
-- **Admin Public Key:** `GAZDBPU7QQWHOZ53MFQO5I2O6OSAQSEOE3OMXDZNBXJCRV2RPVTGDYKS`
-- **Treasury Public Key:** `GBV6SIDIZVHR22Y4KH4MTTYQOGSKNHZ27IWGSHVIHMK2HUUERVVMKFAM`
-- **Registrar Public Key:** `GAFVQPZFHN5GUCTXZQXC6RKI4U4R47VNANCDSZ7KES4KQ7MEWJKUZOKH`
-- **Gateway / Relayer:** `GDTDK62M4ZJU6QPCEFUSQWOPYED4I4GPHLB4ZZTMBZZL2AO2VK63VQUH`
-- 📸 **Screenshot — Stellar Expert (Testnet)**
-<img width="1624" height="918" alt="Screenshot 2026-07-14 195353" src="https://github.com/user-attachments/assets/76e2345f-1e9d-4382-8d40-65154dbcacb0" />
-
-## 🎥 Demo
-
-<img width="2048" height="686" alt="744953176_2162519231264311_8293557383350544543_n" src="https://github.com/user-attachments/assets/33a64331-e87c-4609-9e93-8b2e9c58997c" />
-
-- 🔗 **Pijin App Simulator:** [Live Demo](https://pijin.live/demo-split)
-- 📱 **Live Mobile App:** [APK Link](https://expo.dev/accounts/senec4/projects/pijin-app/builds/fa770cff-7d57-44f9-b94d-8a1e1c73e2aa)
-- 🔗 **Pijin Website:** [Pijin Website](https://pijin.live)
-- 🔗 **Pijin API:** [Pijin API](https://pijin.live/api-docs) 
-- 🔗 **Treasury Portal:** [Pijin Treasury Portal](https://pijin-treasury-portal.vercel.app)
-- 🔗 **𝕏 Account:** [Pijin X Account](https://x.com/supportpijin)
-- 🎬 **Demo Video:** [Google Drive link](https://drive.google.com/drive/folders/1t6U8wcVb51mi0uzTqRw5SjulPRAxKj4w?fbclid=IwY2xjawTFPk5leHRuA2FlbQIxMABicmlkETF3Wm82aU56ZHFma0pGQmFQc3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHq_xaoYl2-Dgd9RmSoQc3SldJ-Z-oKXJb6OHMCCuLCpf2uL49ET3IVDRL2rO_aem_uB4143FHr410vqQskDKX7A)
-- 🖼️ **Pitch Deck:** [Canva link](https://www.canva.com/design/DAHQftZcNfQ/stkrT_pfyH_xrup4vs31WQ/edit)
-
-<div align="center">
-
-## Build on Stellar Philippines Hackathon 2026 Champion  - Abot Pera
-
-  <img width="2048" height="1536" alt="746067307_1497483411701648_7965632142598952982_n" src="https://github.com/user-attachments/assets/79121b6c-bd76-4012-8741-d5bd01e0eb78" />
-</div>
-
-<div align="center">
-  
-## 👨‍💻 Team
-
-</div>
-
-<div align="center">
-  
-| Name | Role | GitHub |
-|---|---|---|
-|Mark Kengie Aldabon| Frontend Developer / DevOps | [@Mark](https://github.com/tambayNgOrtigasAvenue ) |
-| Carl Arbolado | Backend Developer / Frontend Developer / Team Lead | [@Carl](https://github.com/Kaido147) |
-| Erickson Guhilde | Frontend Developer / Backend Developer / Quality Assurance | [@Erickson](https://github.com/riXoon) |
-| Cedric Paul Mendoza | System Architect / System Analyst | [@Cedric](https://github.com/daeroSys) |
-| Janrell Quiaroro | Backend Developer / Quality Assurance / Web3 Architect | [@Janrell](https://github.com/0xreru) |
-</div>
-
-## 📜 License
-MIT
+MIT. See [LICENSE](LICENSE).
