@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 // Per-weight imports: the package index would bundle all 9 weights (~700 KB of TTF).
+import { Lexend_200ExtraLight } from '@expo-google-fonts/lexend/200ExtraLight';
 import { Lexend_300Light } from '@expo-google-fonts/lexend/300Light';
 import { Lexend_400Regular } from '@expo-google-fonts/lexend/400Regular';
 import { Lexend_500Medium } from '@expo-google-fonts/lexend/500Medium';
@@ -22,6 +23,7 @@ import { LandingScreen } from './src/screens/LandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MpinCreationScreen } from './src/screens/MpinCreationScreen';
 import { OtpScreen } from './src/screens/OtpScreen';
+import { QrScanScreen } from './src/screens/QrScanScreen';
 import { UserDetailsScreen } from './src/screens/UserDetailsScreen';
 import { MainTabs } from './src/navigation/MainTabs';
 import type { RootStackParamList } from './src/navigation/types';
@@ -45,6 +47,7 @@ function RootNavigator() {
         <Stack.Screen name="MpinCreation" component={MpinCreationScreen} />
         <Stack.Screen name="AccountConfirmation" component={AccountConfirmationScreen} />
         <Stack.Screen name="Tabs" component={MainTabs} />
+        <Stack.Screen name="QrScan" component={QrScanScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -52,6 +55,7 @@ function RootNavigator() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
+    [fonts.extraLight]: Lexend_200ExtraLight,
     [fonts.light]: Lexend_300Light,
     [fonts.regular]: Lexend_400Regular,
     [fonts.medium]: Lexend_500Medium,

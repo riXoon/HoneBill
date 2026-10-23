@@ -25,10 +25,15 @@ export const colors = {
   statusOnline: '#53D44C',
   statusOffline: '#8D8B8B',
   shadow: '#D3D3D3',
+  /** Figma "placeholder color" (#9784AC) at 10%: the QR "Send via offline" pill and the vault address row. */
+  placeholderTint: 'rgba(151, 132, 172, 0.1)',
+  /** Pure white, used for text on the Profile arch (Figma text-white). */
+  white: '#FFFFFF',
 } as const;
 
 /** Loaded in App.tsx via @expo-google-fonts/lexend. Keys match the registered font names. */
 export const fonts = {
+  extraLight: 'Lexend_200ExtraLight',
   light: 'Lexend_300Light',
   regular: 'Lexend_400Regular',
   medium: 'Lexend_500Medium',

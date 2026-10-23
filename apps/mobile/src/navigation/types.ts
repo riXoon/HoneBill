@@ -18,4 +18,5 @@ export type RootStackParamList = {
   MpinCreation: undefined;
   AccountConfirmation: undefined;
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  QrScan: undefined;
 };
