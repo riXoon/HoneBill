@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "HoneBill",
-    "slug": "pijin-app",
-    "scheme": "pijin",
+    "slug": "honebill-app",
+    "scheme": "honebill",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,7 +22,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "live.pijin.app",
+      "package": "live.honebill.app",
       "softwareKeyboardLayoutMode": "pan",
       "allowBackup": false,
       "permissions": [

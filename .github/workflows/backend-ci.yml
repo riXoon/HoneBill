@@ -28,11 +28,9 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: |
-            apps/backend/package-lock.json
-            packages/pijin_core/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install Monorepo Dependencies
         run: |

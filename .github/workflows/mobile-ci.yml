@@ -39,10 +39,12 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: ./apps/mobile/package-lock.json
+          cache-dependency-path: package-lock.json
       
+      # Workspace install: the lockfile lives at the repo root, not in apps/mobile.
       - run: npm ci
+        working-directory: .
       - run: npx tsc --noEmit
       - run: npx expo export --platform android --platform ios
