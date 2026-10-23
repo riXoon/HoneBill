@@ -9,10 +9,11 @@
 | Path | What it is |
 |---|---|
 | `apps/mobile` | Expo / React Native app (Expo SDK 57, React Native 0.86) |
-| `apps/backend` | Next.js backend with Prisma |
+| `apps/backend` | NestJS backend (being rebuilt, see `docs/backend-rebuild`) |
+| `apps/_legacy/backend` | Previous Next.js backend, read-only reference for the rebuild |
 | `contracts` | Soroban smart contract (Rust) |
 | `packages/pijin_core` | Shared TypeScript code |
-| `docs` | Project notes, including the UI rebuild plan in `docs/ui-rebuild` |
+| `docs` | Project notes: UI rebuild in `docs/ui-rebuild`, backend rebuild in `docs/backend-rebuild` |
 
 ## Getting started
 
@@ -32,10 +33,7 @@ npx expo start -c
 
 **Backend**
 
-```bash
-cp apps/backend/.env.example apps/backend/.env
-npm run dev --workspace=backend
-```
+The NestJS backend is being rebuilt in `apps/backend`. Progress and setup steps are tracked in `docs/backend-rebuild/01-nestjs-migration-plan.md`. The old Next.js app in `apps/_legacy/backend` is not part of the workspace and is not meant to be run.
 
 ## Status
 
