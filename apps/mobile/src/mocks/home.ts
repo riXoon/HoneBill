@@ -7,9 +7,9 @@ export type ActivityItem = {
 };
 
 export const mockHome = {
-  name: 'Juan Dela Cruz',
-  onlineBalance: 100000,
-  offlineBalance: 20000,
+  name: 'Erickson Guhilde',
+  onlineBalance: 800000,
+  offlineBalance: 50000,
   activity: [
     { id: '1', title: 'Transfer received from Aaron Gabriel Chavez', body: 'Aaron Gabriel Chavez sent you ₱125,000', time: '25m ago' },
     { id: '2', title: 'Transfer received from Nicole Mayo', body: 'Nicole Mayo sent you ₱125,000', time: '24m ago' },
