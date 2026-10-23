@@ -1,4 +1,4 @@
-import { deriveKeysFromMnemonic } from '../src/services/wallet/mnemonic';
+import { deriveKeysFromMnemonic } from '../src/_legacy/services/wallet/mnemonic';
 
 const mnemonic = process.argv.slice(2).join(' ');
 
