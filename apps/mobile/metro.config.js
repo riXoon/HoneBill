@@ -44,7 +44,6 @@ config.resolver.unstable_enablePackageExports = false;
 
 // Dynamically resolve roots using the new helper
 const stellarSdkRoot = resolvePackageRoot('@stellar/stellar-sdk');
-const reactNativeSvgRoot = resolvePackageRoot('react-native-svg');
 const stellarFull = path.join(stellarSdkRoot, 'lib');
 
 config.resolver.extraNodeModules = {
@@ -59,9 +58,6 @@ const stellarAliases = {
   '@stellar/stellar-sdk/contract': path.join(stellarFull, 'contract/index.js'),
   '@stellar/stellar-sdk/rpc': path.join(stellarFull, 'rpc/index.js'),
   'eventsource': path.join(__dirname, 'empty-module.js'),
-  // Force Metro to use the compiled CommonJS build of react-native-svg instead of
-  // the TypeScript source.
-  'react-native-svg': path.join(reactNativeSvgRoot, 'lib', 'commonjs', 'index.js'),
 };
 
 const defaultResolveRequest = config.resolver.resolveRequest;
