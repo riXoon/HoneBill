@@ -1,8 +1,13 @@
 # HoneBill
 
-## `apps/mobile/src/_legacy` is off-limits unless the user says so
+## `_legacy` folders are off-limits unless the user says so
 
-`_legacy` holds the old backend/Stellar/storage/auth logic, kept only as reference for when logic is wired back in after the frontend is built.
+These hold old code kept only as reference:
+
+- `apps/mobile/src/_legacy`: the old mobile backend/Stellar/storage/auth logic, for when logic is wired back in after the frontend is built.
+- `apps/_legacy/backend`: the old Next.js backend, for the NestJS rebuild in `apps/backend` (tracked in `docs/backend-rebuild/`). It is not an npm workspace and is not built in CI.
+
+The rules below apply to both.
 
 - Do not edit, move, rename, delete, format, or refactor anything in `_legacy`, and do not import from it in live code. It is excluded from `tsconfig.json` on purpose.
 - Do not "fix" its type errors, stale names, or `process.env` usage, and do not include it in sweeping changes (renames, find-and-replace, lint fixes, dependency cleanups).

@@ -87,6 +87,13 @@ apps/backend/yarn-error.log*
 apps/backend/pnpm-debug.log*
 apps/backend/.eslintcache
 
+# legacy Next.js backend (reference only)
+apps/_legacy/backend/node_modules/
+apps/_legacy/backend/.next/
+apps/_legacy/backend/.env
+apps/_legacy/backend/.env*.local
+apps/_legacy/backend/tsconfig.tsbuildinfo
+
 #markdown
 walkthrough.md
 apps/mobile/eas.json
