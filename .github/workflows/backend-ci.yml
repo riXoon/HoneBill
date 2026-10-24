@@ -1,5 +1,10 @@
 name: Backend CI
 
+# NestJS backend (apps/backend). The legacy Next.js app in apps/_legacy/backend
+# is reference-only and is not built here. Every step after checkout is skipped
+# until the Nest app is scaffolded (apps/backend/package.json exists).
+# See docs/backend-rebuild/01-nestjs-migration-plan.md.
+
 on:
   push:
     branches: [ "main" ]
@@ -18,14 +23,23 @@ on:
 
 jobs:
   verify-and-build:
-    name: Backend Type Check & Smoke Test
+    name: Backend Type Check, Test & Build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/backend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Skip notice (Nest app not scaffolded yet)
+        if: hashFiles('apps/backend/package.json') == ''
+        working-directory: .
+        run: echo "apps/backend/package.json not found; skipping backend CI."
+
       - name: Setup Node.js Environment
+        if: hashFiles('apps/backend/package.json') != ''
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -33,43 +47,32 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install Monorepo Dependencies
-        run: |
-          npm ci --ignore-scripts
+        if: hashFiles('apps/backend/package.json') != ''
+        working-directory: .
+        run: npm ci --ignore-scripts
 
       - name: Build Pijin SDK
-        run: |
-          cd packages/pijin_core
-          npx tsc
+        if: hashFiles('apps/backend/package.json') != ''
+        working-directory: ./packages/pijin_core
+        run: npx tsc
 
       - name: Validate & Generate Prisma Client
+        if: hashFiles('apps/backend/package.json') != ''
         env:
-          # A dummy database URL allows Prisma to generate types without needing live Neon access
+          # A dummy database URL allows Prisma to generate types without a live database
           DATABASE_URL: "postgresql://postgres:password@localhost:5432/dummy"
         run: |
-          cd apps/backend
           npx prisma validate
           npx prisma generate
 
       - name: Strict Type Check
-        run: |
-          cd apps/backend
-          npx tsc --noEmit
+        if: hashFiles('apps/backend/package.json') != ''
+        run: npx tsc --noEmit
 
-      - name: Next.js Build (Smoke Test)
-        env:
-          DATABASE_URL: "postgresql://postgres:password@localhost:5432/dummy"
-          # Mock environment variables to satisfy Next.js build-time requirements
-          CONTRACT_ID: "C_DUMMY_ID"
-          TOKEN_ID: "C_DUMMY_TOKEN"
-          SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org"
-          RELAYER_PUBLIC_KEY: "C_DUMMY_KEY"
-          RELAYER_SECRET_KEY: "C_DUMMY_KEY"
-          TEXTBEE_GATEWAY_URL: "C_DUMMY_URL"
-          TEXTBEE_API_KEY: "C_DUMMY_KEY"
-          TEXTBEE_DEVICE_ID: "C_DUMMY_ID"
-          STELLAR_HORIZON_MAINNET_URL: "C_DUMMY_URL"
-          STELLAR_NETWORK_PASSPHRASE: "C_DUMMY_PASSPHRASE"
-          WEBHOOK_SECRET: "C_DUMMY_SECRET"
-        run: |
-          cd apps/backend
-          npm run build
+      - name: Unit Tests
+        if: hashFiles('apps/backend/package.json') != ''
+        run: npm test --if-present
+
+      - name: Nest Build
+        if: hashFiles('apps/backend/package.json') != ''
+        run: npm run build

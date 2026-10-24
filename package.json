@@ -1,6 +1,6 @@
 {
   "workspaces": [
-    "apps/*",
+    "apps/mobile",
     "packages/*"
   ],
   "dependencies": {
@@ -14,8 +14,8 @@
   "scripts": {
     "prepare": "node -e \"if (process.env.CI !== 'true') { require('child_process').execSync('husky', {stdio: 'inherit'}) }\"",
     "lint-staged": "lint-staged",
-    "build:sdk": "npm install && npm run build --workspace=pijin_core && npm install --workspace=backend",
-    "typecheck": "npm run typecheck --workspace=backend --workspace=pijin_core"
+    "build:sdk": "npm install && npm run build --workspace=pijin_core",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "lint-staged": {
     "apps/backend/**/*.{ts,tsx}": [],
