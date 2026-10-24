@@ -1,24 +1,34 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
 import { BalanceCards } from '../components/home/BalanceCards';
 import type { BalanceMode } from '../components/home/BalanceCards';
-import { QuickActions } from '../components/home/QuickActions';
+import { QuickActions, type QuickActionKey } from '../components/home/QuickActions';
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { mockHome } from '../mocks/home';
+import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
 // Figma: Home Page - Online (870:3102) and Home Page - Offline (870:3140), 402x874.
 const FADE_MS = 250;
+const QUICK_ACTION_ROUTE = {
+  send: 'SendTo',
+  receive: 'ReceiveAmount',
+  online: 'TransferOnline',
+  offline: 'TransferOffline',
+} as const satisfies Record<QuickActionKey, keyof RootStackParamList>;
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   // Mock-only: the real mode will come from connectivity. For now tapping the cards switches it.
   const [mode, setMode] = useState<BalanceMode>('online');
   const online = mode === 'online';
@@ -65,7 +75,7 @@ export function HomeScreen() {
           onToggle={toggle}
         />
 
-        <QuickActions online={online} />
+        <QuickActions online={online} onPress={(key) => navigation.navigate(QUICK_ACTION_ROUTE[key])} />
 
         <View style={styles.activity}>
           {online ? (

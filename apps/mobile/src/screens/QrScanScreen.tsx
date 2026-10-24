@@ -112,8 +112,8 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
           </Pressable>
 
           <View style={styles.actions}>
-            {/* Receive 2 - My QR (870:2925) is not built yet. */}
-            <Pressable accessibilityRole="button" style={styles.generate}>
+            {/* A code needs an amount first, so this opens Receive 1, which leads on to Receive 2 - My QR. */}
+            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('ReceiveAmount')} style={styles.generate}>
               <GenerateQrIcon />
               <Text style={styles.generateText}>Generate QR</Text>
             </Pressable>
