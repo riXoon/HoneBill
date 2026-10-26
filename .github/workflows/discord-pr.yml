@@ -31,6 +31,14 @@ jobs:
       PR_HEAD: ${{ github.event.pull_request.head.ref }}
       PR_BASE: ${{ github.event.pull_request.base.ref }}
       PR_MERGED: ${{ github.event.pull_request.merged }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+      PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+      PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+      PR_FILES: ${{ github.event.pull_request.changed_files }}
+      PR_COMMITS: ${{ github.event.pull_request.commits }}
+      REPO: ${{ github.repository }}
+      REVIEW_BODY: ${{ github.event.review.body }}
       REVIEWER: ${{ github.event.review.user.login }}
       REVIEW_STATE: ${{ github.event.review.state }}
       REVIEW_URL: ${{ github.event.review.html_url }}
@@ -57,7 +65,7 @@ jobs:
           if [[ "$EVENT_NAME" == "pull_request_target" ]]; then
             case "$ACTION" in
               opened|reopened|ready_for_review)
-                TITLE="🚀 Pull request ready for review"; COLOR=3447003
+                TITLE="🐝 New pull request"; COLOR=15765297 # #F08F31 primary orange
                 BODY="$(mention "$PR_AUTHOR") opened a PR into \`$PR_BASE\`."
                 # Ping the owner for review, unless the owner opened it.
                 if [[ "$PR_AUTHOR" != "$OWNER" ]]; then
@@ -67,10 +75,10 @@ jobs:
                 ;;
               closed)
                 if [[ "$PR_MERGED" == "true" ]]; then
-                  TITLE="✅ Pull request merged"; COLOR=10181046
+                  TITLE="🍯 Pull request merged"; COLOR=764300 # #0BA98C
                   BODY="This PR was merged into \`$PR_BASE\`."
                 else
-                  TITLE="🚫 Pull request closed without merging"; COLOR=15158332
+                  TITLE="🚫 Pull request closed"; COLOR=9276299 # #8D8B8B
                   BODY="This PR was closed without being merged."
                 fi
                 PING_USERS=("$PR_AUTHOR")
@@ -82,13 +90,13 @@ jobs:
             if [[ "$REVIEWER" == "$PR_AUTHOR" ]]; then exit 0; fi
             case "$REVIEW_STATE" in
               approved)
-                TITLE="🟢 Pull request approved"; COLOR=5763719
+                TITLE="✅ Pull request approved"; COLOR=5493836 # #53D44C
                 BODY="$(mention "$REVIEWER") approved this PR."$'\n\n'
                 BODY="${BODY}⚠️ **Reminder:** pull \`$PR_BASE\` before starting or continuing your work so you don't build on stale code."
                 PING_USERS=("${!DISCORD_ID[@]}")
                 ;;
               changes_requested)
-                TITLE="🟠 Changes requested"; COLOR=15105570
+                TITLE="🔧 Changes requested"; COLOR=15104350 # #E6795E coral
                 BODY="$(mention "$PR_AUTHOR") check your latest PR: $(mention "$REVIEWER") raised feedback that needs to be addressed."
                 PING_USERS=("$PR_AUTHOR")
                 ;;
@@ -105,29 +113,60 @@ jobs:
           CONTENT=""
           for id in "${IDS[@]:-}"; do [[ -n "$id" ]] && CONTENT="$CONTENT<@$id> "; done
 
+          # Quoted note under the message: the review comment, or the PR description for new PRs.
+          QUOTE_LABEL=""; QUOTE_TEXT=""
+          if [[ "$EVENT_NAME" == "pull_request_review" ]]; then
+            QUOTE_LABEL="💬 Reviewer's note"; QUOTE_TEXT="${REVIEW_BODY:-}"
+          elif [[ "$ACTION" != "closed" ]]; then
+            QUOTE_LABEL="📝 Description"; QUOTE_TEXT="${PR_BODY:-}"
+          fi
+
           PAYLOAD=$(jq -n \
             --arg username "HoneBill CI Bot" \
             --arg content "$CONTENT" \
             --arg title "$TITLE" \
             --argjson color "$COLOR" \
-            --arg prtitle "#$PR_NUMBER $PR_TITLE" \
+            --arg prtitle "#$PR_NUMBER · $PR_TITLE" \
+            --arg num "$PR_NUMBER" \
             --arg body "$BODY" \
-            --arg branch "\`$PR_HEAD\` → \`$PR_BASE\`" \
+            --arg quotelabel "$QUOTE_LABEL" \
+            --arg quote "$QUOTE_TEXT" \
+            --arg head "$PR_HEAD" \
+            --arg base "$PR_BASE" \
             --arg author "$PR_AUTHOR" \
+            --arg avatar "$PR_AUTHOR_AVATAR" \
+            --arg adds "$PR_ADDITIONS" \
+            --arg dels "$PR_DELETIONS" \
+            --arg files "$PR_FILES" \
+            --arg commits "$PR_COMMITS" \
+            --arg repo "$REPO" \
             --arg link "$LINK" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --argjson users "$IDS_JSON" \
-            '{
+            '
+            def clip(n): gsub("\r"; "") | if length > n then .[0:n] + "…" else . end;
+            def quoted: split("\n") | map("> " + .) | join("\n");
+            ($quote | gsub("^\\s+|\\s+$"; "") | clip(300)) as $q
+            | {
               username: $username,
               content: $content,
               allowed_mentions: { parse: [], users: $users },
               embeds: [{
+                author: { name: $author, url: ("https://github.com/" + $author), icon_url: $avatar },
                 title: $title,
-                description: ($prtitle + "\n\n" + $body + "\n\n[Open on GitHub](" + $link + ")"),
+                url: $link,
+                description: (
+                  "### " + $prtitle + "\n" + $body
+                  + (if $q != "" then "\n\n**" + $quotelabel + "**\n" + ($q | quoted) else "" end)
+                ),
                 color: $color,
                 fields: [
-                  { name: "Author", value: $author, inline: true },
-                  { name: "Branch", value: $branch, inline: true }
-                ]
+                  { name: "🌿 Branch", value: ("`" + $head + "`\n→ `" + $base + "`"), inline: true },
+                  { name: "📦 Changes", value: ("**+" + $adds + "** / **−" + $dels + "**\n" + $files + " files"), inline: true },
+                  { name: "🔖 Commits", value: $commits, inline: true }
+                ],
+                footer: { text: ($repo + " · PR #" + $num) },
+                timestamp: $ts
               }]
             }')
 
