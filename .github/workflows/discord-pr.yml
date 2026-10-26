@@ -2,8 +2,8 @@ name: Pull Request Discord Notifier
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
-    branches: [ "main" ]
+    types: [opened, reopened, ready_for_review]
+    branches: [ "main", "dev/staging" ]
 
 jobs:
   notify:
@@ -19,8 +19,8 @@ jobs:
           embed-description: |
             **PR Title:** ${{ github.event.pull_request.title }}
             **Author:** ${{ github.event.pull_request.user.login }}
-            **Branch:** `${{ github.event.pull_request.head.ref }}` into `main`
+            **Branch:** `${{ github.event.pull_request.head.ref }}` into `${{ github.event.pull_request.base.ref }}`
             
             [View Pull Request on GitHub](${{ github.event.pull_request.html_url }})
           embed-color: 10325 
-          username: "CelluFi CI Bot"
+          username: "HoneBill CI Bot"
