@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 // Per-weight imports: the package index would bundle all 9 weights (~700 KB of TTF).
+import { Lexend_200ExtraLight } from '@expo-google-fonts/lexend/200ExtraLight';
 import { Lexend_300Light } from '@expo-google-fonts/lexend/300Light';
 import { Lexend_400Regular } from '@expo-google-fonts/lexend/400Regular';
 import { Lexend_500Medium } from '@expo-google-fonts/lexend/500Medium';
@@ -22,6 +23,16 @@ import { LandingScreen } from './src/screens/LandingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { MpinCreationScreen } from './src/screens/MpinCreationScreen';
 import { OtpScreen } from './src/screens/OtpScreen';
+import { QrScanScreen } from './src/screens/QrScanScreen';
+import { ReceiveQrScreen } from './src/screens/ReceiveQrScreen';
+import { ReceiveScreen } from './src/screens/ReceiveScreen';
+import { SendAmountScreen } from './src/screens/SendAmountScreen';
+import { SendMethodScreen } from './src/screens/SendMethodScreen';
+import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
+import { SendToScreen } from './src/screens/SendToScreen';
+import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
+import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
+import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
 import { UserDetailsScreen } from './src/screens/UserDetailsScreen';
 import { MainTabs } from './src/navigation/MainTabs';
 import type { RootStackParamList } from './src/navigation/types';
@@ -45,6 +56,17 @@ function RootNavigator() {
         <Stack.Screen name="MpinCreation" component={MpinCreationScreen} />
         <Stack.Screen name="AccountConfirmation" component={AccountConfirmationScreen} />
         <Stack.Screen name="Tabs" component={MainTabs} />
+        <Stack.Screen name="QrScan" component={QrScanScreen} />
+        <Stack.Screen name="SendTo" component={SendToScreen} />
+        <Stack.Screen name="SendAmount" component={SendAmountScreen} />
+        <Stack.Screen name="SendVerification" component={SendVerificationScreen} />
+        <Stack.Screen name="SendMethod" component={SendMethodScreen} />
+        <Stack.Screen name="ReceiveAmount" component={ReceiveScreen} />
+        <Stack.Screen name="ReceiveQr" component={ReceiveQrScreen} />
+        <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
+        <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />
+        {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}
+        <Stack.Screen name="SendReceipt" component={SendReceiptScreen} options={{ gestureEnabled: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -52,6 +74,7 @@ function RootNavigator() {
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
+    [fonts.extraLight]: Lexend_200ExtraLight,
     [fonts.light]: Lexend_300Light,
     [fonts.regular]: Lexend_400Regular,
     [fonts.medium]: Lexend_500Medium,

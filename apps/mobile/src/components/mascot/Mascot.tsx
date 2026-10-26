@@ -14,6 +14,8 @@ import Animated, {
 // Honi poses exported from the Figma `Emotes` component set (653:706). Add the other moods
 // (fail, alert, question, bill) here as their pages need them. `width` is the exported image's
 // size in dp (it includes the soft shadow/glow bleed around the 323x196 component).
+type MoodDef = { source: number; width: number; aspect: number; fit?: 'cover' | 'contain' };
+
 const MOODS = {
   wave: { source: require('../../../assets/mascot/honi-wave.png'), width: 347, aspect: 740 / 1041 },
   /** Login's idle pose, with sparkles. */
@@ -23,7 +25,13 @@ const MOODS = {
   phone: { source: require('../../../assets/mascot/honi-phone.png'), width: 347, aspect: 680 / 1041 },
   success: { source: require('../../../assets/mascot/honi-success.png'), width: 347, aspect: 680 / 1041 },
   secure: { source: require('../../../assets/mascot/honi-secure.png'), width: 347, aspect: 769 / 1041 },
-} as const;
+  /** Send 4 "Get help sending": Honi with the alert mark. */
+  alert: { source: require('../../../assets/mascot/honi-alert.png'), width: 347, aspect: 471 / 694 },
+  /** Transfer to Offline: Honi holding the offline-vault badge. */
+  bill: { source: require('../../../assets/mascot/honi-bill.png'), width: 347, aspect: 453 / 694 },
+  /** Receipt "Voucher ready illustration": Honi with a green check. Cropped to the design's 180x128 box. */
+  voucher: { source: require('../../../assets/mascot/honi-voucher.png'), width: 180, aspect: 128 / 180, fit: 'cover' },
+} satisfies Record<string, MoodDef>;
 
 export type MascotMood = keyof typeof MOODS;
 
@@ -45,7 +53,7 @@ const FLOAT_HALF_CYCLE_MS = 1400;
  * loop is skipped when the OS "reduce motion" setting is on.
  */
 export function Mascot({ mood, width, animated = true, style }: MascotProps) {
-  const { source, width: defaultWidth, aspect } = MOODS[mood];
+  const { source, width: defaultWidth, aspect, fit = 'contain' }: MoodDef = MOODS[mood];
   const w = width ?? defaultWidth;
   const offset = useSharedValue(0);
 
@@ -73,7 +81,7 @@ export function Mascot({ mood, width, animated = true, style }: MascotProps) {
       <Image
         source={source}
         style={{ width: '100%', height: '100%' }}
-        contentFit="contain"
+        contentFit={fit}
         accessibilityLabel="Honi, the HoneBill mascot"
       />
     </Animated.View>
