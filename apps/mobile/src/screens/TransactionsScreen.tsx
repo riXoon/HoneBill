@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DateDivider } from '../components/history/DateDivider';
@@ -13,18 +15,24 @@ import { BANNER_HONI, PromoBanner } from '../components/ui/PromoBanner';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { TRANSACTION_FILTERS, buildHistoryRows, mockTransactions } from '../mocks/transactions';
 import type { HistoryRow, TransactionFilter } from '../mocks/transactions';
+import type { RootStackParamList } from '../navigation/types';
 import { mockProfile } from '../mocks/profile';
 import { colors, fonts } from '../theme';
 
 // Figma: Transactions (870:3169), 402x874. Reached from the "History" tab.
-const renderItem = ({ item }: { item: HistoryRow }) => (
-  <SlideRow>{item.type === 'date' ? <DateDivider label={item.label} /> : <TransactionCard tx={item.tx} />}</SlideRow>
-);
 const keyExtractor = (item: HistoryRow) => item.id;
 const Separator = () => <View style={styles.separator} />;
 
 export function TransactionsScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const openDetail = useCallback((id: string) => navigation.navigate('TransactionDetail', { id }), [navigation]);
+  const renderItem = useCallback(
+    ({ item }: { item: HistoryRow }) => (
+      <SlideRow>{item.type === 'date' ? <DateDivider label={item.label} /> : <TransactionCard tx={item.tx} onPress={openDetail} />}</SlideRow>
+    ),
+    [openDetail],
+  );
   const [filter, setFilter] = useState<TransactionFilter>('All');
   const slide = useFilterSlide(TRANSACTION_FILTERS.indexOf(filter));
   const rows = useMemo(() => buildHistoryRows(mockTransactions, filter), [filter]);

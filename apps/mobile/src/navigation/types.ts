@@ -30,6 +30,7 @@ export type RootStackParamList = {
   /** Receive flow: amount -> offline relay voucher QR. */
   ReceiveAmount: undefined;
   ReceiveQr: { amount: number };
+  TransactionDetail: { id: string };
   /** Moves funds between the user's own wallets. */
   TransferOnline: undefined;
   TransferOffline: undefined;
