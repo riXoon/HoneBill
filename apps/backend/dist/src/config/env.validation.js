@@ -50,5 +50,18 @@ exports.envValidationSchema = Joi.object({
     REDIS_PORT: Joi.number().port().default(6379),
     REDIS_DB: Joi.number().min(0).default(0),
     QUEUE_ENABLED: Joi.boolean().default(false),
+    TEXTBEE_GATEWAY_URL: Joi.string().uri().optional(),
+    TEXTBEE_API_KEY: Joi.string().optional(),
+    TEXTBEE_TIMEOUT_MS: Joi.number().integer().min(1000).default(4500),
+    TEXTBEE_RETRIES: Joi.number().integer().min(0).max(5).default(2),
+    TEXTBEE_FALLBACK_GATEWAY_URL: Joi.string().uri().allow('').optional(),
+    TEXTBEE_FALLBACK_API_KEY: Joi.string().allow('').optional(),
+    OTP_VERIFICATION_JWT_SECRET: Joi.string().allow('').optional(),
+    REQUIRE_OTP_TOKEN: Joi.boolean().default(false),
+    OTP_TEST_MODE: Joi.boolean().default(false),
+    OTP_TEST_NUMBERS: Joi.string().allow('').default(''),
+    OTP_TEST_CODE: Joi.string().allow('').optional(),
+    SEP10_AUTH_TIMEOUT: Joi.number().integer().positive().default(900),
+    SEP10_JWT_TIMEOUT: Joi.number().integer().positive().default(86400),
 });
 //# sourceMappingURL=env.validation.js.map

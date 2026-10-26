@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "types": ["jest", "node"],
+    "noEmit": true
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts", "../src/scripts/phase2-smoke.spec.ts", "../src/scripts/phase3-wallet-smoke.spec.ts", "../src/scripts/auth.service.spec.ts", "../src/scripts/auth-jwt.config.spec.ts", "../src/scripts/reconciliation.test.ts", "../src/scripts/signup-security.test.ts", "../src/scripts/legacy-http-exception.filter.spec.ts", "../src/scripts/sep10-jwt.guard.spec.ts"]
+}

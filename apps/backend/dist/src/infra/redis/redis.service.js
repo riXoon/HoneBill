@@ -27,14 +27,19 @@ let RedisService = class RedisService {
             return this.client;
         }
         const redisUrl = this.configService.get('REDIS_URL');
+        const options = {
+            lazyConnect: true,
+            maxRetriesPerRequest: 1,
+            connectTimeout: 2000,
+            commandTimeout: 2000,
+        };
         this.client = redisUrl
-            ? new ioredis_1.default(redisUrl, { lazyConnect: true, maxRetriesPerRequest: null })
+            ? new ioredis_1.default(redisUrl, options)
             : new ioredis_1.default({
                 host: this.configService.get('REDIS_HOST', '127.0.0.1'),
                 port: this.configService.get('REDIS_PORT', 6379),
                 db: this.configService.get('REDIS_DB', 0),
-                lazyConnect: true,
-                maxRetriesPerRequest: null,
+                ...options,
             });
         return this.client;
     }

@@ -19,6 +19,11 @@ const redis_module_1 = require("./infra/redis/redis.module");
 const queue_module_1 = require("./infra/queue/queue.module");
 const lock_module_1 = require("./infra/lock/lock.module");
 const stellar_module_1 = require("./infra/stellar/stellar.module");
+const accounts_module_1 = require("./modules/accounts/accounts.module");
+const auth_module_1 = require("./modules/auth/auth.module");
+const otp_module_1 = require("./modules/otp/otp.module");
+const wallet_module_1 = require("./modules/wallet/wallet.module");
+const settlements_module_1 = require("./modules/settlements/settlements.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -27,6 +32,7 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
+                ignoreEnvFile: process.env.NODE_ENV === 'test',
                 validationSchema: env_validation_1.envValidationSchema,
                 validationOptions: {
                     abortEarly: false,
@@ -45,6 +51,11 @@ exports.AppModule = AppModule = __decorate([
             ...(process.env.QUEUE_ENABLED === 'true' ? [queue_module_1.QueueModule] : []),
             lock_module_1.LockModule,
             stellar_module_1.StellarModule,
+            auth_module_1.AuthModule,
+            otp_module_1.OtpModule,
+            accounts_module_1.AccountsModule,
+            wallet_module_1.WalletModule,
+            settlements_module_1.SettlementsModule,
             health_module_1.HealthModule,
         ],
         providers: [
