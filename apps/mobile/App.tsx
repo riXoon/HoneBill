@@ -24,6 +24,15 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { MpinCreationScreen } from './src/screens/MpinCreationScreen';
 import { OtpScreen } from './src/screens/OtpScreen';
 import { QrScanScreen } from './src/screens/QrScanScreen';
+import { ReceiveQrScreen } from './src/screens/ReceiveQrScreen';
+import { ReceiveScreen } from './src/screens/ReceiveScreen';
+import { SendAmountScreen } from './src/screens/SendAmountScreen';
+import { SendMethodScreen } from './src/screens/SendMethodScreen';
+import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
+import { SendToScreen } from './src/screens/SendToScreen';
+import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
+import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
+import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
 import { UserDetailsScreen } from './src/screens/UserDetailsScreen';
 import { MainTabs } from './src/navigation/MainTabs';
 import type { RootStackParamList } from './src/navigation/types';
@@ -48,6 +57,16 @@ function RootNavigator() {
         <Stack.Screen name="AccountConfirmation" component={AccountConfirmationScreen} />
         <Stack.Screen name="Tabs" component={MainTabs} />
         <Stack.Screen name="QrScan" component={QrScanScreen} />
+        <Stack.Screen name="SendTo" component={SendToScreen} />
+        <Stack.Screen name="SendAmount" component={SendAmountScreen} />
+        <Stack.Screen name="SendVerification" component={SendVerificationScreen} />
+        <Stack.Screen name="SendMethod" component={SendMethodScreen} />
+        <Stack.Screen name="ReceiveAmount" component={ReceiveScreen} />
+        <Stack.Screen name="ReceiveQr" component={ReceiveQrScreen} />
+        <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
+        <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />
+        {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}
+        <Stack.Screen name="SendReceipt" component={SendReceiptScreen} options={{ gestureEnabled: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
