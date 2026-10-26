@@ -10,11 +10,17 @@ import { RedisModule } from './infra/redis/redis.module';
 import { QueueModule } from './infra/queue/queue.module';
 import { LockModule } from './infra/lock/lock.module';
 import { StellarModule } from './infra/stellar/stellar.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { OtpModule } from './modules/otp/otp.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { SettlementsModule } from './modules/settlements/settlements.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       validationSchema: envValidationSchema,
       validationOptions: {
         abortEarly: false,
@@ -33,6 +39,11 @@ import { StellarModule } from './infra/stellar/stellar.module';
     ...(process.env.QUEUE_ENABLED === 'true' ? [QueueModule] : []),
     LockModule,
     StellarModule,
+    AuthModule,
+    OtpModule,
+    AccountsModule,
+    WalletModule,
+    SettlementsModule,
     HealthModule,
   ],
   providers: [

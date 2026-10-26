@@ -4,11 +4,14 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
 
 @Catch()
 export class LegacyHttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(LegacyHttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -16,6 +19,20 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
+      if (
+        'retryAfterSeconds' in exception &&
+        typeof exception.retryAfterSeconds === 'number'
+      ) {
+        response.setHeader('Retry-After', String(exception.retryAfterSeconds));
+      } else if (
+        status === 423 &&
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null &&
+        'retryAfter' in exceptionResponse &&
+        typeof exceptionResponse.retryAfter === 'number'
+      ) {
+        response.setHeader('Retry-After', String(exceptionResponse.retryAfter));
+      }
 
       if (typeof exceptionResponse === 'string') {
         response.status(status).json({ error: exceptionResponse });
@@ -25,20 +42,32 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
       if (
         typeof exceptionResponse === 'object' &&
         exceptionResponse !== null &&
-        'error' in exceptionResponse &&
-        typeof exceptionResponse.error === 'string'
+        'found' in exceptionResponse &&
+        exceptionResponse.found === false
       ) {
-        response.status(status).json({ error: exceptionResponse.error });
+        response.status(status).json({ found: false });
         return;
       }
 
-      if (
-        typeof exceptionResponse === 'object' &&
-        exceptionResponse !== null &&
-        'message' in exceptionResponse &&
-        typeof exceptionResponse.message === 'string'
-      ) {
-        response.status(status).json({ error: exceptionResponse.message });
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const responseBody = exceptionResponse as Record<string, unknown>;
+        const error =
+          typeof responseBody.message === 'string'
+            ? responseBody.message
+            : typeof responseBody.error === 'string'
+              ? responseBody.error
+              : exception.message;
+        const legacyBody: Record<string, unknown> = { error };
+        if (typeof responseBody.attemptsRemaining === 'number') {
+          legacyBody.attemptsRemaining = responseBody.attemptsRemaining;
+        }
+        if (typeof responseBody.retryAfter === 'number') {
+          legacyBody.retryAfter = responseBody.retryAfter;
+        }
+        if (typeof responseBody.code === 'string') {
+          legacyBody.code = responseBody.code;
+        }
+        response.status(status).json(legacyBody);
         return;
       }
 
@@ -46,6 +75,7 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    this.logger.error(exception instanceof Error ? exception.stack : String(exception));
     response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: 'Internal Server Error',
     });

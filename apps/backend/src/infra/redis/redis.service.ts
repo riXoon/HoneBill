@@ -14,15 +14,20 @@ export class RedisService implements OnModuleDestroy {
     }
 
     const redisUrl = this.configService.get<string>('REDIS_URL');
+    const options = {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2000,
+      commandTimeout: 2000,
+    } as const;
 
     this.client = redisUrl
-      ? new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: null })
+      ? new Redis(redisUrl, options)
       : new Redis({
           host: this.configService.get<string>('REDIS_HOST', '127.0.0.1'),
           port: this.configService.get<number>('REDIS_PORT', 6379),
           db: this.configService.get<number>('REDIS_DB', 0),
-          lazyConnect: true,
-          maxRetriesPerRequest: null,
+          ...options,
         });
 
     return this.client;
