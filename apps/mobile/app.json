@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#EB7124"
       },
       "package": "live.honebill.app",
       "softwareKeyboardLayoutMode": "pan",
@@ -64,7 +64,7 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#ECF0F3"
         }
       ]
     ],
