@@ -3,8 +3,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
 
-// Figma: Actions (870:3109), four 78 dp columns 88 dp apart, each a 62 dp dark circle plus a label.
-export type QuickActionKey = 'send' | 'receive' | 'online' | 'offline';
+// Each action is a 62 dp dark circle plus a label.
+export type QuickActionKey = 'send' | 'receive' | 'topup' | 'online' | 'offline';
 
 const ICON_BOX = '0 0 37.4286 37.75';
 const stroke = { stroke: colors.surface, strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' } as const;
@@ -34,6 +34,18 @@ function ReceiveIcon() {
   );
 }
 
+/** A plus inside a ring, drawn in the same 37.4 dp box and 3 dp stroke as the other action icons. */
+function TopUpIcon() {
+  return (
+    <Svg width={37.43} height={37.75} viewBox={ICON_BOX}>
+      <Path
+        d="M18.7143 6.2C25.6 6.2 31.1905 11.8 31.1905 18.7C31.1905 25.6 25.6 31.2 18.7143 31.2C11.8286 31.2 6.2381 25.6 6.2381 18.7C6.2381 11.8 11.8286 6.2 18.7143 6.2ZM18.7143 12.9V24.5M12.9 18.7H24.5"
+        {...stroke}
+      />
+    </Svg>
+  );
+}
+
 function OnlineIcon() {
   return (
     <Svg width={37.43} height={37.75} viewBox={ICON_BOX}>
@@ -56,48 +68,54 @@ function OfflineIcon() {
   );
 }
 
-const ACTIONS: { key: QuickActionKey; label: string; left: number; Icon: () => React.JSX.Element; onlineOnly: boolean }[] = [
-  { key: 'send', label: 'Send', left: 0, Icon: SendIcon, onlineOnly: false },
-  { key: 'receive', label: 'Receive', left: 88, Icon: ReceiveIcon, onlineOnly: false },
-  { key: 'online', label: 'Online', left: 176, Icon: OnlineIcon, onlineOnly: true },
-  { key: 'offline', label: 'Offline', left: 264, Icon: OfflineIcon, onlineOnly: true },
+// Figma: Actions (870:3109), 88 dp columns. Only the transfer that leaves the current balance is offered,
+// so the row is Send, Receive and one of the two transfers, centred in the 342 dp row.
+const ACTIONS: { key: QuickActionKey; label: string; Icon: () => React.JSX.Element }[] = [
+  { key: 'send', label: 'Send', Icon: SendIcon },
+  { key: 'receive', label: 'Receive', Icon: ReceiveIcon },
+  { key: 'topup', label: 'Top-up', Icon: TopUpIcon },
+  { key: 'offline', label: 'Transfer to Offline Balance', Icon: OfflineIcon },
+  { key: 'online', label: 'Transfer to Online Balance', Icon: OnlineIcon },
 ];
 
+const COLUMN = 88;
+const ROW_WIDTH = 342;
+
 type QuickActionsProps = {
-  /** When false, the Online and Offline actions are dimmed and disabled (Figma "Home Page - Offline"). */
+  /** Online balance mode shows "Transfer to Offline Balance"; offline mode shows "Transfer to Online Balance". */
   online: boolean;
   onPress?: (key: QuickActionKey) => void;
 };
 
 export function QuickActions({ online, onPress }: QuickActionsProps) {
+  // Online hides "Transfer to Online". Offline hides "Transfer to Offline" and Top-up.
+  const actions = ACTIONS.filter(({ key }) => (online ? key !== 'online' : key !== 'offline' && key !== 'topup'));
+  // Four columns of 88 dp would overflow the 342 dp row, so they shrink to fit.
+  const column = Math.min(COLUMN, ROW_WIDTH / actions.length);
+  const start = (ROW_WIDTH - actions.length * column) / 2;
   return (
     <View style={styles.row}>
-      {ACTIONS.map(({ key, label, left, Icon, onlineOnly }) => {
-        const dim = onlineOnly && !online;
-        return (
-          <Pressable
-            key={key}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            accessibilityState={{ disabled: dim }}
-            disabled={dim}
-            onPress={() => onPress?.(key)}
-            style={({ pressed }) => [styles.item, { left }, pressed && styles.pressed]}
-          >
-            <View style={[styles.circle, dim ? styles.circleDim : styles.circleOn]}>
-              <Icon />
-            </View>
-            <Text style={[styles.label, dim && styles.labelDim]}>{label}</Text>
-          </Pressable>
-        );
-      })}
+      {actions.map(({ key, label, Icon }, i) => (
+        <Pressable
+          key={key}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          onPress={() => onPress?.(key)}
+          style={({ pressed }) => [styles.item, { left: start + i * column, width: column }, pressed && styles.pressed]}
+        >
+          <View style={styles.circle}>
+            <Icon />
+          </View>
+          <Text style={styles.label}>{label}</Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { width: 342, height: 120 },
-  item: { position: 'absolute', top: 0, width: 78, height: 120, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  row: { width: ROW_WIDTH, height: 120 },
+  item: { position: 'absolute', top: 0, width: COLUMN, height: 120, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 12, gap: 12 },
   pressed: { opacity: 0.7 },
   circle: {
     width: 62,
@@ -109,9 +127,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
+    backgroundColor: colors.text,
+    elevation: 4,
   },
-  circleOn: { backgroundColor: colors.text, elevation: 4 },
-  circleDim: { backgroundColor: 'rgba(34, 32, 33, 0.5)' },
   label: { fontFamily: fonts.regular, fontSize: 12, color: colors.text, textAlign: 'center' },
-  labelDim: { color: colors.textMuted },
 });

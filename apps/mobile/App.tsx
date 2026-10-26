@@ -26,6 +26,7 @@ import { OtpScreen } from './src/screens/OtpScreen';
 import { QrScanScreen } from './src/screens/QrScanScreen';
 import { ReceiveQrScreen } from './src/screens/ReceiveQrScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
+import { TransactionDetailScreen } from './src/screens/TransactionDetailScreen';
 import { SendAmountScreen } from './src/screens/SendAmountScreen';
 import { SendMethodScreen } from './src/screens/SendMethodScreen';
 import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
@@ -63,6 +64,7 @@ function RootNavigator() {
         <Stack.Screen name="SendMethod" component={SendMethodScreen} />
         <Stack.Screen name="ReceiveAmount" component={ReceiveScreen} />
         <Stack.Screen name="ReceiveQr" component={ReceiveQrScreen} />
+        <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
         <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
         <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />
         {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}

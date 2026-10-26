@@ -9,8 +9,10 @@ import { AuthChrome } from '../components/ui/AuthChrome';
 import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
+import { WeakPinDialog } from '../components/ui/WeakPinDialog';
 import { MPIN_LENGTH } from '../mocks/user';
 import type { RootStackParamList } from '../navigation/types';
+import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
 import { colors, fonts } from '../theme';
 
 // Figma: MPIN Creation (870:2965), 402x874.
@@ -33,10 +35,25 @@ function LockIcon() {
 
 export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'MpinCreation'>) {
   const [pin, setPin] = useState('');
+  const [weak, setWeak] = useState<WeakMpinReason | null>(null);
+  // Remounting the boxes after the dialog brings the keyboard back (the Modal steals focus).
+  const [attempt, setAttempt] = useState(0);
 
   // The PIN is not stored yet (mock-only frontend).
   const confirm = () => {
-    if (pin.length === MPIN_LENGTH) navigation.navigate('AccountConfirmation');
+    if (pin.length !== MPIN_LENGTH) return;
+    const reason = weakMpinReason(pin);
+    if (reason) {
+      setWeak(reason);
+      return;
+    }
+    navigation.navigate('AccountConfirmation');
+  };
+
+  const dismissWeak = () => {
+    setWeak(null);
+    setPin('');
+    setAttempt((n) => n + 1);
   };
 
   return (
@@ -50,7 +67,7 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
           <Text style={styles.subtitle}>Create a 4-digit PIN to protect your device</Text>
         </View>
 
-        <CodeBoxes length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+        <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
 
         <Button label="Confirm 4-digit pin" size="large" icon={<LockIcon />} onPress={confirm} />
 
@@ -59,6 +76,8 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
           <Mascot mood="secure" />
         </View>
       </View>
+
+      <WeakPinDialog reason={weak} onDismiss={dismissWeak} />
     </View>
   );
 }
