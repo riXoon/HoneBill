@@ -11,14 +11,8 @@ export class AuthController {
   ) {}
 
   @Get()
-  getChallenge(
-    @Query('account') account?: string | string[],
-    @Query('memo') memo?: string | string[],
-  ) {
-    return this.authService.getChallenge(
-      typeof account === 'string' ? account : undefined,
-      typeof memo === 'string' ? memo : undefined,
-    );
+  getChallenge(@Query('account') account?: string | string[]) {
+    return this.authService.getChallenge(typeof account === 'string' ? account : undefined);
   }
 
   @Post()

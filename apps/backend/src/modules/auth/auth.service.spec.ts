@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { BadRequestException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Keypair, Networks, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Keypair, Networks, Transaction, TransactionBuilder, WebAuth } from '@stellar/stellar-sdk';
 import type { StellarService } from '../../infra/stellar/stellar.service';
+import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
 import { AuthService } from './auth.service';
 
 const JWT_SECRET = 'test-jwt-secret-only';
@@ -81,7 +82,9 @@ describe('AuthService SEP-10', () => {
 
     it('rejects a missing account with the legacy message', () => {
       const { service } = createService();
-      expect(() => service.getChallenge(undefined)).toThrow("Missing required query parameter: 'account'");
+      expect(() => service.getChallenge(undefined)).toThrow(
+        "Missing required query parameter: 'account'",
+      );
     });
 
     it('rejects an invalid account, echoing it like legacy', () => {
@@ -89,9 +92,9 @@ describe('AuthService SEP-10', () => {
       expect(() => service.getChallenge('GABC')).toThrow('Invalid Stellar account address: GABC');
     });
 
-    it('rejects a non-numeric memo', () => {
+    it('builds a challenge without a memo', () => {
       const { service } = createService();
-      expect(() => service.getChallenge(client.publicKey(), 'abc')).toThrow(BadRequestException);
+      expect(service.getChallenge(client.publicKey()).transaction).toEqual(expect.any(String));
     });
 
     it('fails when SEP10_HOME_DOMAINS is missing (no localhost default)', () => {
@@ -115,10 +118,27 @@ describe('AuthService SEP-10', () => {
       expect(claims).not.toHaveProperty('memo');
     });
 
-    it('includes the memo claim only when the challenge had one', async () => {
+    it('does not include a memo claim when the challenge has no memo', async () => {
       const { service, jwtService, loadAccount } = createService();
       loadAccount.mockResolvedValue(fundedAccount(client));
-      const { transaction } = service.getChallenge(client.publicKey(), '12345');
+      const { transaction } = service.getChallenge(client.publicKey());
+
+      const { token } = await service.issueToken(signChallenge(transaction, client));
+      expect(jwtService.verify(token)).not.toHaveProperty('memo');
+    });
+
+    it('preserves a memo claim from a valid signed challenge that contains a memo', async () => {
+      const { service, seed, jwtService, loadAccount } = createService();
+      loadAccount.mockResolvedValue(fundedAccount(client));
+      const transaction = WebAuth.buildChallengeTx(
+        Keypair.fromSecret(seed),
+        client.publicKey(),
+        DOMAIN,
+        900,
+        Networks.TESTNET,
+        DOMAIN,
+        '12345',
+      );
 
       const { token } = await service.issueToken(signChallenge(transaction, client));
       expect(jwtService.verify(token).memo).toBe('12345');
@@ -126,19 +146,32 @@ describe('AuthService SEP-10', () => {
 
     it('rejects an empty transaction with 400', async () => {
       const { service } = createService();
-      await expect(service.issueToken('')).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.issueToken('')).rejects.toMatchObject({
+        status: 400,
+        legacyBody: {
+          error: 'Bad Request',
+          message: "Missing required field in body: 'transaction'",
+        },
+      });
     });
 
     it('rejects a malformed transaction with 401', async () => {
       const { service } = createService();
-      await expect(service.issueToken('not-a-transaction')).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(service.issueToken('not-a-transaction')).rejects.toMatchObject({
+        status: 401,
+        legacyBody: {
+          error: 'Unauthorized',
+          message:
+            'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',
+        },
+      });
     });
 
     it('rejects an unsigned challenge', async () => {
       const { service, loadAccount } = createService();
       loadAccount.mockResolvedValue(fundedAccount(client));
       const { transaction } = service.getChallenge(client.publicKey());
-      await expect(service.issueToken(transaction)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(service.issueToken(transaction)).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
     it('rejects a challenge signed by a different account', async () => {
@@ -147,7 +180,7 @@ describe('AuthService SEP-10', () => {
       const { transaction } = service.getChallenge(client.publicKey());
       await expect(
         service.issueToken(signChallenge(transaction, Keypair.random())),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
     it('rejects a challenge signed for a different network', async () => {
@@ -156,7 +189,7 @@ describe('AuthService SEP-10', () => {
       const { transaction } = service.getChallenge(client.publicKey());
       await expect(
         service.issueToken(signChallenge(transaction, client, Networks.PUBLIC)),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
     it('rejects an expired challenge', async () => {
@@ -165,7 +198,7 @@ describe('AuthService SEP-10', () => {
       const { transaction } = service.getChallenge(client.publicKey());
       const signed = signChallenge(transaction, client);
       jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 1300 * 1000);
-      await expect(service.issueToken(signed)).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(service.issueToken(signed)).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
     it('rejects a challenge issued by another server key', async () => {
@@ -175,7 +208,7 @@ describe('AuthService SEP-10', () => {
       const { transaction } = issuer.getChallenge(client.publicKey());
       await expect(
         verifier.issueToken(signChallenge(transaction, client)),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
     it('rejects an unexpected home domain', async () => {
@@ -186,16 +219,23 @@ describe('AuthService SEP-10', () => {
       const { transaction } = issuer.getChallenge(client.publicKey());
       await expect(
         verifier.issueToken(signChallenge(transaction, client)),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(LegacyBodyException);
     });
 
-    it('rejects an unfunded account (Horizon lookup fails)', async () => {
+    it('rejects an unfunded account with the legacy error body and detail message', async () => {
       const { service, loadAccount } = createService();
       loadAccount.mockRejectedValue(new Error('Not Found'));
       const { transaction } = service.getChallenge(client.publicKey());
       await expect(
         service.issueToken(signChallenge(transaction, client)),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toMatchObject({
+        status: 401,
+        legacyBody: {
+          error: 'Unauthorized',
+          message:
+            'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',
+        },
+      });
     });
 
     it('requires every on-chain signer to sign (legacy all-weights threshold)', async () => {
@@ -205,7 +245,7 @@ describe('AuthService SEP-10', () => {
       const { transaction } = service.getChallenge(client.publicKey());
       await expect(
         service.issueToken(signChallenge(transaction, client)),
-      ).rejects.toBeInstanceOf(UnauthorizedException);
+      ).rejects.toBeInstanceOf(LegacyBodyException);
     });
       it('tokenIssuer returns the first home domain', () => {
      const { service } = createService(undefined, { SEP10_HOME_DOMAINS: 'a.example, b.example' });

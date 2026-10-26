@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { LegacyBodyException } from '../src/common/exceptions/legacy-body.exception.js';
 import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
 import { AuthController } from '../src/modules/auth/auth.controller.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
@@ -72,7 +73,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
         transaction: 'fake-challenge-xdr',
         network_passphrase: 'Test SDF Network ; September 2015',
       });
-    expect(authService.getChallenge).toHaveBeenCalledWith('GTEST', '123');
+    expect(authService.getChallenge).toHaveBeenCalledWith('GTEST');
   });
 
   it('POST /api/auth returns { token } with legacy status 200', async () => {
@@ -83,6 +84,25 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       .send({ transaction: 'fake-signed-challenge-xdr' })
       .expect(200, { token: 'fake-sep10-token' });
     expect(authService.issueToken).toHaveBeenCalledWith('fake-signed-challenge-xdr');
+  });
+
+  it('POST /api/auth preserves the scoped legacy unfunded-account body', async () => {
+    authService.issueToken.mockRejectedValueOnce(
+      new LegacyBodyException(401, {
+        error: 'Unauthorized',
+        message:
+          'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth')
+      .send({ transaction: 'fake-signed-challenge-xdr' })
+      .expect(401, {
+        error: 'Unauthorized',
+        message:
+          'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',
+      });
   });
 
   it('POST /api/auth/pin/verify preserves success and incorrect-PIN contracts', async () => {

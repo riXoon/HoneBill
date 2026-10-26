@@ -1,6 +1,7 @@
 import { BadRequestException, HttpException, Logger, UnauthorizedException } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import { LegacyHttpExceptionFilter } from './legacy-http-exception.filter';
+import { LegacyBodyException } from '../exceptions/legacy-body.exception.js';
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 function createHost() {
@@ -28,6 +29,25 @@ describe('LegacyHttpExceptionFilter', () => {
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'Invalid phone number format' });
+  });
+
+  it('passes a LegacyBodyException response through verbatim', () => {
+    const { host, response } = createHost();
+    const body = { error: 'Unauthorized', message: 'Account is not funded.' };
+
+    filter.catch(new LegacyBodyException(401, body), host);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith(body);
+  });
+
+  it('keeps plain UnauthorizedException responses in the legacy error shape', () => {
+    const { host, response } = createHost();
+
+    filter.catch(new UnauthorizedException('x'), host);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({ error: 'x' });
   });
 
   it('preserves attemptsRemaining in the legacy error shape', () => {

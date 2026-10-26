@@ -1,14 +1,13 @@
 import {
-  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Keypair, StrKey, WebAuth } from '@stellar/stellar-sdk';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
+import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
 import { parseTtl } from './auth-jwt.config.js';
 
 @Injectable()
@@ -41,16 +40,18 @@ export class AuthService {
   return this.homeDomains[0];
 }
 
-getChallenge(account: string | undefined, memo?: string) {
+getChallenge(account: string | undefined) {
       if (!account) {
-    throw new BadRequestException("Missing required query parameter: 'account'");
-    }
-    if (!StrKey.isValidEd25519PublicKey(account)) {
-      throw new BadRequestException(`Invalid Stellar account address: ${account}`);
-    }
-    // Deliberate deviation: legacy passed memo as the 9th argument (clientSigningKey), so it was silently dropped.
-    if (memo !== undefined && !/^\d+$/.test(memo)) {
-      throw new BadRequestException('Invalid memo');
+  throw new LegacyBodyException(400, {
+    error: 'Bad Request',
+    message: "Missing required query parameter: 'account'",
+  });
+  }
+  if (!StrKey.isValidEd25519PublicKey(account)) {
+    throw new LegacyBodyException(400, {
+      error: 'Bad Request',
+      message: `Invalid Stellar account address: ${account}`,
+    });
     }
     const homeDomain = this.homeDomains[0];
     const timeout = parseTtl(
@@ -66,36 +67,53 @@ getChallenge(account: string | undefined, memo?: string) {
       timeout,
       this.networkPassphrase,
       homeDomain, // web auth domain
-      memo, // 7th argument, not 9th
     );
     return { transaction, network_passphrase: this.networkPassphrase };
   }
 
   async issueToken(transaction: string) {
   if (!transaction?.trim()) {
-    throw new BadRequestException("Missing required field in body: 'transaction'");
+    throw new LegacyBodyException(400, {
+      error: 'Bad Request',
+      message: "Missing required field in body: 'transaction'",
+    });
   }
   const server = this.serverKeypair.publicKey();
   const homeDomains = this.homeDomains;
   const primaryDomain = homeDomains[0];
 
-  let clientAccountID: string;
+    let clientAccountID: string;
   let memo: string | null | undefined;
   try {
     ({ clientAccountID, memo } = WebAuth.readChallengeTx(
       transaction, server, this.networkPassphrase, homeDomains, primaryDomain,
     ));
-    const record = await this.stellar.horizonServer.loadAccount(clientAccountID); // unfunded -> throws -> 401
+
+    let record;
+    try {
+      record = await this.stellar.horizonServer.loadAccount(clientAccountID);
+    } catch (err) {
+      this.logger.debug(`Could not load account from Horizon: ${clientAccountID} - ${(err as Error).message}`);
+      throw new LegacyBodyException(401, {
+        error: 'Unauthorized',
+        message:
+          'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',
+      });
+    }
+
     const signers = record.signers;
     const totalWeight = signers.reduce((sum, s) => sum + s.weight, 0);
     WebAuth.verifyChallengeTxThreshold(
       transaction, server, this.networkPassphrase, totalWeight, signers, homeDomains, primaryDomain,
     );
   } catch (err) {
+    if (err instanceof LegacyBodyException) throw err;
     this.logger.debug(`SEP-10 verification failed: ${(err as Error).message}`);
-    throw new UnauthorizedException(
-      'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',
-    );
+    throw new LegacyBodyException(401, {
+      error: 'Unauthorized',
+      message:
+        'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',
+    });
   }
 
   const token = this.jwtService.sign({

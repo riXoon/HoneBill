@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { LegacyBodyException } from '../exceptions/legacy-body.exception.js';
 
 @Catch()
 export class LegacyHttpExceptionFilter implements ExceptionFilter {
@@ -32,6 +33,11 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
         typeof exceptionResponse.retryAfter === 'number'
       ) {
         response.setHeader('Retry-After', String(exceptionResponse.retryAfter));
+      }
+
+      if (exception instanceof LegacyBodyException) {
+        response.status(status).json(exception.legacyBody);
+        return;
       }
 
       if (typeof exceptionResponse === 'string') {

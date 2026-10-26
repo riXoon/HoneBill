@@ -180,7 +180,7 @@ Setup checkpoint complete: the Nest app scaffold, workspace wiring, Prisma/Redis
 - [ ] PIN verify with lockout
 - [ ] OTP send/verify (TextBee via `SmsModule` client)
 - [ ] Register, users check/lookup
-- [ ] Port `signup-security.test.ts`
+- [x] Port `signup-security.test.ts`
 
 ### Phase 3: Wallet, transactions, settlements
 - [ ] Balance, history, vault balance, transactions
@@ -240,6 +240,10 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-23 | Rebuild the backend in NestJS; keep Next.js app as read-only reference in `apps/_legacy/backend` | Clearer structure for a growing API; legacy keeps the reference without being maintained |
 | 2026-10-23 | Host as a long-running server (Docker), not Vercel serverless | Enables BullMQ workers, ioredis, in-process schedules; replaces QStash |
 | 2026-10-23 | Web pages deferred | Decide Nest views vs separate web app later; SEP-24 pages block Phase 6 |
+| 2026-10-27 | Preserve legacy SEP-10 memo behavior: ignore the GET memo parameter, but retain a memo claim when one is present in a valid POST challenge | Legacy passes the GET memo in a position the Stellar SDK ignores, while POST extracts and conditionally emits the challenge memo |
+| 2026-10-27 | Keep SEP-10 issuer validation and require a non-empty string `sub` claim | The issuer matches the first `SEP10_HOME_DOMAINS` entry in legacy; production configuration must remain aligned for held-token compatibility. Legacy protected routes require `sub`. |
+| 2026-10-27 | Preserve route-specific two-field legacy error bodies for `/api/auth` with an explicit exception marker | Legacy error bodies vary by route; a global message-field response would break parity elsewhere |
+| 2026-10-27 | Keep 401 message text route-specific; require status and response-body parity rather than a global error normalizer | Legacy protected routes use different messages and body shapes; the mobile client reads the `error` field |
 
 ## Change log
 
@@ -247,3 +251,4 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 |---|---|---|---|
 | 2026-10-23 | `chores` branch | 0 | Legacy freeze: moved Next.js backend to `apps/_legacy/backend`, CI/workspace updates, this plan |
 | 2026-10-25 | setup-first migration pass | 1 | Completed Nest scaffold, workspace wiring, Prisma baseline, env validation, runtime bootstrap, Redis/BullMQ/lock/Stellar infra, Swagger/health/Docker, and readiness checks before feature migration |
+| 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |

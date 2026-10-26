@@ -91,7 +91,15 @@ describe('Sep10JwtGuard (e2e)', () => {
   });
 
   it('accepts a valid SEP-10 bearer token', async () => {
-    const token = await jwt.signAsync({ sub: 'GTEST' });
+    const legacyTokenSigner = new JwtService({
+      secret: TEST_SECRET,
+      signOptions: {
+        algorithm: 'HS256',
+        issuer: TEST_ISSUER,
+        expiresIn: '1h',
+      },
+    });
+    const token = await legacyTokenSigner.signAsync({ sub: 'GTEST' });
     await call(`Bearer ${token}`).expect(200, { ok: true });
   });
 });
