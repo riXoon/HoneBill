@@ -1,0 +1,193 @@
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SettlementStatus {
+  PENDING
+  SETTLED
+  FAILED
+}
+
+enum DemoPairPurpose {
+  JUDGE
+  QA
+}
+
+enum DemoPairStatus {
+  PROVISIONING
+  READY
+  LEASED
+  FAILED
+  RETIRED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Account {
+  id               Int      @id @default(autoincrement())
+  shortId          String   @unique @map("short_id")           // e.g., "aB3x9Q"
+  role             Role     @default(USER) @map("role")
+  stellarPublicKey String   @unique @map("stellar_public_key") // e.g., "GC333QNW..."
+  offlineDeviceKey String?  @map("offline_device_key")         // Ed25519 public key
+  pin              String?  @map("pin")
+  phoneNumber      String?  @map("phone_number")
+  firstName        String?  @map("first_name")
+  lastName         String?  @map("last_name")
+  email            String?  @map("email")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  demoSenderPair   DemoAccountPair? @relation("DemoSenderAccount")
+  demoReceiverPair DemoAccountPair? @relation("DemoReceiverAccount")
+
+  @@index([phoneNumber])
+  @@map("account")
+}
+
+/// A pre-provisioned, single-use pair of disposable Testnet accounts for judges.
+/// Secrets are encrypted by the application before they are persisted.
+model DemoAccountPair {
+  id                            String          @id @default(cuid())
+  senderAccountId               Int             @unique @map("sender_account_id")
+  receiverAccountId             Int             @unique @map("receiver_account_id")
+  encryptedSenderWalletSecret   String          @map("encrypted_sender_wallet_secret")
+  encryptedReceiverWalletSecret String          @map("encrypted_receiver_wallet_secret")
+  encryptedSenderDeviceSecret   String          @map("encrypted_sender_device_secret")
+  encryptedReceiverDeviceSecret String          @map("encrypted_receiver_device_secret")
+  purpose                       DemoPairPurpose @default(JUDGE)
+  status                        DemoPairStatus  @default(PROVISIONING)
+  claimedByHash                 String?         @unique @map("claimed_by_hash")
+  claimedAt                     DateTime?       @map("claimed_at")
+  expiresAt                     DateTime?       @map("expires_at")
+  lastVerifiedAt                DateTime?       @map("last_verified_at")
+  lastError                     String?         @map("last_error")
+  createdAt                     DateTime        @default(now()) @map("created_at")
+  updatedAt                     DateTime        @updatedAt @map("updated_at")
+
+  senderAccount   Account @relation("DemoSenderAccount", fields: [senderAccountId], references: [id], onDelete: Restrict)
+  receiverAccount Account @relation("DemoReceiverAccount", fields: [receiverAccountId], references: [id], onDelete: Restrict)
+
+  @@index([purpose, status, createdAt])
+  @@map("demo_account_pair")
+}
+
+model GatewayNode {
+  id               Int      @id @default(autoincrement())
+  name             String   @map("name")                       // e.g. "Backup Server 1"
+  stellarPublicKey String   @unique @map("stellar_public_key")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("gateway_node")
+}
+
+/// Supported tokens
+
+model Token {
+  id         Int      @id @default(autoincrement()) @map("id")
+  symbol     String   @unique @map("symbol")       // e.g., "PHPC"
+  contractId String   @unique @map("contract_id")  // Soroban contract / SAC address
+  decimals   Int      @default(7) @map("decimals") // Stellar standard: 7 decimal places
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  settlements     Settlement[]
+  onlineTransfers OnlineTransfer[]
+
+  @@map("token")
+}
+
+model Settlement {
+  id              Int              @id @default(autoincrement())
+  qstashMessageId String           @unique @map("qstash_message_id") // Upstash-Message-Id header
+  nonce           String           @unique @map("nonce")              // Replay-attack dedup key
+  senderShortId   String           @map("sender_short_id")
+  receiverShortId String           @map("receiver_short_id")
+  relayerAddress  String?          @map("relayer_address")            // Gateway node public key
+  tokenId         Int              @map("token_id")
+  amountStroops   BigInt           @map("amount_stroops")             // Stellar stroops (7-decimal integer)
+  txHash          String?          @map("tx_hash")
+  signedTxXdr     String?          @map("signed_tx_xdr")
+  status          SettlementStatus @map("status")
+  failReason      String?          @map("fail_reason")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  token Token @relation(fields: [tokenId], references: [id])
+
+  @@index([senderShortId, createdAt])
+  @@index([receiverShortId, createdAt])
+  @@map("settlement")
+}
+
+//Anchor Transaction
+enum AnchorTxType {
+  deposit
+  withdrawal
+}
+
+enum AnchorTxStatus {
+  incomplete
+  pending_user_transfer_start
+  pending_external
+  completed
+  error
+}
+
+model AnchorTransaction {
+  id              String         @id @default(uuid()) // SEP-24 requires string/UUID transaction IDs
+  stellarAccount  String         @map("stellar_account") // The user's G... public key
+  type            AnchorTxType
+  status          AnchorTxStatus @default(incomplete)
+  
+  assetCode       String         @map("asset_code") // "PHPC" or "USDC"
+  amountIn        String?        @map("amount_in") // Fiat amount user wants to deposit
+  amountOut       String?        @map("amount_out") // Crypto amount they will receive (minus fees)
+  amountFee       String?        @map("amount_fee")
+  
+  memo            String?        // For withdrawals (identifying the return transaction)
+  memoType        String?        @map("memo_type") // Usually "hash" or "id"
+  
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@index([stellarAccount, createdAt])
+  @@map("anchor_transaction")
+}
+
+/// Authoritative record of a direct online Soroban token transfer.
+/// The transaction hash is computed from the server-assembled transaction and
+/// later promoted to SETTLED only after Soroban RPC confirms it.
+model OnlineTransfer {
+  id                 String           @id @default(uuid())
+  txHash             String           @unique @map("tx_hash")
+  senderPublicKey    String           @map("sender_public_key")
+  recipientPublicKey String           @map("recipient_public_key")
+  tokenId            Int              @map("token_id")
+  amountStroops      BigInt           @map("amount_stroops")
+  status             SettlementStatus @default(PENDING)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  confirmedAt        DateTime?        @map("confirmed_at")
+
+  token Token @relation(fields: [tokenId], references: [id])
+
+  @@index([senderPublicKey, createdAt])
+  @@index([recipientPublicKey, createdAt])
+  @@map("online_transfer")
+}

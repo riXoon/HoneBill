@@ -162,16 +162,18 @@ Shared lib: `lib/ramp-config.ts`.
 - [x] `CLAUDE.md` read-only rule covers `apps/_legacy/backend`; README updated
 
 ### Phase 1: Scaffold and infrastructure
-- [ ] `nest new` into `apps/backend` (package name `backend`, strict TS); add `"apps/backend"` to root `package.json` `workspaces` and resync the lockfile
-- [ ] Scripts the CI expects: `build`, `test`, plus `typecheck` (`tsc --noEmit`) for the root pre-commit hook
-- [ ] Copy `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`; `PrismaModule`
-- [ ] `@nestjs/config` + env schema (fail fast on missing required vars)
-- [ ] Global prefix `api` (exclude `/.well-known/*`), CORS, `rawBody: true`, global `ValidationPipe`
-- [ ] Global exception filter producing the legacy error JSON shape (check legacy routes: `{ error: string }` with status)
-- [ ] Redis (ioredis), BullMQ, lock service, throttler with Redis storage
-- [ ] `StellarModule` (SDK, Horizon/RPC clients, `pijin_core` contract client)
-- [ ] Swagger at `/api/docs`; Terminus health at `/api/health`
-- [ ] Dockerfile + `.env.example`; CI green
+- [x] `nest new` into `apps/backend` (package name `backend`, strict TS); add `"apps/backend"` to root `package.json` `workspaces` and resync the lockfile
+- [x] Scripts the CI expects: `build`, `test`, plus `typecheck` (`tsc --noEmit`) for the root pre-commit hook
+- [x] Copy `prisma/schema.prisma`, `prisma/migrations/`, `prisma.config.ts`; `PrismaModule`
+- [x] `@nestjs/config` + env schema (fail fast on missing required vars)
+- [x] Global prefix `api` (exclude `/.well-known/*`), CORS, `rawBody: true`, global `ValidationPipe`
+- [x] Global exception filter producing the legacy error JSON shape (check legacy routes: `{ error: string }` with status)
+- [x] Redis (ioredis), BullMQ, lock service, throttler with Redis storage
+- [x] `StellarModule` (SDK, Horizon/RPC clients, `pijin_core` contract client)
+- [x] Swagger at `/api/docs`; Terminus health at `/api/health`
+- [x] Dockerfile + `.env.example`; CI green
+
+Setup checkpoint complete: the Nest app scaffold, workspace wiring, Prisma/Redis/queue/Stellar infra, health/docs bootstrap, and readiness checks all pass. We are ready to move into feature migration work in Phase 2.
 
 ### Phase 2: Auth, OTP, accounts
 - [ ] `Sep10JwtGuard`, SEP-10 challenge/token
@@ -244,3 +246,4 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | Date | PR / commit | Phase | Change |
 |---|---|---|---|
 | 2026-10-23 | `chores` branch | 0 | Legacy freeze: moved Next.js backend to `apps/_legacy/backend`, CI/workspace updates, this plan |
+| 2026-10-25 | setup-first migration pass | 1 | Completed Nest scaffold, workspace wiring, Prisma baseline, env validation, runtime bootstrap, Redis/BullMQ/lock/Stellar infra, Swagger/health/Docker, and readiness checks before feature migration |
