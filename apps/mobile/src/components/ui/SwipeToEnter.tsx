@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -16,6 +18,10 @@ import { colors, fonts } from '../../theme';
 type SwipeToEnterProps = {
   onComplete: () => void;
   label?: string;
+  /** Screen-reader name; defaults to the "enter" wording used on the auth screens. */
+  accessibilityLabel?: string;
+  /** Dims the track and ignores drags (e.g. until a form is valid). */
+  disabled?: boolean;
 };
 
 const WIDTH = 325;
@@ -40,11 +46,23 @@ function Knob() {
 }
 
 /** Figma Swipe (870:2964): a 325x80 gradient track with a draggable knob. Only `transform` animates. */
-export function SwipeToEnter({ onComplete, label = 'SWIPE TO  ENTER' }: SwipeToEnterProps) {
+export function SwipeToEnter({
+  onComplete,
+  label = 'SWIPE TO  ENTER',
+  accessibilityLabel = 'Swipe to enter',
+  disabled = false,
+}: SwipeToEnterProps) {
   const x = useSharedValue(0);
   const startX = useSharedValue(0);
 
+  // Coming back to a screen (e.g. Back from the next step of a flow) puts the knob at the start again.
+  const focused = useIsFocused();
+  useEffect(() => {
+    if (focused) x.value = 0;
+  }, [focused, x]);
+
   const pan = Gesture.Pan()
+    .enabled(!disabled)
     .onBegin(() => {
       startX.value = x.value;
     })
@@ -76,12 +94,13 @@ export function SwipeToEnter({ onComplete, label = 'SWIPE TO  ENTER' }: SwipeToE
 
   return (
     <View
-      style={styles.shadow}
+      style={[styles.shadow, disabled && styles.disabled]}
       accessible
       accessibilityRole="button"
-      accessibilityLabel="Swipe to enter"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
       accessibilityActions={[{ name: 'activate' }]}
-      onAccessibilityAction={onComplete}
+      onAccessibilityAction={disabled ? undefined : onComplete}
     >
       <LinearGradient
         colors={[colors.primarySoft, colors.coral]}
@@ -113,6 +132,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  disabled: { opacity: 0.5 },
   track: {
     flex: 1,
     borderRadius: 100,

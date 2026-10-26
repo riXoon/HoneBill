@@ -55,6 +55,7 @@ apps/backend/node_modules/
 apps/backend/.next/
 apps/backend/out/
 apps/backend/build/
+apps/backend/dist
 
 # Environment Variables 
 apps/backend/.env

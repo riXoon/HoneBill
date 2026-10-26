@@ -1,26 +1,173 @@
 name: Pull Request Discord Notifier
 
+# pull_request_target runs the workflow from the base branch and never checks
+# out PR code, so the PR event steps stay safe. Review events use pull_request_review.
 on:
-  pull_request:
-    types: [opened, reopened, synchronize]
-    branches: [ "main" ]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, closed]
+    branches: ["main", "dev/staging"]
+  pull_request_review:
+    types: [submitted]
+    branches: ["main", "dev/staging"]
+
+permissions:
+  contents: read
 
 jobs:
   notify:
     name: Send Discord Notification
     runs-on: ubuntu-latest
+    # Draft PRs stay quiet until they are marked ready for review.
+    if: github.event.pull_request.draft == false || github.event.action == 'closed'
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      EVENT_NAME: ${{ github.event_name }}
+      ACTION: ${{ github.event.action }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      PR_HEAD: ${{ github.event.pull_request.head.ref }}
+      PR_BASE: ${{ github.event.pull_request.base.ref }}
+      PR_MERGED: ${{ github.event.pull_request.merged }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+      PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+      PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+      PR_FILES: ${{ github.event.pull_request.changed_files }}
+      PR_COMMITS: ${{ github.event.pull_request.commits }}
+      REPO: ${{ github.repository }}
+      REVIEW_BODY: ${{ github.event.review.body }}
+      REVIEWER: ${{ github.event.review.user.login }}
+      REVIEW_STATE: ${{ github.event.review.state }}
+      REVIEW_URL: ${{ github.event.review.html_url }}
 
     steps:
-      - name: Send PR Alert via Discord Webhook
-        uses: tsickert/discord-webhook@v7.0.0
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
-          embed-title: "🚀 New Pull Request Opened"
-          embed-description: |
-            **PR Title:** ${{ github.event.pull_request.title }}
-            **Author:** ${{ github.event.pull_request.user.login }}
-            **Branch:** `${{ github.event.pull_request.head.ref }}` into `main`
-            
-            [View Pull Request on GitHub](${{ github.event.pull_request.html_url }})
-          embed-color: 10325 
-          username: "CelluFi CI Bot"
+      - name: Build and send Discord message
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # GitHub login -> Discord user ID
+          declare -A DISCORD_ID=(
+            ["riXoon"]="890180050345922580"
+            ["Nightlion-blk"]="1153515805405872198"
+            ["IamMattHenry"]="809604630865641483"
+          )
+          OWNER="riXoon"
+
+          mention() { [[ -n "${DISCORD_ID[$1]:-}" ]] && echo "<@${DISCORD_ID[$1]}>" || echo "**$1**"; }
+          ids_of()  { for u in "$@"; do [[ -n "${DISCORD_ID[$u]:-}" ]] && echo "${DISCORD_ID[$u]}"; done; }
+
+          TITLE=""; COLOR=0; BODY=""; PING_USERS=()
+
+          if [[ "$EVENT_NAME" == "pull_request_target" ]]; then
+            case "$ACTION" in
+              opened|reopened|ready_for_review)
+                TITLE="🐝 New pull request"; COLOR=15765297 # #F08F31 primary orange
+                BODY="$(mention "$PR_AUTHOR") opened a PR into \`$PR_BASE\`."
+                # Ping the owner for review, unless the owner opened it.
+                if [[ "$PR_AUTHOR" != "$OWNER" ]]; then
+                  BODY="$BODY"$'\n'"$(mention "$OWNER") please review it."
+                  PING_USERS=("$OWNER")
+                fi
+                ;;
+              closed)
+                if [[ "$PR_MERGED" == "true" ]]; then
+                  TITLE="🍯 Pull request merged"; COLOR=764300 # #0BA98C
+                  BODY="This PR was merged into \`$PR_BASE\`."
+                else
+                  TITLE="🚫 Pull request closed"; COLOR=9276299 # #8D8B8B
+                  BODY="This PR was closed without being merged."
+                fi
+                PING_USERS=("$PR_AUTHOR")
+                ;;
+              *) exit 0 ;;
+            esac
+          else
+            # Reviews: don't notify when someone reviews their own PR.
+            if [[ "$REVIEWER" == "$PR_AUTHOR" ]]; then exit 0; fi
+            case "$REVIEW_STATE" in
+              approved)
+                TITLE="✅ Pull request approved"; COLOR=5493836 # #53D44C
+                BODY="$(mention "$REVIEWER") approved this PR."$'\n\n'
+                BODY="${BODY}⚠️ **Reminder:** pull \`$PR_BASE\` before starting or continuing your work so you don't build on stale code."
+                PING_USERS=("${!DISCORD_ID[@]}")
+                ;;
+              changes_requested)
+                TITLE="🔧 Changes requested"; COLOR=15104350 # #E6795E coral
+                BODY="$(mention "$PR_AUTHOR") check your latest PR: $(mention "$REVIEWER") raised feedback that needs to be addressed."
+                PING_USERS=("$PR_AUTHOR")
+                ;;
+              *) exit 0 ;;
+            esac
+          fi
+
+          LINK="$PR_URL"
+          [[ "$EVENT_NAME" == "pull_request_review" && -n "$REVIEW_URL" ]] && LINK="$REVIEW_URL"
+
+          # Only these IDs may be pinged, whatever the message text says.
+          mapfile -t IDS < <(ids_of "${PING_USERS[@]}" | sort -u)
+          IDS_JSON=$(printf '%s\n' "${IDS[@]:-}" | jq -R . | jq -sc 'map(select(length>0))')
+          CONTENT=""
+          for id in "${IDS[@]:-}"; do [[ -n "$id" ]] && CONTENT="$CONTENT<@$id> "; done
+
+          # Quoted note under the message: the review comment, or the PR description for new PRs.
+          QUOTE_LABEL=""; QUOTE_TEXT=""
+          if [[ "$EVENT_NAME" == "pull_request_review" ]]; then
+            QUOTE_LABEL="💬 Reviewer's note"; QUOTE_TEXT="${REVIEW_BODY:-}"
+          elif [[ "$ACTION" != "closed" ]]; then
+            QUOTE_LABEL="📝 Description"; QUOTE_TEXT="${PR_BODY:-}"
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg username "HoneBill CI Bot" \
+            --arg content "$CONTENT" \
+            --arg title "$TITLE" \
+            --argjson color "$COLOR" \
+            --arg prtitle "#$PR_NUMBER · $PR_TITLE" \
+            --arg num "$PR_NUMBER" \
+            --arg body "$BODY" \
+            --arg quotelabel "$QUOTE_LABEL" \
+            --arg quote "$QUOTE_TEXT" \
+            --arg head "$PR_HEAD" \
+            --arg base "$PR_BASE" \
+            --arg author "$PR_AUTHOR" \
+            --arg avatar "$PR_AUTHOR_AVATAR" \
+            --arg adds "$PR_ADDITIONS" \
+            --arg dels "$PR_DELETIONS" \
+            --arg files "$PR_FILES" \
+            --arg commits "$PR_COMMITS" \
+            --arg repo "$REPO" \
+            --arg link "$LINK" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson users "$IDS_JSON" \
+            '
+            def clip(n): gsub("\r"; "") | if length > n then .[0:n] + "…" else . end;
+            def quoted: split("\n") | map("> " + .) | join("\n");
+            ($quote | gsub("^\\s+|\\s+$"; "") | clip(300)) as $q
+            | {
+              username: $username,
+              content: $content,
+              allowed_mentions: { parse: [], users: $users },
+              embeds: [{
+                author: { name: $author, url: ("https://github.com/" + $author), icon_url: $avatar },
+                title: $title,
+                url: $link,
+                description: (
+                  "### " + $prtitle + "\n" + $body
+                  + (if $q != "" then "\n\n**" + $quotelabel + "**\n" + ($q | quoted) else "" end)
+                ),
+                color: $color,
+                fields: [
+                  { name: "🌿 Branch", value: ("`" + $head + "`\n→ `" + $base + "`"), inline: true },
+                  { name: "📦 Changes", value: ("**+" + $adds + "** / **−" + $dels + "**\n" + $files + " files"), inline: true },
+                  { name: "🔖 Commits", value: $commits, inline: true }
+                ],
+                footer: { text: ($repo + " · PR #" + $num) },
+                timestamp: $ts
+              }]
+            }')
+
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
