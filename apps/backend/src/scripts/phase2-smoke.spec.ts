@@ -1,8 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { signVerificationToken, otpMatches, verifyVerificationToken } from '../modules/auth/otp.util';
-import { normalizePhoneNumber, toDbPhone } from '../modules/auth/phone.util';
-import { hashPin, verifyPin } from '../modules/auth/pin.util';
+import { signVerificationToken, otpMatches, verifyVerificationToken } from '../common/utils/otp.util';
+import { normalizePhoneNumber, toDbPhone } from '../common/utils/phone.util';
+import { hashPin, verifyPin } from '../common/utils/pin.util';
 
 describe('Phase 2 auth/OTP smoke tests', () => {
   it('normalizes local Philippine phone numbers into the expected E.164 format', () => {

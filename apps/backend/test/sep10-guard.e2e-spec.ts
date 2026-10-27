@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { Sep10JwtGuard } from '../src/common/guards/sep10-jwt.guard.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
-import { signVerificationToken } from '../src/modules/auth/otp.util.js';
+import { signVerificationToken } from '../src/common/utils/otp.util.js';
 
 const TEST_SECRET = 'fake-sep10-jwt-secret-for-e2e-tests';
 const TEST_ISSUER = 'anchor.test';

@@ -31,13 +31,19 @@ const ACCOUNT = {
 };
 
 describe('AccountsService.checkUser', () => {
-  it('rejects an empty or digit-less phone with the legacy message', async () => {
-    const { service, prisma } = createService();
-    await expect(service.checkUser('')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.checkUser('abc')).rejects.toThrow('Missing required parameter: phone');
-    expect(prisma.account.findFirst).not.toHaveBeenCalled();
-  });
+ it('rejects an empty phone with the legacy missing-parameter message', async () => {
+  const { service, prisma } = createService();
+  await expect(service.checkUser('')).rejects.toBeInstanceOf(BadRequestException);
+  await expect(service.checkUser('')).rejects.toThrow('Missing required parameter: phone');
+  expect(prisma.account.findFirst).not.toHaveBeenCalled();
+});
 
+it('rejects a digit-less phone with the legacy invalid-format message', async () => {
+  const { service, prisma } = createService();
+  await expect(service.checkUser('abc')).rejects.toThrow('Invalid phone number format');
+  await expect(service.checkUser(' ')).rejects.toThrow('Invalid phone number format');
+  expect(prisma.account.findFirst).not.toHaveBeenCalled();
+});
   it('returns { exists: false } when no account matches', async () => {
     const { service } = createService();
     await expect(service.checkUser('639170000001')).resolves.toEqual({ exists: false });
@@ -64,15 +70,11 @@ describe('AccountsService.checkUser', () => {
     );
   });
 
-  // PARITY FLAG: checkUser only strips non-digits, while register and PIN use toDbPhone.
-  // '09170000001' is queried as typed and will NOT match a stored '639170000001'.
-  // Compare with legacy users/check/route.ts. If legacy uses toDbPhone, change the service
-  // and replace this test with one asserting '09170000001' queries '639170000001'.
-  it('documents current behavior for a local 09 number (queried as typed)', async () => {
+  it('normalizes a local 09 number to the stored database phone format', async () => {
     const { service, prisma } = createService();
     await service.checkUser('09170000001');
     expect(prisma.account.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { phoneNumber: '09170000001' } }),
+      expect.objectContaining({ where: { phoneNumber: '639170000001' } }),
     );
   });
 });
@@ -125,7 +127,7 @@ describe('AccountsService.lookupUser', () => {
     await expect(service.lookupUser('aB3xYz')).resolves.toMatchObject({ offlineDeviceKey: key });
   });
 
-  it('looks up by phone (digits only) when no shortId is given', async () => {
+  it('looks up by normalized phone when no shortId is given', async () => {
     const { service, prisma } = createService();
     prisma.account.findFirst.mockResolvedValue(ACCOUNT);
     await service.lookupUser(undefined, '+63 917-000-0001');
@@ -133,6 +135,15 @@ describe('AccountsService.lookupUser', () => {
       expect.objectContaining({ where: { phoneNumber: '639170000001' } }),
     );
     expect(prisma.account.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a local phone number when looking up an account', async () => {
+    const { service, prisma } = createService();
+    prisma.account.findFirst.mockResolvedValue(ACCOUNT);
+    await service.lookupUser(undefined, '09170000001');
+    expect(prisma.account.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { phoneNumber: '639170000001' } }),
+    );
   });
 
   it('prefers shortId over phone when both are given', async () => {

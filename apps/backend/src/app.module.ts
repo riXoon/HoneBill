@@ -27,6 +27,7 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
       },
     }),
     ThrottlerModule.forRoot({
+      errorMessage: 'Too many requests. Please try again later.',
       throttlers: [
         {
           ttl: 60_000,

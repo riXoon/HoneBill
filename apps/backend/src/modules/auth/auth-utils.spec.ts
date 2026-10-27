@@ -6,9 +6,9 @@ import {
   otpMatches,
   signVerificationToken,
   verifyVerificationToken,
-} from './otp.util';
-import { hashPin, isValidPinFormat, verifyPin } from './pin.util';
-import { isPlausiblePhone, normalizePhoneNumber, toDbPhone } from './phone.util';
+} from '../../common/utils/otp.util';
+import { hashPin, isValidPinFormat, verifyPin } from '../../common/utils/pin.util';
+import { isPlausiblePhone, normalizePhoneNumber, toDbPhone } from '../../common/utils/phone.util';
 
 const SECRET = 'test-otp-secret';
 const jwt = new JwtService();

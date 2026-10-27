@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { PrismaService } from '../../infra/prisma/prisma.service';
 import type { RedisService } from '../../infra/redis/redis.service';
 import { AccountsService } from './accounts.service';
-import { signVerificationToken, verifyVerificationToken } from '../auth/otp.util';
-import { verifyPin } from '../auth/pin.util';
+import { signVerificationToken, verifyVerificationToken } from '../../common/utils/otp.util';
+import { verifyPin } from '../../common/utils/pin.util';
+import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception';
 
 const VALID_PUBLIC_KEY = `G${'A'.repeat(55)}`;
 const VALID_PHONE = '09000000001';
@@ -67,9 +68,15 @@ describe('signup security', () => {
   it('validates an invalid phone before database lookups', async () => {
     const { prisma, service } = createService();
 
-    await expect(
-      service.register({ stellarPublicKey: VALID_PUBLIC_KEY, phoneNumber: 'not-a-phone' }),
-    ).rejects.toThrow('Invalid phone number.');
+    const error = await service
+      .register({ stellarPublicKey: VALID_PUBLIC_KEY, phoneNumber: 'not-a-phone' })
+      .catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(HttpException);
+    expect((error as HttpException).getStatus()).toBe(400);
+    expect((error as HttpException).getResponse()).toEqual({
+      error: 'Validation failed',
+      fieldErrors: { phoneNumber: 'Invalid phone number.' },
+    });
     expect(prisma.account.findUnique).not.toHaveBeenCalled();
     expect(prisma.account.create).not.toHaveBeenCalled();
   });
@@ -153,6 +160,43 @@ describe('signup security', () => {
       success: true,
     });
     expect(prisma.account.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns the legacy 500 response after exhausting short-ID retries', async () => {
+    const { prisma, service } = createService();
+    prisma.account.create.mockRejectedValue({
+      code: 'P2002',
+      meta: { target: ['short_id'] },
+    });
+
+    await expect(service.register({ stellarPublicKey: VALID_PUBLIC_KEY })).rejects.toMatchObject({
+      status: 500,
+      legacyBody: {
+        error: 'Failed to generate a unique short ID. Please try again.',
+      },
+    });
+    expect(prisma.account.create).toHaveBeenCalledTimes(5);
+  });
+
+  it('stores blank optional strings as null and lowercases a nonblank email', async () => {
+    const { prisma, service } = createService();
+
+    await service.register({
+      stellarPublicKey: VALID_PUBLIC_KEY,
+      firstName: '  ',
+      lastName: '\t',
+      email: '  USER@Example.com ',
+    });
+
+    expect(prisma.account.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          firstName: null,
+          lastName: null,
+          email: 'user@example.com',
+        }),
+      }),
+    );
   });
 
   it('stores only a PIN hash and never returns the PIN or hash in the registration response', async () => {

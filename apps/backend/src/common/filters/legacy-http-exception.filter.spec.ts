@@ -10,13 +10,15 @@ function createHost() {
     json: jest.fn().mockReturnThis(),
     setHeader: jest.fn(),
   };
+  const request = { method: 'GET', path: '/', originalUrl: '/' };
   const host = {
     switchToHttp: () => ({
+      getRequest: () => request,
       getResponse: () => response,
     }),
   } as unknown as ArgumentsHost;
 
-  return { host, response };
+  return { host, request, response };
 }
 
 describe('LegacyHttpExceptionFilter', () => {
@@ -29,6 +31,57 @@ describe('LegacyHttpExceptionFilter', () => {
 
     expect(response.status).toHaveBeenCalledWith(400);
     expect(response.json).toHaveBeenCalledWith({ error: 'Invalid phone number format' });
+  });
+
+  it('normalizes malformed registration JSON to the legacy response', () => {
+    const { host, request, response } = createHost();
+    request.method = 'POST';
+    request.path = '/api/register';
+    request.originalUrl = '/api/register?source=test';
+    const error = new BadRequestException(
+      "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+    );
+
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Invalid JSON body' });
+  });
+
+  it('normalizes strict-parser errors for JSON primitives on registration', () => {
+    const { host, request, response } = createHost();
+    request.method = 'POST';
+    request.path = '/api/register';
+    const error = new BadRequestException(`Unexpected token 'n', "null" is not valid JSON`);
+
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Invalid JSON body' });
+  });
+
+  it.each([
+    [
+      '/api/auth?source=test',
+      {
+        error: 'Bad Request',
+        message: "Request body must contain a valid 'transaction' field.",
+      },
+    ],
+    ['/api/auth/pin/verify', { error: 'A valid phone number and PIN are required.' }],
+    ['/api/register', { error: 'Invalid JSON body' }],
+  ])('normalizes malformed JSON for %s', (originalUrl, body) => {
+    const { host, request, response } = createHost();
+    request.method = 'POST';
+    request.originalUrl = originalUrl;
+    const error = Object.assign(new SyntaxError('Unexpected token'), {
+      type: 'entity.parse.failed',
+    });
+
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith(body);
   });
 
   it('passes a LegacyBodyException response through verbatim', () => {
@@ -90,6 +143,20 @@ describe('LegacyHttpExceptionFilter', () => {
     filter.catch(new HttpException({ error: 'Rate limited.', retryAfter: 30 }, 429), host);
 
     expect(response.setHeader).not.toHaveBeenCalled();
+  });
+
+  it('normalizes throttler exceptions by name to the legacy 429 body', () => {
+    const { host, response } = createHost();
+    const error = Object.assign(new Error('ThrottlerException'), {
+      name: 'ThrottlerException',
+    });
+
+    filter.catch(error, host);
+
+    expect(response.status).toHaveBeenCalledWith(429);
+    expect(response.json).toHaveBeenCalledWith({
+      error: 'Too many requests. Please try again later.',
+    });
   });
 
   it('logs unexpected errors and returns the legacy 500 body', () => {

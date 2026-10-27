@@ -10,7 +10,7 @@ import { RedisService } from '../src/infra/redis/redis.service.js';
 import { AccountsService } from '../src/modules/accounts/accounts.service.js';
 import { AuthController } from '../src/modules/auth/auth.controller.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
-import { toDbPhone } from '../src/modules/auth/phone.util.js';
+import { toDbPhone } from '../src/common/utils/phone.util.js';
 
 type AccountRow = { id: number; pin: string | null };
 

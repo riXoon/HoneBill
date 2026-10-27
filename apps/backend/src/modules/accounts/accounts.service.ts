@@ -8,13 +8,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { RedisService } from '../../infra/redis/redis.service.js';
-import { isPlausiblePhone, toDbPhone } from '../auth/phone.util.js';
-import { isValidPinFormat, hashPin, verifyPin } from '../auth/pin.util.js';
-import { generateBase62Id } from '../auth/short-id.util.js';
-import { signVerificationToken, verifyVerificationToken } from '../auth/otp.util.js';
+import { isPlausiblePhone, toDbPhone } from '../../common/utils/phone.util.js';
+import { isValidPinFormat, hashPin, verifyPin } from '../../common/utils/pin.util.js';
+import { generateBase62Id } from '../../common/utils/short-id.util.js';
+import { signVerificationToken, verifyVerificationToken } from '../../common/utils/otp.util.js';
+import { classifyAccountUniqueConstraint } from './unique-constraint.js';
+import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
 
 const STELLAR_KEY_PATTERN = /^G[A-Z2-7]{55}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -39,14 +40,6 @@ export class AccountsService {
     private readonly configService: ConfigService,
   ) {}
 
-  private static assertUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
-    if (!error || typeof error !== 'object') {
-      return false;
-    }
-    const candidate = error as { code?: unknown };
-    return candidate.code === 'P2002';
-  }
-
   async register(payload: Record<string, unknown>) {
     const stellarPublicKey = typeof payload.stellarPublicKey === 'string' ? payload.stellarPublicKey.trim() : '';
     if (!stellarPublicKey) {
@@ -61,29 +54,27 @@ export class AccountsService {
       throw new BadRequestException('Invalid offline device public key format');
     }
 
+    const fieldErrors: Record<string, string> = {};
     const rawPhone = typeof payload.phoneNumber === 'string' ? payload.phoneNumber.trim() : '';
-    if (rawPhone && !isPlausiblePhone(rawPhone)) {
-      throw new BadRequestException('Invalid phone number.');
-    }
+    if (rawPhone && !isPlausiblePhone(rawPhone)) fieldErrors.phoneNumber = 'Invalid phone number.';
     const cleanPhone = rawPhone ? toDbPhone(rawPhone) : null;
 
     const rawPin = typeof payload.pin === 'string' ? payload.pin.trim() : '';
-    if (rawPin && !isValidPinFormat(rawPin)) {
-      throw new BadRequestException('PIN must be 4 to 6 digits.');
-    }
+    if (rawPin && !isValidPinFormat(rawPin)) fieldErrors.pin = 'PIN must be 4 to 6 digits.';
 
-    const firstName = typeof payload.firstName === 'string' ? payload.firstName.trim() : null;
-    const lastName = typeof payload.lastName === 'string' ? payload.lastName.trim() : null;
-    const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : null;
+    const firstName = optionalString(payload.firstName);
+    const lastName = optionalString(payload.lastName);
+    const email = optionalString(payload.email)?.toLowerCase() ?? null;
 
-    if (firstName && firstName.length > MAX_NAME_LENGTH) {
-      throw new BadRequestException(`First name must be at most ${MAX_NAME_LENGTH} characters.`);
-    }
-    if (lastName && lastName.length > MAX_NAME_LENGTH) {
-      throw new BadRequestException(`Last name must be at most ${MAX_NAME_LENGTH} characters.`);
-    }
+    if (firstName && firstName.length > MAX_NAME_LENGTH)
+      fieldErrors.firstName = `First name must be at most ${MAX_NAME_LENGTH} characters.`;
+    if (lastName && lastName.length > MAX_NAME_LENGTH)
+      fieldErrors.lastName = `Last name must be at most ${MAX_NAME_LENGTH} characters.`;
     if (email && (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email))) {
-      throw new BadRequestException('Invalid email address.');
+      fieldErrors.email = 'Invalid email address.';
+    }
+    if (Object.keys(fieldErrors).length > 0) {
+      throw new LegacyBodyException(400, { error: 'Validation failed', fieldErrors });
     }
 
     const verificationToken = typeof payload.verificationToken === 'string' ? payload.verificationToken.trim() : '';
@@ -131,33 +122,28 @@ export class AccountsService {
         const { pin: _pin, ...result } = created;
         return { success: true, data: result };
       } catch (error) {
-        if (!AccountsService.assertUniqueViolation(error)) {
-          throw error;
+        switch (classifyAccountUniqueConstraint(error)) {
+          case 'shortId':
+            continue;
+          case 'phoneNumber':
+            throw new ConflictException('Phone number is already registered.');
+          case 'stellarPublicKey':
+            throw new ConflictException('Stellar Public Key is already registered.');
+          default:
+            throw error;
         }
-        const target = error.meta?.target;
-        const targetFields =
-          typeof target === 'string' ? [target] : Array.isArray(target) ? target : [];
-        if (targetFields.some((field) => String(field).includes('short'))) {
-          continue;
-        }
-        if (targetFields.some((field) => String(field).includes('phone'))) {
-          throw new ConflictException('Phone number is already registered.');
-        }
-        if (targetFields.some((field) => String(field).includes('stellar'))) {
-          throw new ConflictException('Stellar Public Key is already registered.');
-        }
-        throw error;
       }
     }
 
-    throw new BadRequestException('Failed to generate a unique short ID. Please try again.');
+    throw new LegacyBodyException(500, {
+      error: 'Failed to generate a unique short ID. Please try again.',
+    });
   }
 
   async checkUser(phone: string) {
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      throw new BadRequestException('Missing required parameter: phone');
-    }
+    if (!phone) throw new BadRequestException('Missing required parameter: phone');
+    const cleanPhone = toDbPhone(phone);
+    if (!cleanPhone) throw new BadRequestException('Invalid phone number format');
 
     const account = await this.prisma.account.findFirst({
       where: { phoneNumber: cleanPhone },
@@ -201,7 +187,7 @@ export class AccountsService {
       });
     } else if (phone) {
       account = await this.prisma.account.findFirst({
-        where: { phoneNumber: phone.replace(/\D/g, '') },
+        where: { phoneNumber: toDbPhone(phone) },
         select: {
           shortId: true,
           stellarPublicKey: true,
@@ -317,4 +303,10 @@ export class AccountsService {
     const required = this.configService.get<boolean | string>('REQUIRE_OTP_TOKEN');
     return required === true || required === 'true';
   }
+}
+
+function optionalString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

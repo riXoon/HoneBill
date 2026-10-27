@@ -155,6 +155,30 @@ describe('AuthService SEP-10', () => {
       });
     });
 
+    it('passes whitespace-only transaction values to SDK verification', async () => {
+      const { service } = createService();
+      await expect(service.issueToken('   ')).rejects.toMatchObject({
+        status: 401,
+        legacyBody: {
+          error: 'Unauthorized',
+          message:
+            'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',
+        },
+      });
+    });
+
+    it.each([123, {}])('lets truthy non-string transaction values reach SDK verification', async (value) => {
+      const { service } = createService();
+      await expect(service.issueToken(value)).rejects.toMatchObject({
+        status: 401,
+        legacyBody: {
+          error: 'Unauthorized',
+          message:
+            'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',
+        },
+      });
+    });
+
     it('rejects a malformed transaction with 401', async () => {
       const { service } = createService();
       await expect(service.issueToken('not-a-transaction')).rejects.toMatchObject({

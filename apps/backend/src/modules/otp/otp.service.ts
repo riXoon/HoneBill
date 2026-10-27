@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isPlausiblePhone, normalizePhoneNumber } from '../auth/phone.util.js';
+import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import {
   generateOtp,
   getTestOtpCode,
@@ -16,7 +16,7 @@ import {
   OTP_MAX_ATTEMPTS,
   OTP_TTL_SECONDS,
   VERIFICATION_TOKEN_TTL_SECONDS,
-} from '../auth/otp.util.js';
+} from '../../common/utils/otp.util.js';
 import { RedisService } from '../../infra/redis/redis.service.js';
 import { OtpRateLimitService } from '../../infra/redis/otp-rate-limit.service.js';
 import { TextbeeService } from './textbee.service.js';

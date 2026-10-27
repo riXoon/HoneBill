@@ -7,7 +7,7 @@ import request from 'supertest';
 import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
 import { OtpRateLimitService } from '../src/infra/redis/otp-rate-limit.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
-import { normalizePhoneNumber, toDbPhone } from '../src/modules/auth/phone.util.js';
+import { normalizePhoneNumber, toDbPhone } from '../src/common/utils/phone.util.js';
 import { OtpController } from '../src/modules/otp/otp.controller.js';
 import { OtpService } from '../src/modules/otp/otp.service.js';
 import { TextbeeService } from '../src/modules/otp/textbee.service.js';

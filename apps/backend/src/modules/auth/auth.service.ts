@@ -71,13 +71,14 @@ getChallenge(account: string | undefined) {
     return { transaction, network_passphrase: this.networkPassphrase };
   }
 
-  async issueToken(transaction: string) {
-  if (!transaction?.trim()) {
-    throw new LegacyBodyException(400, {
-      error: 'Bad Request',
-      message: "Missing required field in body: 'transaction'",
-    });
-  }
+  async issueToken(transaction: unknown) {
+    if (!transaction) {
+      throw new LegacyBodyException(400, {
+        error: 'Bad Request',
+        message: "Missing required field in body: 'transaction'",
+      });
+    }
+    const tx = transaction as string;
   const server = this.serverKeypair.publicKey();
   const homeDomains = this.homeDomains;
   const primaryDomain = homeDomains[0];
@@ -86,7 +87,7 @@ getChallenge(account: string | undefined) {
   let memo: string | null | undefined;
   try {
     ({ clientAccountID, memo } = WebAuth.readChallengeTx(
-      transaction, server, this.networkPassphrase, homeDomains, primaryDomain,
+    tx, server, this.networkPassphrase, homeDomains, primaryDomain,
     ));
 
     let record;
@@ -104,7 +105,7 @@ getChallenge(account: string | undefined) {
     const signers = record.signers;
     const totalWeight = signers.reduce((sum, s) => sum + s.weight, 0);
     WebAuth.verifyChallengeTxThreshold(
-      transaction, server, this.networkPassphrase, totalWeight, signers, homeDomains, primaryDomain,
+      tx, server, this.networkPassphrase, totalWeight, signers, homeDomains, primaryDomain,
     );
   } catch (err) {
     if (err instanceof LegacyBodyException) throw err;

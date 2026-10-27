@@ -9,20 +9,19 @@ import { PrismaService } from '../src/infra/prisma/prisma.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
 import { AccountsController } from '../src/modules/accounts/accounts.controller.js';
 import { AccountsService } from '../src/modules/accounts/accounts.service.js';
-import { signVerificationToken } from '../src/modules/auth/otp.util.js';
-import { toDbPhone } from '../src/modules/auth/phone.util.js';
+import { signVerificationToken } from '../src/common/utils/otp.util.js';
+import { toDbPhone } from '../src/common/utils/phone.util.js';
+import { classifyAccountUniqueConstraint } from '../src/modules/accounts/unique-constraint.js';
 
 // Runs against a real Postgres (DATABASE_URL, migrations applied). Use a local dev database only.
 // The test creates its own rows and deletes them by Stellar key in afterAll.
 const OTP_SECRET = 'e2e-otp-secret-not-real';
 
-type UniqueViolation = { code?: string; meta?: { target?: unknown } };
-
 describe('Register and users with real Postgres (e2e)', () => {
   const configValues: Record<string, unknown> = {};
   const createdKeys: string[] = [];
-  let app: INestApplication;
-  let prisma: PrismaService;
+  let app: INestApplication | undefined;
+  let prisma: PrismaService | undefined;
 
   const newKey = () => {
     const key = Keypair.random().publicKey();
@@ -32,8 +31,17 @@ describe('Register and users with real Postgres (e2e)', () => {
   const newPhone = () => `0917${Math.floor(1000000 + Math.random() * 8999999)}`;
   const newShortId = () => Math.random().toString(36).slice(2, 8).padEnd(6, 'x');
 
-  const register = (body: Record<string, unknown>) =>
-    request(app.getHttpServer()).post('/api/register').send(body);
+  const getApp = () => {
+    if (!app) throw new Error('Register E2E app was not initialized.');
+    return app;
+  };
+  const getPrisma = () => {
+    if (!prisma) throw new Error('Register E2E Prisma client was not initialized.');
+    return prisma;
+  };
+  const register = (body: Record<string, unknown>) => {
+    return request(getApp().getHttpServer()).post('/api/register').send(body);
+  };
 
   async function registered() {
     const phone = newPhone();
@@ -47,22 +55,40 @@ describe('Register and users with real Postgres (e2e)', () => {
     return { phone, key, data: res.body.data as { shortId: string; phoneNumber: string } };
   }
 
-  async function captureUniqueViolation(run: () => Promise<unknown>): Promise<UniqueViolation> {
+  async function captureUniqueViolation(run: () => Promise<unknown>): Promise<unknown> {
     try {
       await run();
     } catch (error) {
-      return error as UniqueViolation;
+      return error;
     }
     throw new Error('Expected a unique constraint violation');
   }
 
-  const targetFieldsOf = (error: UniqueViolation): string[] => {
-    const target = error.meta?.target;
-    if (typeof target === 'string') return [target];
-    return Array.isArray(target) ? target.map(String) : [];
-  };
-
   beforeAll(async () => {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      throw new Error(
+        'Register E2E requires DATABASE_URL. Set it in apps/backend/.env or the test environment.',
+      );
+    }
+
+    let parsedDatabaseUrl: URL;
+    try {
+      parsedDatabaseUrl = new URL(databaseUrl);
+    } catch {
+      throw new Error('Register E2E requires DATABASE_URL to be a valid PostgreSQL URL.');
+    }
+
+    if (
+      !['postgres:', 'postgresql:'].includes(parsedDatabaseUrl.protocol) ||
+      !parsedDatabaseUrl.username ||
+      !parsedDatabaseUrl.password
+    ) {
+      throw new Error(
+        'Register E2E requires DATABASE_URL with a PostgreSQL username and password.',
+      );
+    }
+
     configValues.DATABASE_URL = process.env.DATABASE_URL;
     const moduleRef = await Test.createTestingModule({
       controllers: [AccountsController],
@@ -76,10 +102,11 @@ describe('Register and users with real Postgres (e2e)', () => {
         },
       ],
     }).compile();
-    app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalFilters(new LegacyHttpExceptionFilter());
-    await app.init();
+    const application = moduleRef.createNestApplication();
+    app = application;
+    application.setGlobalPrefix('api');
+    application.useGlobalFilters(new LegacyHttpExceptionFilter());
+    await application.init();
     prisma = moduleRef.get(PrismaService);
   });
 
@@ -90,11 +117,43 @@ describe('Register and users with real Postgres (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.account.deleteMany({ where: { stellarPublicKey: { in: createdKeys } } });
-    await app.close();
+    const database = prisma;
+    if (database && createdKeys.length > 0) {
+      await database.account.deleteMany({ where: { stellarPublicKey: { in: createdKeys } } });
+    }
+    await app?.close();
   });
 
   describe('POST /api/register', () => {
+    it('returns the legacy invalid-body response for an empty request body', async () => {
+      await request(getApp().getHttpServer())
+        .post('/api/register')
+        .set('Content-Type', 'application/json')
+        .expect(400, { error: 'Invalid JSON body' });
+    });
+
+    it.each([
+      ['null', 'Invalid JSON body'],
+      ['"text"', 'Invalid JSON body'],
+      ['[]', 'Missing required field: stellarPublicKey'],
+    ])('matches legacy handling for JSON body %s', async (body, message) => {
+      const response = await request(getApp().getHttpServer())
+        .post('/api/register')
+        .set('Content-Type', 'application/json')
+        .send(body)
+        .expect(400);
+
+      expect(response.body).toEqual({ error: message });
+    });
+
+    it('returns the legacy error for malformed JSON', async () => {
+      await request(getApp().getHttpServer())
+        .post('/api/register')
+        .set('Content-Type', 'application/json')
+        .send('{')
+        .expect(400, { error: 'Invalid JSON body' });
+    });
+
     it('registers a user: 201, no pin in the body, PIN stored hashed, phone stored in DB format', async () => {
       const phone = newPhone();
       const key = newKey();
@@ -118,7 +177,7 @@ describe('Register and users with real Postgres (e2e)', () => {
       });
       expect(typeof res.body.data.shortId).toBe('string');
 
-      const row = await prisma.account.findUnique({ where: { stellarPublicKey: key } });
+      const row = await getPrisma().account.findUnique({ where: { stellarPublicKey: key } });
       expect(row?.pin).toEqual(expect.any(String));
       expect(row?.pin).not.toBe('1234');
     });
@@ -126,6 +185,19 @@ describe('Register and users with real Postgres (e2e)', () => {
     it('registers with only a Stellar key (phone and PIN are optional)', async () => {
       const res = await register({ stellarPublicKey: newKey() }).expect(201);
       expect(res.body.success).toBe(true);
+    });
+
+    it('stores whitespace-only optional fields as null', async () => {
+      const key = newKey();
+      await register({
+        stellarPublicKey: key,
+        firstName: '  ',
+        lastName: '\t',
+        email: '   ',
+      }).expect(201);
+
+      const row = await getPrisma().account.findUnique({ where: { stellarPublicKey: key } });
+      expect(row).toMatchObject({ firstName: null, lastName: null, email: null });
     });
 
     const invalidCases: Array<{ name: string; payload: () => Record<string, unknown>; message: string }> = [
@@ -181,52 +253,47 @@ describe('Register and users with real Postgres (e2e)', () => {
   describe('Prisma unique violations (what the register retry logic relies on)', () => {
     it('a duplicate Stellar key gives P2002 with a usable meta.target', async () => {
       const key = newKey();
-      await prisma.account.create({ data: { shortId: newShortId(), role: 'USER', stellarPublicKey: key } });
+      await getPrisma().account.create({ data: { shortId: newShortId(), role: 'USER', stellarPublicKey: key } });
 
       const error = await captureUniqueViolation(() =>
-        prisma.account.create({ data: { shortId: newShortId(), role: 'USER', stellarPublicKey: key } }),
+        getPrisma().account.create({ data: { shortId: newShortId(), role: 'USER', stellarPublicKey: key } }),
       );
-      const fields = targetFieldsOf(error);
-      if (error.code !== 'P2002' || !fields.some((f) => f.toLowerCase().includes('stellar'))) {
-        throw new Error(`Unusable P2002 shape: ${JSON.stringify({ code: error.code, meta: error.meta })}`);
+      if (classifyAccountUniqueConstraint(error) !== 'stellarPublicKey') {
+        throw new Error(`Unusable P2002 shape: ${JSON.stringify(error)}`);
       }
     });
 
     it('a duplicate short ID gives P2002 with a usable meta.target', async () => {
       const shortId = newShortId();
-      await prisma.account.create({ data: { shortId, role: 'USER', stellarPublicKey: newKey() } });
+      await getPrisma().account.create({ data: { shortId, role: 'USER', stellarPublicKey: newKey() } });
 
       const error = await captureUniqueViolation(() =>
-        prisma.account.create({ data: { shortId, role: 'USER', stellarPublicKey: newKey() } }),
+        getPrisma().account.create({ data: { shortId, role: 'USER', stellarPublicKey: newKey() } }),
       );
-      const fields = targetFieldsOf(error);
-      if (error.code !== 'P2002' || !fields.some((f) => f.toLowerCase().includes('short'))) {
-        throw new Error(`Unusable P2002 shape: ${JSON.stringify({ code: error.code, meta: error.meta })}`);
+      if (classifyAccountUniqueConstraint(error) !== 'shortId') {
+        throw new Error(`Unusable P2002 shape: ${JSON.stringify(error)}`);
       }
     });
   });
 
   describe('GET /api/users/check', () => {
     it('400 without a phone', async () => {
-      await request(app.getHttpServer()).get('/api/users/check').expect(400);
+      await request(getApp().getHttpServer()).get('/api/users/check').expect(400);
     });
 
     it('{ exists: false } for an unknown phone', async () => {
-      const res = await request(app.getHttpServer())
+      const res = await request(getApp().getHttpServer())
         .get('/api/users/check')
         .query({ phone: newPhone() })
         .expect(200);
       expect(res.body).toEqual({ exists: false });
     });
 
-    // DECISION TEST: asserts the behavior we expect (any phone format finds the account).
-    // If the local-format case fails, compare with legacy users/check before changing the service:
-    // either use toDbPhone in checkUser/lookupUser, or flip this test and log the legacy behavior.
     it('finds the account for local, +63 and 63 phone formats', async () => {
       const { phone, key } = await registered();
       const db = toDbPhone(phone);
       for (const variant of [phone, `+${db}`, db]) {
-        const res = await request(app.getHttpServer())
+        const res = await request(getApp().getHttpServer())
           .get('/api/users/check')
           .query({ phone: variant })
           .expect(200);
@@ -238,11 +305,11 @@ describe('Register and users with real Postgres (e2e)', () => {
 
   describe('GET /api/users/lookup', () => {
     it('400 without shortId or phone', async () => {
-      await request(app.getHttpServer()).get('/api/users/lookup').expect(400);
+      await request(getApp().getHttpServer()).get('/api/users/lookup').expect(400);
     });
 
     it('404 { found: false } for an unknown short ID', async () => {
-      await request(app.getHttpServer())
+      await request(getApp().getHttpServer())
         .get('/api/users/lookup')
         .query({ shortId: 'zzNoSuchId' })
         .expect(404, { found: false });
@@ -250,7 +317,7 @@ describe('Register and users with real Postgres (e2e)', () => {
 
     it('finds by short ID with a display name', async () => {
       const { key, data } = await registered();
-      const res = await request(app.getHttpServer())
+      const res = await request(getApp().getHttpServer())
         .get('/api/users/lookup')
         .query({ shortId: data.shortId })
         .expect(200);
@@ -265,12 +332,11 @@ describe('Register and users with real Postgres (e2e)', () => {
       });
     });
 
-    // DECISION TEST: same normalisation question as users/check.
     it('finds by phone for local, +63 and 63 formats', async () => {
       const { phone, key } = await registered();
       const db = toDbPhone(phone);
       for (const variant of [phone, `+${db}`, db]) {
-        const res = await request(app.getHttpServer())
+        const res = await request(getApp().getHttpServer())
           .get('/api/users/lookup')
           .query({ phone: variant });
         expect({ variant, status: res.status }).toEqual({ variant, status: 200 });
@@ -278,9 +344,10 @@ describe('Register and users with real Postgres (e2e)', () => {
       }
     });
 
-    // Needs the array guard in AccountsController (typeof checks on the query params).
-    it('400 (not 500) for a repeated shortId query parameter', async () => {
-      await request(app.getHttpServer()).get('/api/users/lookup?shortId=a&shortId=b').expect(400);
+    it('uses the first value of a repeated shortId query parameter', async () => {
+      await request(getApp().getHttpServer())
+        .get('/api/users/lookup?shortId=a&shortId=b')
+        .expect(404, { found: false });
     });
   });
 });

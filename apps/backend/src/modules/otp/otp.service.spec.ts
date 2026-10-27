@@ -1,7 +1,7 @@
 import { BadRequestException, HttpException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
-import { verifyVerificationToken } from '../auth/otp.util';
+import { verifyVerificationToken } from '../../common/utils/otp.util';
 import { RedisService } from '../../infra/redis/redis.service';
 import { OtpRateLimitService } from '../../infra/redis/otp-rate-limit.service';
 import { TextbeeService } from './textbee.service';
