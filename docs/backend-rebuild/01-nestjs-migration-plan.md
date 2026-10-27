@@ -176,11 +176,11 @@ Shared lib: `lib/ramp-config.ts`.
 Setup checkpoint complete: the Nest app scaffold, workspace wiring, Prisma/Redis/queue/Stellar infra, health/docs bootstrap, and readiness checks all pass. We are ready to move into feature migration work in Phase 2.
 
 ### Phase 2: Auth, OTP, accounts
-- [ ] `Sep10JwtGuard`, SEP-10 challenge/token
-- [ ] PIN verify with lockout
-- [ ] OTP send/verify (TextBee via `SmsModule` client)
-- [ ] Register, users check/lookup
-- [ ] Port `signup-security.test.ts`
+- [x] `Sep10JwtGuard`, SEP-10 challenge/token
+- [x] PIN verify with lockout
+- [x] OTP send/verify (TextBee via `SmsModule` client)
+- [x] Register, users check/lookup
+- [x] Port `signup-security.test.ts`
 
 ### Phase 3: Wallet, transactions, settlements
 - [ ] Balance, history, vault balance, transactions
