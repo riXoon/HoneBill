@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { buildTransactionHistory, isValidStellarPublicKey, normalizeAssetCode, stroopsToDecimalString } from '../modules/wallet/wallet.util';
+import { buildTransactionHistory, isValidStellarPublicKey, normalizeAssetCode, normalizeLimit, stroopsToDecimalString } from '../modules/wallet/wallet.util';
 import { parseSettlementSmsBody } from '../modules/settlements/settlements.util';
 
 describe('Phase 3 wallet and settlements smoke tests', () => {
@@ -32,15 +32,22 @@ describe('Phase 3 wallet and settlements smoke tests', () => {
   });
 
   it('parses offline settlement messages in the expected six-part format', () => {
-    const payload = parseSettlementSmsBody('1:abc123:def456:3v5K:nonce-123:signature-abc');
+    const payload = parseSettlementSmsBody(`1:abc123:def456:3v5K:${Buffer.alloc(32, 1).toString('base64')}:${Buffer.alloc(64, 2).toString('base64')}`);
 
     expect(payload).toMatchObject({
       tokenId: '1',
       senderShortId: 'abc123',
       receiverShortId: 'def456',
       amountBase62: '3v5K',
-      nonce: 'nonce-123',
-      signature: 'signature-abc',
+      nonce: Buffer.alloc(32, 1).toString('base64'),
+      signature: Buffer.alloc(64, 2).toString('base64'),
     });
+  });
+
+  it('clamps list limits and rejects malformed voucher amounts and nonce lengths', () => {
+    expect(normalizeLimit('500')).toBe(100);
+    expect(normalizeLimit('0')).toBe(50);
+    expect(() => parseSettlementSmsBody('1:abc123:def456:!:bm9uY2U=:c2ln')).toThrow('Invalid Base62 character');
+    expect(() => parseSettlementSmsBody('1:abc123:def456:3v5K:bm9uY2U=:c2ln')).toThrow('Nonce must decode to 32 bytes');
   });
 });

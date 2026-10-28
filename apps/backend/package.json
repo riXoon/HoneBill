@@ -26,9 +26,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:phase2": "jest --runTestsByPath src/phase2-smoke.spec.ts --runInBand",
     "test:phase2:watch": "jest --watch --runTestsByPath src/phase2-smoke.spec.ts --runInBand",
-    "test:phase3": "jest --runTestsByPath src/phase3-wallet-smoke.spec.ts --runInBand",
-    "test:phase3:watch": "jest --watch --runTestsByPath src/phase3-wallet-smoke.spec.ts --runInBand",
-    "phase3:script": "node -r ts-node/register ./scripts/phase3-wallet-smoke.ts",
+    "test:phase3": "jest --runTestsByPath src/scripts/phase3-wallet-smoke.spec.ts src/modules/wallet/wallet.service.spec.ts src/modules/settlements/settlements.service.spec.ts src/modules/settlements/reconciliation.service.spec.ts src/scripts/reconciliation.test.ts --runInBand",
+    "test:phase3:watch": "jest --watch --runTestsByPath src/scripts/phase3-wallet-smoke.spec.ts src/modules/wallet/wallet.service.spec.ts src/modules/settlements/settlements.service.spec.ts src/modules/settlements/reconciliation.service.spec.ts src/scripts/reconciliation.test.ts --runInBand",
+    "phase3:script": "node -r ts-node/register ./src/scripts/phase3-wallet-smoke.ts",
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc --noEmit"
   },
