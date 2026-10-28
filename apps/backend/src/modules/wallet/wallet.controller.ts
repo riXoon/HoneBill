@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { WalletService } from './wallet.util.js';
+import { LegacyThrottlerGuard } from '../../common/guards/legacy-throttler.guard.js';
 
 @Controller()
+@UseGuards(LegacyThrottlerGuard) // applies to every route in this controller
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 

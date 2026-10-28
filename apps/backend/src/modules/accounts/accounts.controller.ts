@@ -41,6 +41,11 @@ export class AccountsController {
     return this.accountsService.register(body as Record<string, unknown>);
   }
 
+  @All('register')
+  unsupportedRegisterMethod(@Res() response: Response): void {
+    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
+  }
+
   @Get('users/check')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   checkUser(@Query('phone') phone?: unknown) {
@@ -54,6 +59,11 @@ export class AccountsController {
       queryString(shortId)?.trim(),
       queryString(phone)?.trim(),
     );
+  }
+
+  @All('users/lookup')
+  unsupportedLookupMethod(@Res() response: Response): void {
+    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
   }
 
   @All('users/check')

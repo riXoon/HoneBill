@@ -176,11 +176,25 @@ Shared lib: `lib/ramp-config.ts`.
 Setup checkpoint complete: the Nest app scaffold, workspace wiring, Prisma/Redis/queue/Stellar infra, health/docs bootstrap, and readiness checks all pass. We are ready to move into feature migration work in Phase 2.
 
 ### Phase 2: Auth, OTP, accounts
-- [ ] `Sep10JwtGuard`, SEP-10 challenge/token
-- [ ] PIN verify with lockout
-- [ ] OTP send/verify (TextBee via `SmsModule` client)
-- [ ] Register, users check/lookup
+- [x] `Sep10JwtGuard`, SEP-10 challenge/token
+- [x] PIN verify with lockout
+- [x] OTP send/verify (TextBee via `SmsModule` client)
+- [x] Register, users check/lookup
 - [x] Port `signup-security.test.ts`
+
+#### Verification checkpoint — 2026-10-28
+
+The Phase 2 implementation and automated test gates pass. Live parity is clean for the exercised cases; the funded-auth and OTP live-flow probes remain blocked on test inputs, so those specific cases still need verification.
+
+| Work area | Unit | E2E | Live parity | Status |
+|---|---|---|---|---|
+| Guard + SEP-10 | Full unit suite: 17 suites / 142 tests pass | Full E2E suite: 11 suites / 71 tests pass, including `sep10-guard.e2e-spec.ts` | Main parity on 3001→3000: 63 OK, 0 DIFF; funded-auth probe blocked on parity secret | Implementation verified; funded-auth probe pending |
+| PIN lockout | Full unit suite passes | Full E2E suite passes, including Redis-backed lockout coverage | PIN contract cases passed in main parity; broader live lockout probe not included in this run | Verified by automated tests |
+| OTP | Full unit suite passes, including TextBee client/service coverage | Full E2E suite passes, including OTP flow and malformed-body cases | OTP/method parity on 3001→3000: 62 OK, 0 DIFF; live OTP flow skipped because test-mode confirmation and probe variables were absent | Implementation verified; live OTP flow pending |
+| Register + Users | Full unit suite passes | Full E2E suite passes, including `register-users.e2e-spec.ts` and `accounts-methods.e2e-spec.ts` | Main and OTP/method parity cases passed with 0 DIFF | Verified |
+| Signup security | Full unit suite passes, including `accounts.register.spec.ts` | Full E2E suite passes, including registration coverage | Registration and users contract cases passed in main parity | Verified |
+
+Additional checks on this checkpoint: `npm run typecheck --workspace=backend` and `npm run build --workspace=backend` pass. Both local servers returned HTTP 200 from `/api/health`. The full E2E suite passed with 11/11 suites and 71/71 tests. Main parity reported 63 OK / 0 DIFF / 1 BLOCKED; OTP and method parity reported 62 OK / 0 DIFF / 1 BLOCKED. The blocked cases require the funded-auth secret and OTP test-mode confirmation/probe variables, respectively.
 
 ### Phase 3: Wallet, transactions, settlements
 - [ ] Balance, history, vault balance, transactions
@@ -244,6 +258,8 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-27 | Keep SEP-10 issuer validation and require a non-empty string `sub` claim | The issuer matches the first `SEP10_HOME_DOMAINS` entry in legacy; production configuration must remain aligned for held-token compatibility. Legacy protected routes require `sub`. |
 | 2026-10-27 | Preserve route-specific two-field legacy error bodies for `/api/auth` with an explicit exception marker | Legacy error bodies vary by route; a global message-field response would break parity elsewhere |
 | 2026-10-27 | Keep 401 message text route-specific; require status and response-body parity rather than a global error normalizer | Legacy protected routes use different messages and body shapes; the mobile client reads the `error` field |
+| 2026-10-27 | Match unsupported-method behavior per endpoint: use 405 when the legacy Next.js route exports another method, and retain native 404 bodies for unknown paths | Live route evidence shows Next.js returns 405 for OTP routes that export POST only; Nest requires a route-scoped handler to match. Do not treat unknown paths as method mismatches. |
+| 2026-10-27 | Compare unknown-route behavior by status only; retain each framework's native 404 body | Next.js and NestJS format unmatched-route bodies differently, while both correctly return 404 |
 
 ## Change log
 
@@ -251,4 +267,11 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 |---|---|---|---|
 | 2026-10-23 | `chores` branch | 0 | Legacy freeze: moved Next.js backend to `apps/_legacy/backend`, CI/workspace updates, this plan |
 | 2026-10-25 | setup-first migration pass | 1 | Completed Nest scaffold, workspace wiring, Prisma baseline, env validation, runtime bootstrap, Redis/BullMQ/lock/Stellar infra, Swagger/health/Docker, and readiness checks before feature migration |
-| 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
+| 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Expanded account and registration parity: normalized repeated query handling; matched validation/error shapes; mapped adapter unique-constraint races; retried short-ID collisions and preserved the legacy 500 on exhaustion; normalized blank optional names/email to `null`; aligned empty, primitive, and malformed registration bodies. Added focused controller, service, and registration E2E coverage. |
+| 2026-10-27 | local SEP-10 and HTTP compatibility pass | 2 (in progress) | Preserved SEP-10 memo, issuer, subject, and route-specific error behavior; passed raw transaction values through to SDK validation (falsy-only 400, invalid truthy values 401); normalized malformed-JSON responses for auth, PIN verification, and registration; standardized throttler 429 responses; retained `Retry-After` for PIN lockouts; fixed Redis health checks. Moved shared phone, PIN, OTP, short-ID, query, and throttling helpers into common locations. |
+| 2026-10-27 | local parity verification and tooling | 2 (in progress) | Added focused unsupported-method, throttle, Redis health, auth, and account E2E/unit tests. Expanded temporary live parity scripts for API response shapes, SEP-10 signed challenges/replay, CORS, cross-server tokens, registration, OTP, PIN lockout, and rate-limit bursts. Verified focused registration E2E (27 tests), exception-filter unit tests (15 tests), backend typecheck, and script syntax; funded and environment-dependent live probes remain unverified. No legacy files changed. |
+| 2026-10-28 | OTP parser and method regression follow-up | 2 (in progress) | Installed route-specific raw-text parsing ahead of global JSON parsing so malformed OTP JSON uses the legacy empty-body validation response; retained raw-body capture for signed requests. Added endpoint-specific 405 behavior for OTP, registration, and user routes. Current run: backend unit suite 16 suites / 140 tests passed; typecheck and build passed; phase 2 contract E2E 12/12, OTP parser/method E2E 4/4, and account-method E2E 3/3 passed. Full E2E had 8/10 suites and 61/69 tests pass; the OTP and PIN suites could not reach Redis. Live legacy/Nest parity is blocked because neither local API server is running. OTP and other Phase 2 items remain in progress. |
+| 2026-10-28 | Full retest and parity harness hardening | 2 (in progress) | Re-ran the full unit suite (16/16 suites, 140/140 tests), full E2E (8/10 suites, 61/69 tests), typecheck, and build. Updated the main parity harness to classify either server's connection failure as BLOCKED and removed the stale expected 404/405 mismatch for registration. Current parity runs are blocked because neither local server is reachable; no live requests were sent by the OTP probe. |
+| 2026-10-28 | Health response compatibility follow-up | 1 / 2 (in progress) | A live check on the supplied ports showed legacy returns HTTP 200 with a legacy health envelope while the running Nest process returned Terminus HTTP 503. Updated the Nest controller to preserve the legacy envelope and degraded status, and added two unit plus two E2E tests. The health tests, typecheck, and build pass. Live confirmation is pending restart of the already-running Nest process so it loads the rebuilt code. |
+| 2026-10-28 | Port 3000/3001 parity rerun | 2 (in progress) | With legacy on 3001 and Nest on 3000, the main parity suite reported no DIFF among comparable rows; three cases were BLOCKED (funded auth, PIN account lookup, health status). The OTP/method script confirmed malformed JSON and account-route method parity, but reported eight OTP method DIFFs because the active Nest process still sends `Allow: POST`; rebuilt source and E2E now verify that header is absent. OTP live-flow assertions were skipped because the runner's explicit test-mode confirmation and probe variables were not supplied. Restart Nest, then rerun these live probes. |
+| 2026-10-28 | Full suite rerun on ports 3000/3001 | 2 (in progress) | Unit tests passed 17/17 suites (142/142); full E2E passed 11/11 suites (71/71); typecheck and build passed. After restarting Nest, main parity passed 63 rows with zero DIFF and one funded-auth BLOCKED row; health passed the normalized legacy contract. OTP/method parity passed 62 rows with zero DIFF; the OTP live-flow sequence remains BLOCKED because the runner's test-mode confirmation and probe variables are not set. |

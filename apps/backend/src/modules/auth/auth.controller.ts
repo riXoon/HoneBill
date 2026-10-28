@@ -29,27 +29,27 @@ postChallenge(@Req() req: RawBodyRequest<Request>) {
   return this.authService.issueToken(this.extractTransaction(req));
 }
 
-private extractTransaction(req: RawBodyRequest<Request>): unknown {
-  const ct = String(req.headers['content-type'] ?? '').toLowerCase();
-  try {
-    if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
-      const v = (req.body as Record<string, unknown> | undefined)?.transaction;
-      const first = Array.isArray(v) ? v[0] : v; // formData.get returns the first value
-      return first ?? '';
-    }
-    const raw = Buffer.isBuffer(req.rawBody)
-      ? req.rawBody.toString('utf8')
-      : typeof req.body === 'string' ? req.body : '';
-    const parsed = JSON.parse(raw) as { transaction?: unknown } | null;
-    return parsed?.transaction ?? '';
-  } catch {
-    throw new LegacyBodyException(400, {
+private extractTransaction(req: Request): unknown {
+  const bad = () =>
+    new LegacyBodyException(400, {
       error: 'Bad Request',
       message: "Request body must contain a valid 'transaction' field.",
     });
+  const ct = String(req.headers['content-type'] ?? '').toLowerCase();
+  const body: unknown = req.body;
+
+  if (/urlencoded|multipart\/form-data/.test(ct)) {
+    return (body as Record<string, unknown> | undefined)?.transaction ?? '';
+  }
+  // text parser consumed the body: a string means we have raw text
+  if (typeof body !== 'string' || body.length === 0) throw bad(); // legacy: JSON.parse('') throws
+  try {
+    const parsed = JSON.parse(body) as { transaction?: unknown } | null;
+    return parsed?.transaction ?? '';
+  } catch {
+    throw bad();
   }
 }
-
   @All()
   methodNotAllowed(@Res() response: Response): void {
     response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
