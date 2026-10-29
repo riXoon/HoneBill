@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
-import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
@@ -31,14 +31,28 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
     if (saving) return;
     setSaving(true);
     try {
-      const permission = await MediaLibrary.requestPermissionsAsync(true);
-      if (!permission.granted) {
-        Alert.alert('Permission needed', 'Allow access to your photos to save the QR code.');
-        return;
+      // Loaded lazily: Expo Go's binary lacks the ExpoMediaLibraryNext native module, and a top-level
+      // import would crash the whole app at startup. Fall back to the share sheet there.
+      let MediaLibrary: typeof import('expo-media-library') | null = null;
+      try {
+        MediaLibrary = await import('expo-media-library');
+      } catch {
+        MediaLibrary = null;
       }
-      const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Alert.alert('Saved', 'The QR code is in your gallery.');
+
+      if (MediaLibrary) {
+        const permission = await MediaLibrary.requestPermissionsAsync(true);
+        if (!permission.granted) {
+          Alert.alert('Permission needed', 'Allow access to your photos to save the QR code.');
+          return;
+        }
+        const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
+        await MediaLibrary.saveToLibraryAsync(uri);
+        Alert.alert('Saved', 'The QR code is in your gallery.');
+      } else {
+        const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save QR code' });
+      }
     } catch {
       Alert.alert('Could not save', 'Something went wrong while saving the QR code. Please try again.');
     } finally {

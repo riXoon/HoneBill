@@ -7,6 +7,8 @@ import { colors, fonts } from '../../theme';
 type KeypadProps = {
   onDigit: (digit: string) => void;
   onDelete: () => void;
+  /** When set, the empty bottom-left key becomes a fingerprint button. */
+  onBiometric?: () => void;
 };
 
 const ROWS = [
@@ -14,6 +16,22 @@ const ROWS = [
   ['4', '5', '6'],
   ['7', '8', '9'],
 ] as const;
+
+/** Fingerprint glyph (Lucide-style outline), drawn to match the delete icon's weight and tint. */
+function FingerprintIcon() {
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24">
+      <Path
+        d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4M14 13.12c0 2.38 0 6.38-1 8.88M17.29 21.02c.12-.6.43-2.3.5-3.02M2 12a10 10 0 0 1 18-6M2 16h.01M21.8 16c.2-2 .131-5.354 0-6M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2M8.65 22c.21-.66.45-1.32.57-2M9 6.8a6 6 0 0 1 9 5.2v2"
+        stroke={colors.primary}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
 
 /** Backspace glyph from Figma (delete, 870:3100). */
 function DeleteIcon() {
@@ -48,7 +66,7 @@ function Key({ label, onPress, children }: KeyProps) {
 }
 
 /** Numeric MPIN keypad (Figma Numbers, 870:3073): 4 rows of 80 dp, three equal columns, full width. */
-export const Keypad = memo(function Keypad({ onDigit, onDelete }: KeypadProps) {
+export const Keypad = memo(function Keypad({ onDigit, onDelete, onBiometric }: KeypadProps) {
   return (
     <View style={styles.pad}>
       {ROWS.map((row) => (
@@ -59,7 +77,13 @@ export const Keypad = memo(function Keypad({ onDigit, onDelete }: KeypadProps) {
         </View>
       ))}
       <View style={styles.row}>
-        <Key />
+        {onBiometric ? (
+          <Key label="Sign in with fingerprint" onPress={onBiometric}>
+            <FingerprintIcon />
+          </Key>
+        ) : (
+          <Key />
+        )}
         <Key label="0" onPress={() => onDigit('0')} />
         <Key label="Delete" onPress={onDelete}>
           <DeleteIcon />
