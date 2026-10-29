@@ -10,40 +10,39 @@ import { RedisModule } from './infra/redis/redis.module';
 import { QueueModule } from './infra/queue/queue.module';
 import { LockModule } from './infra/lock/lock.module';
 import { StellarModule } from './infra/stellar/stellar.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { OtpModule } from './modules/otp/otp.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { SettlementsModule } from './modules/settlements/settlements.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       validationSchema: envValidationSchema,
-      validationOptions: {
-        abortEarly: false,
-      },
+      validationOptions: { abortEarly: false },
     }),
     ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: 60_000,
-          limit: 120,
-        },
-      ],
+      errorMessage: 'Too many requests. Please try again later.',
+      throttlers: [{ ttl: 60_000, limit: 120 }],
     }),
     PrismaModule,
     RedisModule,
     ...(process.env.QUEUE_ENABLED === 'true' ? [QueueModule] : []),
     LockModule,
     StellarModule,
+    AuthModule,
+    OtpModule,
+    AccountsModule,
+    WalletModule,
+    SettlementsModule,
     HealthModule,
   ],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
-    {
-      provide: APP_FILTER,
-      useClass: LegacyHttpExceptionFilter,
-    },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: LegacyHttpExceptionFilter },
   ],
 })
 export class AppModule {}
