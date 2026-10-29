@@ -66,6 +66,12 @@
           "resizeMode": "contain",
           "backgroundColor": "#ECF0F3"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow HoneBill to use Face ID to sign you in."
+        }
       ]
     ],
     "extra": {

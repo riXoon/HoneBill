@@ -22,18 +22,11 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
       isGlobal: true,
       ignoreEnvFile: process.env.NODE_ENV === 'test',
       validationSchema: envValidationSchema,
-      validationOptions: {
-        abortEarly: false,
-      },
+      validationOptions: { abortEarly: false },
     }),
     ThrottlerModule.forRoot({
       errorMessage: 'Too many requests. Please try again later.',
-      throttlers: [
-        {
-          ttl: 60_000,
-          limit: 120,
-        },
-      ],
+      throttlers: [{ ttl: 60_000, limit: 120 }],
     }),
     PrismaModule,
     RedisModule,
@@ -48,14 +41,8 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
     HealthModule,
   ],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
-    {
-      provide: APP_FILTER,
-      useClass: LegacyHttpExceptionFilter,
-    },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: LegacyHttpExceptionFilter },
   ],
 })
 export class AppModule {}

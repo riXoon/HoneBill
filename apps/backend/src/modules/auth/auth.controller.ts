@@ -64,5 +64,5 @@ private extractTransaction(req: Request): unknown {
     return this.accountsService.verifyPin(phoneNumber, pin);
   }
 
-  
+
 }

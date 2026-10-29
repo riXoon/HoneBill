@@ -25,6 +25,11 @@ export const colors = {
   statusOnline: '#53D44C',
   statusOffline: '#8D8B8B',
   shadow: '#D3D3D3',
+  /** Send 2 "Balance after" bar: the remaining-balance part (#0BA98C) and the spent part (#C9C9C9). */
+  success: '#0BA98C',
+  track: '#C9C9C9',
+  /** "L50 low opacity" (#F7F7FB at 50%) flattened over the page background, as TransactionCard does: a translucent fill would show the card shadow through. */
+  card: '#F2F4F7',
   /** Figma "placeholder color" (#9784AC) at 10%: the QR "Send via offline" pill and the vault address row. */
   placeholderTint: 'rgba(151, 132, 172, 0.1)',
   /** Pure white, used for text on the Profile arch (Figma text-white). */

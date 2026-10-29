@@ -112,8 +112,8 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
           </Pressable>
 
           <View style={styles.actions}>
-            {/* Receive 2 - My QR (870:2925) is not built yet. */}
-            <Pressable accessibilityRole="button" style={styles.generate}>
+            {/* A code needs an amount first, so this opens Receive 1, which leads on to Receive 2 - My QR. */}
+            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('ReceiveAmount')} style={styles.generate}>
               <GenerateQrIcon />
               <Text style={styles.generateText}>Generate QR</Text>
             </Pressable>
@@ -170,12 +170,12 @@ const styles = StyleSheet.create({
   panel: {
     width: '100%',
     padding: 30,
-    alignItems: 'flex-end',
     borderRadius: 16,
     overflow: 'hidden',
     height: SCAN_FRAME_HEIGHT + 60,
   },
-  frame: { position: 'absolute', top: 30, right: 30 },
+  // Centred (not right-anchored) so the brackets stay symmetric on screens wider or narrower than 402 dp.
+  frame: { position: 'absolute', top: 30, left: 0, right: 0, alignItems: 'center' },
   // The orb is centred on the panel's top edge.
   orb: { position: 'absolute', top: -SCAN_ORB_SIZE / 2, left: 0, right: 0, alignItems: 'center' },
   hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 10 },
