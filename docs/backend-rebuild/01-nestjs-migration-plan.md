@@ -89,12 +89,12 @@ One row per endpoint. Update **Status** as work lands. "Guard" names are the Nes
 
 | Method | Path | Legacy file | Nest module | Guard / limits | Status | Notes |
 |---|---|---|---|---|---|---|
-| GET | `/api/wallet/balance` | `app/api/wallet/balance/route.ts` | `WalletModule` | rate limit | ☐ | |
-| GET | `/api/wallet/history` | `app/api/wallet/history/route.ts` | `WalletModule` | IP-based | ☐ | |
-| POST | `/api/wallet/transfers/confirm` | `app/api/wallet/transfers/confirm/route.ts` | `WalletModule` | **review** | ☐ | No auth check found in legacy. Decide before porting. |
-| GET | `/api/vault-balance` | `app/api/vault-balance/route.ts` | `WalletModule` | rate limit | ☐ | |
-| GET | `/api/transactions` | `app/api/transactions/route.ts` | `WalletModule` | IP-based | ☐ | |
-| POST | `/api/settlements` | `app/api/settlements/route.ts`, `lib/settlement.ts` | `SettlementsModule` | **review** | ☐ | No auth check found in legacy. Decide before porting. |
+| GET | `/api/wallet/balance` | `app/api/wallet/balance/route.ts` | `WalletModule` | rate limit | ☑ | Horizon PHPC/USDC trustline check with zero-balance fallback |
+| GET | `/api/wallet/history` | `app/api/wallet/history/route.ts` | `WalletModule` | IP-based | ☑ | Reconciles settlements, anchors, and online transfers |
+| POST | `/api/wallet/transfers/confirm` | `app/api/wallet/transfers/confirm/route.ts` | `WalletModule` | public | ☑ | Soroban RPC verified confirmation with 409/422 status |
+| GET | `/api/vault-balance` | `app/api/vault-balance/route.ts` | `WalletModule` | rate limit | ☑ | Soroban contract `get_vault` + Horizon online balance |
+| GET | `/api/transactions` | `app/api/transactions/route.ts` | `WalletModule` | IP-based | ☑ | Settled offline settlements with token metadata |
+| POST | `/api/settlements` | `app/api/settlements/route.ts`, `lib/settlement.ts` | `SettlementsModule` | signed voucher | ☑ | Offline voucher Ed25519 verification + relayer execution |
 
 ### Engine (Soroban contract)
 
@@ -196,10 +196,12 @@ The Phase 2 implementation and automated test gates pass. Live parity is clean f
 
 Additional checks on this checkpoint: `npm run typecheck --workspace=backend` and `npm run build --workspace=backend` pass. Both local servers returned HTTP 200 from `/api/health`. The full E2E suite passed with 11/11 suites and 71/71 tests. Main parity reported 63 OK / 0 DIFF / 1 BLOCKED; OTP and method parity reported 62 OK / 0 DIFF / 1 BLOCKED. The blocked cases require the funded-auth secret and OTP test-mode confirmation/probe variables, respectively.
 
-### Phase 3: Wallet, transactions, settlements
-- [ ] Balance, history, vault balance, transactions
-- [ ] Resolve the **review** items (transfers/confirm, settlements auth)
-- [ ] Port `reconciliation.test.ts`
+### Phase 3: Wallet, transactions, settlements ☑
+- [x] Balance, history, vault balance, transactions
+- [x] Resolve the **review** items (transfers/confirm, settlements auth)
+- [x] Port `reconciliation.test.ts`
+
+Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `WalletModule` and `SettlementsModule` with full legacy parity (balance from Horizon trustlines with 404 fallback to zero, aggregated history across settlements/anchors/transfers with BigInt precision, vault balance querying Soroban and Horizon, transactions list with metadata, Soroban RPC-verified transfer confirmation, and offline voucher signature verification). Tests passing: `reconciliation.test.ts`, `reconciliation.service.spec.ts`, `wallet.service.spec.ts`, `settlements.service.spec.ts`, and `phase3-wallet-smoke.spec.ts` (19/19 Phase 3 tests passing, 155/155 backend unit tests passing).
 
 ### Phase 4: Engine / Soroban (highest risk)
 - [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts`
@@ -260,6 +262,7 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-27 | Keep 401 message text route-specific; require status and response-body parity rather than a global error normalizer | Legacy protected routes use different messages and body shapes; the mobile client reads the `error` field |
 | 2026-10-27 | Match unsupported-method behavior per endpoint: use 405 when the legacy Next.js route exports another method, and retain native 404 bodies for unknown paths | Live route evidence shows Next.js returns 405 for OTP routes that export POST only; Nest requires a route-scoped handler to match. Do not treat unknown paths as method mismatches. |
 | 2026-10-27 | Compare unknown-route behavior by status only; retain each framework's native 404 body | Next.js and NestJS format unmatched-route bodies differently, while both correctly return 404 |
+| 2026-10-29 | Preserve public transfer confirmation and settlement routes during Phase 3; confirm only advances a stored transfer after Soroban RPC success, while settlement requires a valid sender Ed25519 voucher and configured relayer | The legacy routes have no SEP-10 guard. Confirmation changes transaction metadata only, and settlement authorization is carried by the signed offline voucher; adding session authentication would break parity without adding transaction authorization |
 
 ## Change log
 
@@ -275,3 +278,5 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-28 | Health response compatibility follow-up | 1 / 2 (in progress) | A live check on the supplied ports showed legacy returns HTTP 200 with a legacy health envelope while the running Nest process returned Terminus HTTP 503. Updated the Nest controller to preserve the legacy envelope and degraded status, and added two unit plus two E2E tests. The health tests, typecheck, and build pass. Live confirmation is pending restart of the already-running Nest process so it loads the rebuilt code. |
 | 2026-10-28 | Port 3000/3001 parity rerun | 2 (in progress) | With legacy on 3001 and Nest on 3000, the main parity suite reported no DIFF among comparable rows; three cases were BLOCKED (funded auth, PIN account lookup, health status). The OTP/method script confirmed malformed JSON and account-route method parity, but reported eight OTP method DIFFs because the active Nest process still sends `Allow: POST`; rebuilt source and E2E now verify that header is absent. OTP live-flow assertions were skipped because the runner's explicit test-mode confirmation and probe variables were not supplied. Restart Nest, then rerun these live probes. |
 | 2026-10-28 | Full suite rerun on ports 3000/3001 | 2 (in progress) | Unit tests passed 17/17 suites (142/142); full E2E passed 11/11 suites (71/71); typecheck and build passed. After restarting Nest, main parity passed 63 rows with zero DIFF and one funded-auth BLOCKED row; health passed the normalized legacy contract. OTP/method parity passed 62 rows with zero DIFF; the OTP live-flow sequence remains BLOCKED because the runner's test-mode confirmation and probe variables are not set. |
+| 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
+| 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
