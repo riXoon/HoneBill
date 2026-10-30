@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { resolve } from 'node:path';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -22,6 +23,7 @@ import { CommonModule } from './common/common.module';
     ConfigModule.forRoot({
       isGlobal: true,
       ignoreEnvFile: process.env.NODE_ENV === 'test',
+      envFilePath: [resolve(__dirname, '../.env'), resolve(process.cwd(), '.env')],
       validationSchema: envValidationSchema,
       validationOptions: { abortEarly: false },
     }),
