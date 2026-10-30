@@ -1,18 +1,33 @@
 import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
-  NODE_ENV: Joi.string()
-    .valid('development', 'test', 'production')
-    .default('development'),
+  NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().port().default(3000),
   CORS_ORIGIN: Joi.string().default('*'),
   DATABASE_URL: Joi.string().uri().default('postgresql://localhost:5432/mock'),
   SOROBAN_RPC_URL: Joi.string().uri().default('https://soroban-testnet.stellar.org'),
   STELLAR_HORIZON_URL: Joi.string().uri().default('https://horizon-testnet.stellar.org'),
   STELLAR_NETWORK_PASSPHRASE: Joi.string().default('Test SDF Network ; September 2015'),
+  CONTRACT_ID: Joi.string().default('CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX'),
+  RELAYER_PUBLIC_KEY: Joi.string().allow('').optional(),
+  RELAYER_SECRET_KEY: Joi.string().allow('').optional(),
+  PHPC_ISSUER_PUBKEY: Joi.string().allow('').optional(),
   REDIS_URL: Joi.string().uri().optional(),
   REDIS_HOST: Joi.string().default('127.0.0.1'),
   REDIS_PORT: Joi.number().port().default(6379),
   REDIS_DB: Joi.number().min(0).default(0),
   QUEUE_ENABLED: Joi.boolean().default(false),
+  TEXTBEE_GATEWAY_URL: Joi.string().uri().optional(),
+  TEXTBEE_API_KEY: Joi.string().optional(),
+  TEXTBEE_TIMEOUT_MS: Joi.number().integer().min(1000).default(4500),
+  TEXTBEE_RETRIES: Joi.number().integer().min(0).max(5).default(2),
+  TEXTBEE_FALLBACK_GATEWAY_URL: Joi.string().uri().allow('').optional(),
+  TEXTBEE_FALLBACK_API_KEY: Joi.string().allow('').optional(),
+  OTP_VERIFICATION_JWT_SECRET: Joi.string().allow('').optional(),
+  REQUIRE_OTP_TOKEN: Joi.boolean().default(false),
+  OTP_TEST_MODE: Joi.boolean().default(false),
+  OTP_TEST_NUMBERS: Joi.string().allow('').default(''),
+  OTP_TEST_CODE: Joi.string().allow('').optional(),
+  SEP10_AUTH_TIMEOUT: Joi.number().integer().positive().default(900),
+  SEP10_JWT_TIMEOUT: Joi.number().integer().positive().default(86400),
 });

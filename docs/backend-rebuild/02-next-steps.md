@@ -1,8 +1,8 @@
 # Migration next steps
 
-This file captures the next progression path after the setup-phase completion. The goal is to keep the migration safe, incremental, and parity-checked against the legacy backend before cutting over.
+This file captures the progression path after the setup-phase completion. Phase 2 implementation has landed; Phase 3 endpoint code is underway in `apps/backend`, with tests and parity checks still to complete.
 
-## 1. Phase 2: Auth, OTP, accounts
+## 1. Phase 2: Auth, OTP, accounts (implementation landed; parity gate pending)
 
 Execute in this order:
 
@@ -29,6 +29,8 @@ Completion gate:
 - contract parity check against legacy responses for all routes above
 
 ## 2. Phase 3: Wallet, transactions, settlements
+
+Implementation started on 2026-10-29. Wallet balance/history/vault/transactions, transfer confirmation, and signed offline settlement submission have Nest service implementations. Focused tests are in `src/modules/wallet/wallet.service.spec.ts`, `src/modules/settlements/settlements.service.spec.ts`, `src/modules/settlements/reconciliation.service.spec.ts`, and `src/scripts/phase3-wallet-smoke.spec.ts`; all 16 Phase 3 unit tests pass. RPC success, storage lookup, and safe-retry reconciliation cases are covered; recipient registry cases and request/response parity checks are still outstanding.
 
 1. Port wallet endpoints:
    - `/api/wallet/balance`
