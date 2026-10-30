@@ -25,6 +25,7 @@
     "prestart": "npm run prisma:generate",
     "prestart:dev": "npm run prisma:generate",
     "prestart:debug": "npm run prisma:generate",
+    "test:e2e:phase2": "jest --config ./test/jest-e2e.json --runTestsByPath ./test/phase2-contract-parity.e2e-spec.ts ./test/sep10-guard.e2e-spec.ts --runInBand",
     "test:phase2": "jest --runTestsByPath src/phase2-smoke.spec.ts --runInBand",
     "test:phase2:watch": "jest --watch --runTestsByPath src/phase2-smoke.spec.ts --runInBand",
     "test:phase3": "jest --runTestsByPath src/scripts/phase3-wallet-smoke.spec.ts src/modules/wallet/wallet.service.spec.ts src/modules/settlements/settlements.service.spec.ts src/modules/settlements/reconciliation.service.spec.ts src/scripts/reconciliation.test.ts --runInBand",
@@ -89,7 +90,7 @@
       "json",
       "ts"
     ],
-    "rootDir": "test/unit-testing",
+    "rootDir": "src",
     "testRegex": ".*\\.(spec|test)\\.ts$",
     "transform": {
       "^.+\\.[tj]sx?$": [
