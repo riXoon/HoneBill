@@ -204,8 +204,8 @@ Additional checks on this checkpoint: `npm run typecheck --workspace=backend` an
 Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `WalletModule` and `SettlementsModule` with full legacy parity (balance from Horizon trustlines with 404 fallback to zero, aggregated history across settlements/anchors/transfers with BigInt precision, vault balance querying Soroban and Horizon, transactions list with metadata, Soroban RPC-verified transfer confirmation, and offline voucher signature verification). Tests passing: `reconciliation.test.ts`, `reconciliation.service.spec.ts`, `wallet.service.spec.ts`, `settlements.service.spec.ts`, and `phase3-wallet-smoke.spec.ts` (19/19 Phase 3 tests passing, 155/155 backend unit tests passing).
 
 ### Phase 4: Engine / Soroban (highest risk)
-- [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts`
-- [ ] `Ed25519SignatureGuard`
+- [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts` (Nest lock and retry-classifier coverage plus transaction construction/submission/polling tests are in place; friendbot and settlement normalization cases remain pending their feature services)
+- [x] `Ed25519SignatureGuard` (canonical deposit/withdraw/online-transfer message verification; covered by E2E tests)
 - [ ] deposit, transfer, withdraw, offline-key, recipient-registry
 - [ ] settle as a BullMQ processor
 
@@ -280,3 +280,5 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-28 | Full suite rerun on ports 3000/3001 | 2 (in progress) | Unit tests passed 17/17 suites (142/142); full E2E passed 11/11 suites (71/71); typecheck and build passed. After restarting Nest, main parity passed 63 rows with zero DIFF and one funded-auth BLOCKED row; health passed the normalized legacy contract. OTP/method parity passed 62 rows with zero DIFF; the OTP live-flow sequence remains BLOCKED because the runner's test-mode confirmation and probe variables are not set. |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
+| 2026-10-29 | Phase 4 Stellar transaction manager baseline | 4 (in progress) | Added injectable Nest transaction manager with Redis relayer lock, pre-broadcast settlement persistence, Soroban submit/poll flow, and ported unit coverage. Stellar infra unit tests pass (28/28); backend typecheck passes. |
+| 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |

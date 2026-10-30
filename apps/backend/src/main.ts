@@ -14,7 +14,7 @@ async function bootstrap(): Promise<void> {
   configureRequestBodyParsing(app);
   configureApp(app);
 
-  const port = process.env.PORT || 3000;
+  const port = process.env.PORT || 3001;
   await app.listen(port);
 }
 

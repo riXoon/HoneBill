@@ -15,6 +15,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
       validationSchema: envValidationSchema,
       validationOptions: { abortEarly: false },
     }),
+    CommonModule,
     ThrottlerModule.forRoot({
       errorMessage: 'Too many requests. Please try again later.',
       throttlers: [{ ttl: 60_000, limit: 120 }],
