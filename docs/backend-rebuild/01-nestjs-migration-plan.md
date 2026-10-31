@@ -100,12 +100,12 @@ One row per endpoint. Update **Status** as work lands. "Guard" names are the Nes
 
 | Method | Path | Legacy file | Nest module | Guard / limits | Status | Notes |
 |---|---|---|---|---|---|---|
-| POST | `/api/engine/deposit` | `app/api/engine/deposit/route.ts` | `EngineModule` | `Ed25519SignatureGuard` [signed `Authorization: Bearer`] | ☐ | Builds/simulates/submits `deposit` server-side. |
-| POST, PATCH | `/api/engine/offline-key` | `app/api/engine/offline-key/route.ts` | `EngineModule` | `Sep10JwtGuard` | ☐ | |
-| POST | `/api/engine/recipient-registry` | `app/api/engine/recipient-registry/route.ts` | `EngineModule` | `Sep10JwtGuard` | ☐ | |
-| POST | `/api/engine/transfer` | `app/api/engine/transfer/route.ts` | `EngineModule` | `Ed25519SignatureGuard` | ☐ | |
-| POST | `/api/engine/withdraw` | `app/api/engine/withdraw/route.ts` | `EngineModule` | `Ed25519SignatureGuard` | ☐ | |
-| POST | `/api/engine/settle` | `app/api/engine/settle/route.ts`, `lib/settlement.ts` | `EngineModule` | QStash + TextBee signature → BullMQ processor | ☐ | Becomes a queue processor; keep an HTTP entry only if something external still calls it. |
+| POST | `/api/engine/deposit` | `app/api/engine/deposit/route.ts` | `EngineModule` | `Ed25519SignatureGuard` [signed `Authorization: Bearer`] | ☑ | Prepares a wallet-signed deposit envelope with Pijin/SAC auth. |
+| POST, PATCH | `/api/engine/offline-key` | `app/api/engine/offline-key/route.ts` | `EngineModule` | `Sep10JwtGuard` | ☑ | Authenticated device-key rotation and on-chain confirmation. |
+| POST | `/api/engine/recipient-registry` | `app/api/engine/recipient-registry/route.ts` | `EngineModule` | `Sep10JwtGuard` | ☑ | Registrar-backed short-ID registration and offline config response. |
+| POST | `/api/engine/transfer` | `app/api/engine/transfer/route.ts` | `EngineModule` | `Ed25519SignatureGuard` | ☑ | Requires explicit online transfer protocol v2 and records a pending transfer. |
+| POST | `/api/engine/withdraw` | `app/api/engine/withdraw/route.ts` | `EngineModule` | `Ed25519SignatureGuard` | ☑ | Prepares a wallet-signed withdraw envelope. |
+| queue processor | `engine-settlement` BullMQ queue | `app/api/engine/settle/route.ts`, `lib/settlement.ts` | `EngineModule` | BullMQ worker; producer available to SMS integration | ☑ | Uses persisted signed XDR, relayer lock, retry classifier, and bounded confirmation polling. No legacy QStash HTTP callback is exposed. |
 
 Shared engine libs to port into `infra/stellar` or `EngineModule` services: `lib/pijin-contract.ts`, `lib/stellar-transaction-manager.ts`, `lib/stellar-reconciliation.ts`, `lib/redis-lock.ts`, `lib/crypto.ts`.
 
@@ -286,3 +286,4 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
+| 2026-10-31 | Phase 4 implementation | 4 (implementation complete; tests pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Backend build passes; Phase 4 tests remain pending. |

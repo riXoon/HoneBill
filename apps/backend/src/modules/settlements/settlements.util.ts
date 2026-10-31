@@ -1,8 +1,6 @@
-import { BadGatewayException, BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
-import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import {
   buildOfflineSignatureXdr as buildVoucherSignatureXdr,
@@ -11,6 +9,7 @@ import {
   restoreBase64Padding,
   verifyOfflineVoucherSignature,
 } from './offline-voucher.util.js';
+import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 
 // Preserve the settlement helper exports while sharing parsing and XDR logic with Phase 5.
 /** Retains the existing settlement import while using the shared Base62 decoder. */
@@ -63,15 +62,15 @@ export function parseSettlementSmsBody(smsBody: string): {
 export class SettlementsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly stellar: StellarService,
     private readonly config: ConfigService,
+    private readonly transactionManager: StellarTransactionManager,
   ) {}
 
   /** Checks account/token state and signature, then sends the signed offline spend transaction. */
   async processSettlement(smsBody: string) {
     const payload = parseSettlementSmsBody(smsBody);
     const existing = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
-    if (existing) {
+    if (existing && existing.status !== 'PENDING') {
       throw new ApiResponseException(409, { txHash: existing.txHash, status: existing.status });
     }
     const [sender, receiver, token] = await Promise.all([
@@ -99,31 +98,69 @@ export class SettlementsService {
       try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, legacyBytes, signature); } catch { valid = false; }
     }
     if (!valid) throw new UnauthorizedException('Unauthorized');
-    try {
-      const contract = await this.stellar.getContract();
-      const assembled = await contract.spend_offline({
-        gateway, sender: sender.stellarPublicKey, token: token.contractId,
-        receiver_short_id: Buffer.from(payload.receiverShortId, 'ascii'), amount,
-        protocol_toll: toll, nonce, signature,
-      }, { publicKey: gateway });
-      const relayer = Keypair.fromSecret(secret);
-      const { sendTransactionResponse } = await assembled.signAndSend({
-        signTransaction: async (txXdr: string, options?: { networkPassphrase?: string }) => {
-          const tx = TransactionBuilder.fromXDR(txXdr, options?.networkPassphrase ?? this.stellar.networkPassphrase);
-          tx.sign(relayer);
-          return { signedTxXdr: tx.toXDR(), signerAddress: relayer.publicKey() };
-        },
-      });
-      const txHash = sendTransactionResponse?.hash ?? null;
-      await this.prisma.settlement.create({ data: {
-        qstashMessageId: `nest-${payload.nonce}`, nonce: payload.nonce, senderShortId: payload.senderShortId,
-        receiverShortId: payload.receiverShortId, tokenId: token.id, amountStroops: amount,
-        relayerAddress: gateway, txHash, status: 'SETTLED',
-      } });
-      return { txHash, status: 'SETTLED' };
-    } catch (error) {
-      if (error instanceof ConflictException || error instanceof NotFoundException || error instanceof UnauthorizedException) throw error;
-      throw new BadGatewayException('Failed to submit offline settlement to Stellar network.');
+    let settlement = existing;
+    if (!settlement) {
+      try {
+        settlement = await this.prisma.settlement.create({ data: {
+          qstashMessageId: `engine-${payload.nonce}`, nonce: payload.nonce, senderShortId: payload.senderShortId,
+          receiverShortId: payload.receiverShortId, tokenId: token.id, amountStroops: amount,
+          relayerAddress: gateway, status: 'PENDING',
+        } });
+      } catch (error) {
+        // A parallel worker may have claimed this voucher between the lookup and insert.
+        if (isPrismaUniqueConflict(error)) {
+          settlement = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
+          if (!settlement) throw error;
+          if (settlement.status !== 'PENDING') {
+            throw new ApiResponseException(409, { txHash: settlement.txHash, status: settlement.status });
+          }
+        } else {
+          throw error;
+        }
+      }
     }
+
+    const args = {
+      gateway,
+      sender: sender.stellarPublicKey,
+      token: token.contractId,
+      receiver_short_id: Buffer.from(payload.receiverShortId, 'ascii'),
+      amount,
+      protocol_toll: toll,
+      nonce,
+      signature,
+    };
+    const outcome = settlement.txHash && settlement.signedTxXdr
+      ? await this.transactionManager.resumeTwoPhaseSettlement({
+          settlementId: settlement.id,
+          txHash: settlement.txHash,
+          signedTxXdr: settlement.signedTxXdr,
+        })
+      : await this.transactionManager.executeTwoPhaseSettlement({
+          settlementId: settlement.id,
+          args,
+          relayerSecretKey: secret,
+        });
+
+    if (outcome.pollResult.status === 'SUCCESS') {
+      await this.prisma.settlement.update({
+        where: { id: settlement.id },
+        data: { status: 'SETTLED', txHash: outcome.txHash, failReason: null },
+      });
+      return { txHash: outcome.txHash, status: 'SETTLED' };
+    }
+    if (outcome.pollResult.status === 'FAILED') {
+      const reason = outcome.pollResult.errorResultXdr ?? 'Soroban transaction failed';
+      await this.prisma.settlement.update({
+        where: { id: settlement.id },
+        data: { status: 'FAILED', txHash: outcome.txHash, failReason: reason },
+      });
+      return { txHash: outcome.txHash, status: 'FAILED' };
+    }
+    throw new Error(`Settlement transaction ${outcome.txHash} is not confirmed yet (timeout)`);
   }
+}
+
+function isPrismaUniqueConflict(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
