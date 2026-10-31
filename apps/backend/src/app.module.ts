@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
+import { EngineModule } from './modules/engine/engine.module.js';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
     AccountsModule,
     WalletModule,
     SettlementsModule,
+    EngineModule,
     HealthModule,
   ],
   providers: [
