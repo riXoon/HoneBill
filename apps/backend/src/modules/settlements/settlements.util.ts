@@ -1,41 +1,40 @@
 import { BadGatewayException, BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Address, Keypair, nativeToScVal, TransactionBuilder, xdr } from '@stellar/stellar-sdk';
+import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import {
+  buildOfflineSignatureXdr as buildVoucherSignatureXdr,
+  decodeBase62,
+  parseOfflineVoucher,
+  restoreBase64Padding,
+  verifyOfflineVoucherSignature,
+} from './offline-voucher.util.js';
 
-const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const I128_MAX = (1n << 127n) - 1n;
+// Preserve the settlement helper exports while sharing parsing and XDR logic with Phase 5.
+/** Retains the existing settlement import while using the shared Base62 decoder. */
+export { decodeBase62 };
+/** Retains the old helper name for settlement callers while sharing padding logic. */
+export const restorePadding = restoreBase64Padding;
 
-export function decodeBase62(value: string): bigint {
-  if (!value) throw new BadRequestException('Amount encoding is empty');
-  let result = 0n;
-  for (const character of value) {
-    const digit = ALPHABET.indexOf(character);
-    if (digit < 0) throw new BadRequestException(`Invalid Base62 character: '${character}'`);
-    result = result * 62n + BigInt(digit);
-  }
-  return result;
-}
-
-export function restorePadding(value: string): string {
-  return value + '='.repeat((4 - (value.length % 4)) % 4);
-}
-
+/** Adapts settlement terminology to the shared contract-compatible XDR serializer. */
 export function buildOfflineSignatureXdr(input: {
   amountStroops: bigint; protocolToll: bigint; nonce: Buffer; receiverShortId: string;
   gatewayPublicKey: string; tokenContractId: string; contractId?: string;
 }): Buffer {
-  const tuple = [
-    nativeToScVal(input.amountStroops, { type: 'i128' }), nativeToScVal(input.protocolToll, { type: 'i128' }),
-    xdr.ScVal.scvBytes(input.nonce), xdr.ScVal.scvBytes(Buffer.from(input.receiverShortId, 'ascii')),
-    Address.fromString(input.gatewayPublicKey).toScVal(), Address.fromString(input.tokenContractId).toScVal(),
-  ];
-  if (input.contractId) tuple.push(Address.fromString(input.contractId).toScVal());
-  return Buffer.from(xdr.ScVal.scvVec(tuple).toXDR());
+  return buildVoucherSignatureXdr({
+    amountStroops: input.amountStroops,
+    tollStroops: input.protocolToll,
+    nonce: input.nonce,
+    receiverShortId: input.receiverShortId,
+    gatewayPublicKey: input.gatewayPublicKey,
+    tokenContractId: input.tokenContractId,
+    contractAddress: input.contractId,
+  });
 }
 
+/** Adapts the shared voucher parser to settlement's existing string fields and HTTP errors. */
 export function parseSettlementSmsBody(smsBody: string): {
   tokenId: string;
   senderShortId: string;
@@ -44,30 +43,23 @@ export function parseSettlementSmsBody(smsBody: string): {
   nonce: string;
   signature: string;
 } {
-  const payload = (smsBody ?? '').trim();
-  const parts = payload.split(':');
-  if (parts.length !== 6) {
-    throw new BadRequestException(`Malformed SMS payload: expected 6 parts, got ${parts.length}`);
+  try {
+    const parsed = parseOfflineVoucher(smsBody ?? '');
+    return {
+      tokenId: parsed.tokenIdStr,
+      senderShortId: parsed.senderShortId,
+      receiverShortId: parsed.receiverShortId,
+      amountBase62: parsed.amountBase62,
+      nonce: parsed.nonceB64,
+      signature: parsed.signatureB64,
+    };
+  } catch (error) {
+    throw new BadRequestException(error instanceof Error ? error.message : 'Malformed SMS payload');
   }
-
-  const [tokenId, senderShortId, receiverShortId, amountBase62, nonce, signature] = parts;
-  if (!tokenId || !senderShortId || !receiverShortId || !amountBase62 || !nonce || !signature) {
-    throw new BadRequestException('Malformed smsBody');
-  }
-
-  if (!/^\d+$/.test(tokenId) || !Number.isSafeInteger(Number(tokenId)) || Number(tokenId) <= 0) throw new BadRequestException('Invalid token ID');
-  if (!/^[0-9A-Za-z]{6}$/.test(senderShortId)) throw new BadRequestException('senderShortId must be exactly 6 Base62 characters');
-  if (!/^[0-9A-Za-z]{6}$/.test(receiverShortId)) throw new BadRequestException('receiverShortId must be exactly 6 Base62 characters');
-  const amount = decodeBase62(amountBase62);
-  if (amount <= 0n) throw new BadRequestException('Amount must be greater than zero');
-  if (amount > I128_MAX) throw new BadRequestException(`Amount ${amount} exceeds i128::MAX — invalid voucher`);
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(nonce) || Buffer.from(restorePadding(nonce), 'base64').length !== 32) throw new BadRequestException('Nonce must decode to 32 bytes');
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(signature) || Buffer.from(restorePadding(signature), 'base64').length !== 64) throw new BadRequestException('Signature must decode to 64 bytes');
-
-  return { tokenId, senderShortId, receiverShortId, amountBase62, nonce, signature };
 }
 
 @Injectable()
+/** Validates an offline voucher, submits it to Soroban, and records the resulting settlement. */
 export class SettlementsService {
   constructor(
     private readonly prisma: PrismaService,
@@ -75,11 +67,12 @@ export class SettlementsService {
     private readonly config: ConfigService,
   ) {}
 
+  /** Checks account/token state and signature, then sends the signed offline spend transaction. */
   async processSettlement(smsBody: string) {
     const payload = parseSettlementSmsBody(smsBody);
     const existing = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
     if (existing) {
-      throw new LegacyBodyException(409, { txHash: existing.txHash, status: existing.status });
+      throw new ApiResponseException(409, { txHash: existing.txHash, status: existing.status });
     }
     const [sender, receiver, token] = await Promise.all([
       this.prisma.account.findUnique({ where: { shortId: payload.senderShortId } }),
@@ -91,7 +84,7 @@ export class SettlementsService {
     if (!token.isActive) throw new BadRequestException('Token is inactive');
     const gateway = this.config.get<string>('RELAYER_PUBLIC_KEY')?.trim();
     const secret = this.config.get<string>('RELAYER_SECRET_KEY')?.trim();
-    if (!gateway || !secret) throw new LegacyBodyException(500, { error: 'Relayer not configured' });
+    if (!gateway || !secret) throw new ApiResponseException(500, { error: 'Relayer not configured' });
     if (!sender.offlineDeviceKey) throw new ConflictException('Offline device key is not enrolled. Sign in online to synchronize this device.');
     const amount = decodeBase62(payload.amountBase62);
     const toll = token.symbol === 'PHPC' ? 5_000_000n : 0n;
@@ -100,10 +93,10 @@ export class SettlementsService {
     const contractId = this.config.getOrThrow<string>('CONTRACT_ID');
     const signedBytes = buildOfflineSignatureXdr({ amountStroops: amount, protocolToll: toll, nonce, receiverShortId: payload.receiverShortId, gatewayPublicKey: gateway, tokenContractId: token.contractId, contractId });
     let valid: boolean;
-    try { valid = Keypair.fromPublicKey(sender.offlineDeviceKey).verify(signedBytes, signature); } catch { valid = false; }
+    try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, signedBytes, signature); } catch { valid = false; }
     if (!valid) {
       const legacyBytes = buildOfflineSignatureXdr({ amountStroops: amount, protocolToll: toll, nonce, receiverShortId: payload.receiverShortId, gatewayPublicKey: gateway, tokenContractId: token.contractId });
-      try { valid = Keypair.fromPublicKey(sender.offlineDeviceKey).verify(legacyBytes, signature); } catch { valid = false; }
+      try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, legacyBytes, signature); } catch { valid = false; }
     }
     if (!valid) throw new UnauthorizedException('Unauthorized');
     try {

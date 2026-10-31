@@ -19,6 +19,9 @@ export function configureApp(app: INestApplication): void {
       'Authorization',
       'X-Signature',
       'X-Textbee-Signature',
+      'X-Textbee-Timestamp',
+      'X-Timestamp',
+      'X-Sms-Dispatch-Secret',
     ],
   });
 

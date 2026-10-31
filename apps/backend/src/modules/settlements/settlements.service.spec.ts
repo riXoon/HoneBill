@@ -35,7 +35,7 @@ describe('SettlementsService', () => {
     prisma.settlement.findUnique.mockResolvedValue({ txHash: 'already-sent', status: 'SETTLED' });
     await expect(service.processSettlement(body())).rejects.toMatchObject({
       status: 409,
-      legacyBody: { txHash: 'already-sent', status: 'SETTLED' },
+      responseBody: { txHash: 'already-sent', status: 'SETTLED' },
     });
     expect(prisma.account.findUnique).not.toHaveBeenCalled();
     expect(stellar.getContract).not.toHaveBeenCalled();

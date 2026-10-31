@@ -210,10 +210,10 @@ Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `Wallet
 - [ ] settle as a BullMQ processor
 
 ### Phase 5: SMS and queues
-- [ ] TextBee client with fallback device; `TextbeeSignatureGuard`
-- [ ] SMS dispatch queue (replaces QStash), inbound webhook
-- [ ] Offline voucher verification
-- [ ] Port `sms-security.test.ts`, `sms-delivery.test.ts`, `offline-voucher-security.test.ts`
+- [x] TextBee client with fallback device; `TextbeeSignatureGuard`
+- [x] SMS dispatch queue producer/worker (BullMQ), inbound webhook and nonce deduplication
+- [x] Shared offline voucher parser and XDR/signature verification helper
+- [ ] Port remaining legacy `sms-security.test.ts`, `sms-delivery.test.ts`, `offline-voucher-security.test.ts` cases and complete route parity checks
 
 ### Phase 6: Anchor (SEP-1 / SEP-24)
 - [ ] `stellar.toml`, `sep24/info`, `sep24/transaction`
@@ -263,6 +263,7 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-27 | Match unsupported-method behavior per endpoint: use 405 when the legacy Next.js route exports another method, and retain native 404 bodies for unknown paths | Live route evidence shows Next.js returns 405 for OTP routes that export POST only; Nest requires a route-scoped handler to match. Do not treat unknown paths as method mismatches. |
 | 2026-10-27 | Compare unknown-route behavior by status only; retain each framework's native 404 body | Next.js and NestJS format unmatched-route bodies differently, while both correctly return 404 |
 | 2026-10-29 | Preserve public transfer confirmation and settlement routes during Phase 3; confirm only advances a stored transfer after Soroban RPC success, while settlement requires a valid sender Ed25519 voucher and configured relayer | The legacy routes have no SEP-10 guard. Confirmation changes transaction metadata only, and settlement authorization is carried by the signed offline voucher; adding session authentication would break parity without adding transaction authorization |
+| 2026-10-31 | Protect `POST /api/sms/dispatch` with `SMS_DISPATCH_SECRET` in `x-sms-dispatch-secret`; keep it unavailable when the secret is unset | QStash signatures are removed with the queue migration. A dedicated shared secret protects the compatibility endpoint while dispatch is still called over HTTP; BullMQ worker delivery remains the preferred internal path. |
 
 ## Change log
 
@@ -278,6 +279,7 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-28 | Health response compatibility follow-up | 1 / 2 (in progress) | A live check on the supplied ports showed legacy returns HTTP 200 with a legacy health envelope while the running Nest process returned Terminus HTTP 503. Updated the Nest controller to preserve the legacy envelope and degraded status, and added two unit plus two E2E tests. The health tests, typecheck, and build pass. Live confirmation is pending restart of the already-running Nest process so it loads the rebuilt code. |
 | 2026-10-28 | Port 3000/3001 parity rerun | 2 (in progress) | With legacy on 3001 and Nest on 3000, the main parity suite reported no DIFF among comparable rows; three cases were BLOCKED (funded auth, PIN account lookup, health status). The OTP/method script confirmed malformed JSON and account-route method parity, but reported eight OTP method DIFFs because the active Nest process still sends `Allow: POST`; rebuilt source and E2E now verify that header is absent. OTP live-flow assertions were skipped because the runner's explicit test-mode confirmation and probe variables were not supplied. Restart Nest, then rerun these live probes. |
 | 2026-10-28 | Full suite rerun on ports 3000/3001 | 2 (in progress) | Unit tests passed 17/17 suites (142/142); full E2E passed 11/11 suites (71/71); typecheck and build passed. After restarting Nest, main parity passed 63 rows with zero DIFF and one funded-auth BLOCKED row; health passed the normalized legacy contract. OTP/method parity passed 62 rows with zero DIFF; the OTP live-flow sequence remains BLOCKED because the runner's test-mode confirmation and probe variables are not set. |
+| 2026-10-31 | Phase 5 SMS and voucher foundation | 5 (in progress) | Added TextBee primary/fallback delivery with legacy phone normalization and retry classification, exact-body HMAC/timestamp guard, bounded raw webhook parsing, `SMS_DISPATCH_SECRET` protection, BullMQ SMS and settlement queue publishing, inbound webhook filtering/rate limiting/replay protection, shared voucher parsing/XDR verification, and the deep TextBee health probe. Focused SMS/voucher and route tests pass; backend typecheck, build, and unit suite pass. Remaining: port uncovered legacy edge assertions and run live legacy-vs-Nest parity. |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
 | 2026-10-29 | Phase 4 Stellar transaction manager baseline | 4 (in progress) | Added injectable Nest transaction manager with Redis relayer lock, pre-broadcast settlement persistence, Soroban submit/poll flow, and ported unit coverage. Stellar infra unit tests pass (28/28); backend typecheck passes. |

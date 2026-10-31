@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { AccountsService } from '../../src/modules/accounts/accounts.service.js';
 import { AuthController } from '../../src/modules/auth/auth.controller.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
@@ -37,7 +37,7 @@ describe('PIN verify IP throttle (e2e)', () => {
     }).compile();
     const instance = moduleRef.createNestApplication();
     instance.setGlobalPrefix('api');
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }

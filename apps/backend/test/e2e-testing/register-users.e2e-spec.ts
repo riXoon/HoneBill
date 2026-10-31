@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Keypair } from '@stellar/stellar-sdk';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { PrismaService } from '../../src/infra/prisma/prisma.service.js';
 import { RedisService } from '../../src/infra/redis/redis.service.js';
 import { AccountsController } from '../../src/modules/accounts/accounts.controller.js';
@@ -105,7 +105,7 @@ describe('Register and users with real Postgres (e2e)', () => {
     const application = moduleRef.createNestApplication();
     app = application;
     application.setGlobalPrefix('api');
-    application.useGlobalFilters(new LegacyHttpExceptionFilter());
+    application.useGlobalFilters(new ApiExceptionFilter());
     await application.init();
     prisma = moduleRef.get(PrismaService);
   });

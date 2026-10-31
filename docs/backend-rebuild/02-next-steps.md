@@ -68,7 +68,7 @@ Completion gate:
 - contract simulation / submission behavior matches legacy
 - retries, queue semantics, and lock handling are validated under concurrency tests
 
-## 4. Phase 5: SMS, queue, voucher security
+## 4. Phase 5: SMS, queue, voucher security (implementation underway)
 
 1. Port the TextBee client with fallback device logic and signature guard.
 2. Port SMS dispatch queue and webhook inbound handling.
@@ -77,6 +77,8 @@ Completion gate:
    - `sms-security.test.ts`
    - `sms-delivery.test.ts`
    - `offline-voucher-security.test.ts`
+
+Initial Nest implementation now includes TextBee primary/fallback delivery, a BullMQ SMS producer/worker, the signed inbound webhook and settlement queue producer, a shared offline voucher parser/XDR verifier, deep TextBee health status, and the `SMS_DISPATCH_SECRET` guard for the compatibility dispatch route. Raw HTTP size/signature and dispatch authorization tests pass. Finish any remaining legacy edge assertions and live route parity before closing Phase 5.
 
 Completion gate:
 - webhook signatures verified

@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { configureRequestBodyParsing } from '../../src/common/middleware/request-body.middleware.js';
 import { OtpRateLimitService } from '../../src/infra/redis/otp-rate-limit.service.js';
 import { RedisService } from '../../src/infra/redis/redis.service.js';
@@ -57,7 +57,7 @@ describe('OTP with real Redis (e2e)', () => {
     const instance = moduleRef.createNestApplication({ bodyParser: false });
     instance.setGlobalPrefix('api');
     configureRequestBodyParsing(instance);
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }

@@ -1,7 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { DatabaseHealthIndicator } from './indicators/database.health';
 import { RedisHealthIndicator } from './indicators/redis.health';
 import { StellarRpcHealthIndicator } from './indicators/stellar-rpc.health';
+import { SmsHealthService } from './sms-health.service';
 
 @Controller('health')
 export class HealthController {
@@ -9,10 +10,12 @@ export class HealthController {
     private readonly database: DatabaseHealthIndicator,
     private readonly redis: RedisHealthIndicator,
     private readonly stellarRpc: StellarRpcHealthIndicator,
+    private readonly smsHealth: SmsHealthService,
   ) {}
 
+  /** Returns backend readiness and feature flags; deep mode also probes TextBee devices. */
   @Get()
-  async check() {
+  async check(@Query('deep') deep?: string) {
     const [databaseOk, redisOk, sorobanRpcOk] = await Promise.all([
       this.probe(() => this.database.pingCheck('database')),
       this.probe(() => this.redis.pingCheck('redis')),
@@ -29,7 +32,7 @@ export class HealthController {
         process.env.TEXTBEE_FALLBACK_API_KEY,
     );
 
-    return {
+    const response = {
       status: databaseOk && redisOk ? 'healthy' : 'degraded',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
@@ -46,8 +49,11 @@ export class HealthController {
         demo: process.env.DEMO_ENABLED === 'true',
       },
     };
+    if (deep === '1') return { ...response, textbeeDevices: await this.smsHealth.getStatuses() };
+    return response;
   }
 
+  /** Keeps one failed dependency probe from interrupting the remaining health checks. */
   private async probe(run: () => Promise<unknown>): Promise<boolean> {
     try {
       await run();

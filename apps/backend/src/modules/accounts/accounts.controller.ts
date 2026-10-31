@@ -15,7 +15,7 @@ import type { Request, Response } from 'express';
 import { AccountsService } from './accounts.service.js';
 import { Throttle } from '@nestjs/throttler';
 import { queryString } from '../../common/utils/query-string.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
 @Controller()
 export class AccountsController {
@@ -33,10 +33,10 @@ export class AccountsController {
           typeof body === 'object' &&
           Object.keys(body).length === 0));
     if (hasNoBody) {
-      throw new LegacyBodyException(400, { error: 'Invalid JSON body' });
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
     if (body === null || typeof body !== 'object') {
-      throw new LegacyBodyException(400, { error: 'Invalid JSON body' });
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
     return this.accountsService.register(body as Record<string, unknown>);
   }

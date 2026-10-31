@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { PrismaService } from '../../src/infra/prisma/prisma.service.js';
 import { RedisService } from '../../src/infra/redis/redis.service.js';
 import { AccountsService } from '../../src/modules/accounts/accounts.service.js';
@@ -47,7 +47,7 @@ describe('PIN lockout with real Redis (e2e)', () => {
     }).compile();
     const instance = moduleRef.createNestApplication();
     instance.setGlobalPrefix('api');
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }

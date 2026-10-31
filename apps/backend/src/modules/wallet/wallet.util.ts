@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, NotFoundException
 import { rpc } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
 export const ASSET_ISSUERS: Record<string, string> = {
   PHPC: 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY',
@@ -360,7 +360,7 @@ export class WalletService {
       const chainTx = await this.stellar.sorobanServer.getTransaction(normalizedTxHash);
 
       if (chainTx.status === rpc.Api.GetTransactionStatus.NOT_FOUND || (chainTx as any).status === 'NOT_FOUND') {
-        throw new LegacyBodyException(409, {
+        throw new ApiResponseException(409, {
           txHash: normalizedTxHash,
           status: 'PENDING',
           error: 'Transaction has not reached the RPC history window yet',
@@ -372,7 +372,7 @@ export class WalletService {
           where: { txHash: normalizedTxHash },
           data: { status: 'FAILED' },
         });
-        throw new LegacyBodyException(422, {
+        throw new ApiResponseException(422, {
           txHash: normalizedTxHash,
           status: failed.status,
         });
@@ -389,7 +389,7 @@ export class WalletService {
         confirmedAt: settled.confirmedAt,
       };
     } catch (error: any) {
-      if (error instanceof LegacyBodyException) throw error;
+      if (error instanceof ApiResponseException) throw error;
       throw new BadGatewayException('Unable to verify transaction with Soroban RPC');
     }
   }

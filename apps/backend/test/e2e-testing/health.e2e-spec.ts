@@ -6,6 +6,7 @@ import { HealthController } from '../../src/modules/health/health.controller.js'
 import { DatabaseHealthIndicator } from '../../src/modules/health/indicators/database.health.js';
 import { RedisHealthIndicator } from '../../src/modules/health/indicators/redis.health.js';
 import { StellarRpcHealthIndicator } from '../../src/modules/health/indicators/stellar-rpc.health.js';
+import { SmsHealthService } from '../../src/modules/health/sms-health.service.js';
 
 describe('/api/health legacy response contract (e2e)', () => {
   let app: INestApplication;
@@ -20,6 +21,8 @@ describe('/api/health legacy response contract (e2e)', () => {
         { provide: DatabaseHealthIndicator, useValue: database },
         { provide: RedisHealthIndicator, useValue: redis },
         { provide: StellarRpcHealthIndicator, useValue: stellarRpc },
+        // Deep SMS device probing is outside these health-envelope tests.
+        { provide: SmsHealthService, useValue: { getStatuses: jest.fn() } },
       ],
     }).compile();
 

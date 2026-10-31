@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { WalletService } from './wallet.util.js';
-import { LegacyThrottlerGuard } from '../../common/guards/legacy-throttler.guard.js';
+import { ApiThrottlerGuard } from '../../common/guards/api-throttler.guard.js';
 
 @Controller()
 export class WalletController {

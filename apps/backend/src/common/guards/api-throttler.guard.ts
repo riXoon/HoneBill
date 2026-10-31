@@ -1,8 +1,10 @@
 import { ExecutionContext, HttpException, Injectable } from '@nestjs/common';
 import { ThrottlerGuard, ThrottlerLimitDetail } from '@nestjs/throttler';
 
+/** Keeps rate-limit failures in the API's shared { error } response shape. */
 @Injectable()
-export class LegacyThrottlerGuard extends ThrottlerGuard {
+export class ApiThrottlerGuard extends ThrottlerGuard {
+  /** Emits the shared 429 response shape when Nest's rate limit is exceeded. */
   protected async throwThrottlingException(
     _context: ExecutionContext,
     _detail: ThrottlerLimitDetail,

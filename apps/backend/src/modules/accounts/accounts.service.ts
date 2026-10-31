@@ -15,7 +15,7 @@ import { isValidPinFormat, hashPin, verifyPin } from '../../common/utils/pin.uti
 import { generateBase62Id } from '../../common/utils/short-id.util.js';
 import { signVerificationToken, verifyVerificationToken } from '../../common/utils/otp.util.js';
 import { classifyAccountUniqueConstraint } from './unique-constraint.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
 const STELLAR_KEY_PATTERN = /^G[A-Z2-7]{55}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -74,7 +74,7 @@ export class AccountsService {
       fieldErrors.email = 'Invalid email address.';
     }
     if (Object.keys(fieldErrors).length > 0) {
-      throw new LegacyBodyException(400, { error: 'Validation failed', fieldErrors });
+      throw new ApiResponseException(400, { error: 'Validation failed', fieldErrors });
     }
 
     const verificationToken = typeof payload.verificationToken === 'string' ? payload.verificationToken.trim() : '';
@@ -135,7 +135,7 @@ export class AccountsService {
       }
     }
 
-    throw new LegacyBodyException(500, {
+    throw new ApiResponseException(500, {
       error: 'Failed to generate a unique short ID. Please try again.',
     });
   }

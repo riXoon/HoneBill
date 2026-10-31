@@ -1,7 +1,7 @@
 import { BadRequestException, HttpException, Logger, UnauthorizedException } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
-import { LegacyHttpExceptionFilter } from '../../../../src/common/filters/legacy-http-exception.filter';
-import { LegacyBodyException } from '../../../../src/common/exceptions/legacy-body.exception.js';
+import { ApiExceptionFilter } from './api-exception.filter';
+import { ApiResponseException } from '../exceptions/api-response.exception.js';
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 function createHost() {
@@ -21,8 +21,8 @@ function createHost() {
   return { host, request, response };
 }
 
-describe('LegacyHttpExceptionFilter', () => {
-  const filter = new LegacyHttpExceptionFilter();
+describe('ApiExceptionFilter', () => {
+  const filter = new ApiExceptionFilter();
 
   it('shapes message exceptions as { error: string }', () => {
     const { host, response } = createHost();
@@ -84,11 +84,11 @@ describe('LegacyHttpExceptionFilter', () => {
     expect(response.json).toHaveBeenCalledWith(body);
   });
 
-  it('passes a LegacyBodyException response through verbatim', () => {
+  it('passes an ApiResponseException response through verbatim', () => {
     const { host, response } = createHost();
     const body = { error: 'Unauthorized', message: 'Account is not funded.' };
 
-    filter.catch(new LegacyBodyException(401, body), host);
+    filter.catch(new ApiResponseException(401, body), host);
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith(body);

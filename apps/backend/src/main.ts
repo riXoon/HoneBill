@@ -3,11 +3,28 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
 import express, { type Request } from 'express';
+import { randomUUID } from 'node:crypto';
 
+/** Starts Nest with bounded raw SMS webhook parsing before the regular JSON body parser. */
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    rawBody: true,
-    bodyParser: true,
+    bodyParser: false,
+  });
+
+  // Capture signed TextBee bytes before parsing; cap memory use at the legacy 2 KB limit.
+  app.use('/api/sms/webhook', (req: any, _res: any, next: any) => {
+    if (req.method === 'POST') req.traceId = randomUUID();
+    next();
+  }, express.raw({ type: () => true, limit: '2kb' }), (req: any, _res: any, next: any) => {
+    if (req.method === 'POST' && Buffer.isBuffer(req.body)) req.rawBody = req.body;
+    next();
+  });
+  app.use('/api/sms/webhook', (error: any, req: any, res: any, next: any) => {
+    if (error?.type === 'entity.too.large') {
+      res.status(413).json({ error: 'Payload too large', traceId: req.traceId ?? randomUUID() });
+      return;
+    }
+    next(error);
   });
 
   app.use('/api/auth', express.text({
@@ -32,7 +49,13 @@ async function bootstrap() {
     },
   );
 
-  app.useBodyParser('json', { strict: false });
+  app.use(express.json({
+    strict: false,
+    verify: (req: any, _res: any, body: Buffer) => {
+      if (!req.rawBody) req.rawBody = Buffer.from(body);
+    },
+  }));
+  app.use(express.urlencoded({ extended: true }));
   configureApp(app);
   const port = process.env.PORT || 3000;
   await app.listen(port);

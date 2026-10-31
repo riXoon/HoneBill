@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { LegacyBodyException } from '../../src/common/exceptions/legacy-body.exception.js';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiResponseException } from '../../src/common/exceptions/api-response.exception.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { configureRequestBodyParsing } from '../../src/common/middleware/request-body.middleware.js';
 import { AuthController } from '../../src/modules/auth/auth.controller.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
@@ -15,7 +15,7 @@ import { AccountsController } from '../../src/modules/accounts/accounts.controll
 import { AccountsService } from '../../src/modules/accounts/accounts.service.js';
 import { OtpController } from '../../src/modules/otp/otp.controller.js';
 import { OtpService } from '../../src/modules/otp/otp.service.js';
-import { RateLimitedException } from '../../src/infra/redis/otp-rate-limit.service.js';
+import { OtpRateLimitService, RateLimitedException } from '../../src/infra/redis/otp-rate-limit.service.js';
 
 describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
   let app: INestApplication;
@@ -48,13 +48,15 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
         { provide: AuthService, useValue: authService },
         { provide: AccountsService, useValue: accountsService },
         { provide: OtpService, useValue: otpService },
+        // The controller guard is real, but its rate limiter is a no-op for this stubbed contract test.
+        { provide: OtpRateLimitService, useValue: { enforce: async () => undefined } },
       ],
     }).compile();
 
     app = moduleRef.createNestApplication({ rawBody: true, bodyParser: false });
     app.setGlobalPrefix('api');
     configureRequestBodyParsing(app);
-    app.useGlobalFilters(new LegacyHttpExceptionFilter());
+    app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
 
@@ -91,7 +93,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
 
   it('POST /api/auth preserves the scoped legacy unfunded-account body', async () => {
     authService.issueToken.mockRejectedValueOnce(
-      new LegacyBodyException(401, {
+      new ApiResponseException(401, {
         error: 'Unauthorized',
         message:
           'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',

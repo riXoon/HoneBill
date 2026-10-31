@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../../src/common/filters/api-exception.filter.js';
 import { AccountsController } from '../../src/modules/accounts/accounts.controller.js';
 import { AccountsService } from '../../src/modules/accounts/accounts.service.js';
 
@@ -30,7 +30,7 @@ describe('users route throttles (e2e)', () => {
     }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalFilters(new LegacyHttpExceptionFilter());
+    app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
   afterAll(async () => app.close());

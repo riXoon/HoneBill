@@ -6,7 +6,7 @@ import { AccountsService } from '../accounts/accounts.service.js';
 import { AuthService } from './auth.service.js';
 import { Throttle } from '@nestjs/throttler';
 import { queryString } from '../../common/utils/query-string.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 
@@ -43,7 +43,7 @@ private extractTransaction(req: RawBodyRequest<Request>): unknown {
     const parsed = JSON.parse(raw) as { transaction?: unknown } | null;
     return parsed?.transaction ?? '';
   } catch {
-    throw new LegacyBodyException(400, {
+    throw new ApiResponseException(400, {
       error: 'Bad Request',
       message: "Request body must contain a valid 'transaction' field.",
     });

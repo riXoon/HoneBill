@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../src/common/filters/api-exception.filter.js';
 import { OtpRateLimitService } from '../src/infra/redis/otp-rate-limit.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
 import { normalizePhoneNumber, toDbPhone } from '../src/common/utils/phone.util.js';
@@ -55,7 +55,7 @@ describe('OTP with real Redis (e2e)', () => {
     }).compile();
     const instance = moduleRef.createNestApplication();
     instance.setGlobalPrefix('api');
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }

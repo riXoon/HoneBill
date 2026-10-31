@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { LegacyBodyException } from '../exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../exceptions/api-response.exception.js';
 
 const BAD_JSON_BODIES: Record<string, unknown> = {
   '/api/auth': {
@@ -19,9 +19,11 @@ const BAD_JSON_BODIES: Record<string, unknown> = {
 };
 
 @Catch()
-export class LegacyHttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger(LegacyHttpExceptionFilter.name);
+/** Converts Nest and parser exceptions into the API's established JSON error contracts. */
+export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ApiExceptionFilter.name);
 
+  /** Maps route-specific, throttling, Nest, and unexpected errors to the API JSON contract. */
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<Request>();
@@ -72,8 +74,8 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
         response.setHeader('Retry-After', String(exceptionResponse.retryAfter));
       }
 
-      if (exception instanceof LegacyBodyException) {
-        response.status(status).json(exception.legacyBody);
+      if (exception instanceof ApiResponseException) {
+        response.status(status).json(exception.responseBody);
         return;
       }
 
@@ -93,24 +95,24 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
       }
 
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        const responseBody = exceptionResponse as Record<string, unknown>;
+        const exceptionBody = exceptionResponse as Record<string, unknown>;
         const error =
-          typeof responseBody.message === 'string'
-            ? responseBody.message
-            : typeof responseBody.error === 'string'
-              ? responseBody.error
+          typeof exceptionBody.message === 'string'
+            ? exceptionBody.message
+            : typeof exceptionBody.error === 'string'
+              ? exceptionBody.error
               : exception.message;
-        const legacyBody: Record<string, unknown> = { error };
-        if (typeof responseBody.attemptsRemaining === 'number') {
-          legacyBody.attemptsRemaining = responseBody.attemptsRemaining;
+        const contractBody: Record<string, unknown> = { error };
+        if (typeof exceptionBody.attemptsRemaining === 'number') {
+          contractBody.attemptsRemaining = exceptionBody.attemptsRemaining;
         }
-        if (typeof responseBody.retryAfter === 'number') {
-          legacyBody.retryAfter = responseBody.retryAfter;
+        if (typeof exceptionBody.retryAfter === 'number') {
+          contractBody.retryAfter = exceptionBody.retryAfter;
         }
-        if (typeof responseBody.code === 'string') {
-          legacyBody.code = responseBody.code;
+        if (typeof exceptionBody.code === 'string') {
+          contractBody.code = exceptionBody.code;
         }
-        response.status(status).json(legacyBody);
+        response.status(status).json(contractBody);
         return;
       }
 
@@ -125,6 +127,7 @@ export class LegacyHttpExceptionFilter implements ExceptionFilter {
   }
 }
 
+/** Identifies Nest throttling errors so they receive the established 429 response body. */
 function isThrottlerException(exception: unknown): boolean {
   return (
     typeof exception === 'object' &&
@@ -134,6 +137,7 @@ function isThrottlerException(exception: unknown): boolean {
   );
 }
 
+/** Detects Express JSON parser failures for routes with custom malformed-body contracts. */
 function isEntityParseFailed(exception: unknown): boolean {
   return (
     typeof exception === 'object' &&
@@ -143,6 +147,7 @@ function isEntityParseFailed(exception: unknown): boolean {
   );
 }
 
+/** Recognizes JSON syntax errors that need the registration route's legacy error shape. */
 function isJsonParserMessage(message: string): boolean {
   return /^(Expected property name|Expected double-quoted property name|Unexpected end of JSON input|Unexpected token .* (?:in JSON at position|is not valid JSON)|Bad control character in string literal in JSON at position)/.test(
     message,

@@ -10,6 +10,6 @@ import { PinVerifyRateLimitGuard } from '../../common/guards/pin-verify-rate-lim
   imports: [RedisModule],
   controllers: [OtpController],
   providers: [OtpService, OtpRateLimitService, TextbeeService, PinVerifyRateLimitGuard],
-  exports: [OtpService],
+  exports: [OtpService, TextbeeService],
 })
 export class OtpModule {}

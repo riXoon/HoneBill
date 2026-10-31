@@ -4,7 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { envValidationSchema } from './config/env.validation';
-import { LegacyHttpExceptionFilter } from './common/filters/legacy-http-exception.filter';
+import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { HealthModule } from './modules/health/health.module';
 import { PrismaModule } from './infra/prisma/prisma.module';
 import { RedisModule } from './infra/redis/redis.module';
@@ -17,6 +17,7 @@ import { OtpModule } from './modules/otp/otp.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { CommonModule } from './common/common.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
   imports: [
@@ -42,11 +43,13 @@ import { CommonModule } from './common/common.module';
     AccountsModule,
     WalletModule,
     SettlementsModule,
+    SmsModule.register(process.env.QUEUE_ENABLED === 'true'),
     HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_FILTER, useClass: LegacyHttpExceptionFilter },
+    // Normalize all thrown errors to the API contract before sending responses.
+    { provide: APP_FILTER, useClass: ApiExceptionFilter },
   ],
 })
 export class AppModule {}
