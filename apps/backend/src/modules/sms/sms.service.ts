@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
-import { BadRequestException, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bullmq';
 import { RedisService } from '../../infra/redis/redis.service.js';
-import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME } from '../settlements/settlement-queue.constants.js';
+import { SettlementQueueService } from '../engine/settlement-queue.service.js';
 import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
 import { TextbeeService } from '../otp/textbee.service.js';
 import {
@@ -81,7 +82,7 @@ export class SmsService {
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
     @Optional() @InjectQueue(SMS_QUEUE_NAME) private readonly smsQueue?: Queue<SmsJob>,
-    @Optional() @InjectQueue(SETTLEMENT_QUEUE_NAME) private readonly settlementQueue?: Queue,
+    @Optional() private readonly settlementQueue?: SettlementQueueService,
   ) {}
 
   /** Queues an outbound notification, falling back to direct gateway delivery if queues are unavailable. */
@@ -123,7 +124,7 @@ export class SmsService {
     }
     if (result.retryable) {
       this.logger.warn(`Transient SMS failure for ${maskPhoneNumber(job.to)}${trace}`);
-      throw new ServiceUnavailableException('SMS delivery failed, will retry');
+      throw new ApiResponseException(500, { error: 'SMS delivery failed, will retry' });
     }
     this.logger.error(`Permanent SMS failure for ${maskPhoneNumber(job.to)}${trace}`);
     return { success: false, error: 'Undeliverable' };
@@ -167,10 +168,9 @@ export class SmsService {
     }
 
     const redis = this.redisService.getClient();
-    const nonceKey = `pijin:sms:nonce:${voucher.nonceB64}`;
+    const nonceKey = `honebill:sms:nonce:${voucher.nonce.toString('base64')}`;
     try {
-      const nonceStatus = await redis.set(nonceKey, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
-      if (nonceStatus === null) return { success: true, status: 'Duplicate Replay', traceId };
+      if (await redis.get(nonceKey)) return { success: true, status: 'Duplicate Replay', traceId };
     } catch (error) {
       // This short-lived cache is defense in depth; database and Soroban nonce checks remain authoritative.
       this.logger.warn(`SMS nonce cache unavailable; continuing fail-open. traceId=${traceId}: ${this.errorMessage(error)}`);
@@ -178,23 +178,25 @@ export class SmsService {
 
     if (!this.settlementQueue) {
       this.logger.error(`Settlement queue is disabled. traceId=${traceId}`);
-      throw new ServiceUnavailableException('Failed to buffer settlement');
+      throw new ApiResponseException(500, { error: 'Failed to buffer settlement' });
     }
-    const deduplicationId = queueSafeId(`${voucher.senderShortId}_${voucher.nonceB64}`);
     try {
-      const job = await this.settlementQueue.add(SETTLEMENT_JOB_NAME, {
-        smsPayload: sms.message,
+      const job = await this.settlementQueue.enqueue(sms.message, {
         senderPhone: sms.senderPhone,
         traceId,
-      }, {
-        jobId: deduplicationId,
-        removeOnComplete: { age: 86_400 },
-        removeOnFail: false,
       });
-      this.logger.log(`Buffered offline settlement ${job.id}; sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
+      this.logger.log(`Buffered offline settlement ${job.jobId}; sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
     } catch (error) {
       this.logger.error(`Settlement queue publish failed. traceId=${traceId}: ${this.errorMessage(error)}`);
-      throw new ServiceUnavailableException('Failed to buffer settlement');
+      throw new ApiResponseException(500, { error: 'Failed to buffer settlement' });
+    }
+    // Mark only durable publishes. Concurrent requests safely converge on BullMQ's
+    // atomic job-ID deduplication; an ambiguous publish failure can also be retried.
+    try {
+      const marked = await redis.set(nonceKey, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
+      if (marked === null) return { success: true, status: 'Duplicate Replay', traceId };
+    } catch (error) {
+      this.logger.warn(`SMS nonce cache unavailable after publish. traceId=${traceId}: ${this.errorMessage(error)}`);
     }
     return { success: true, status: 'Buffered', traceId };
   }
@@ -222,7 +224,7 @@ export class SmsService {
     const now = Date.now();
     const windowMs = 60_000;
     const keySuffix = createHash('sha256').update(senderPhone).digest('hex');
-    const key = `pijin:sms:webhook:${keySuffix}`;
+    const key = `honebill:sms:webhook:${keySuffix}`;
     const result = await this.redisService.getClient().eval(
       RATE_LIMIT_SCRIPT,
       1,

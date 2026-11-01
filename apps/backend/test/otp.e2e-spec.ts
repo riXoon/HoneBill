@@ -36,8 +36,8 @@ describe('OTP with real Redis (e2e)', () => {
     used.push(id);
     return id;
   }
-  const otpKey = (id: Identity) => `pijin:otp:${normalizePhoneNumber(id.phone)}`;
-  const attemptsKey = (id: Identity) => `pijin:otp:attempts:${normalizePhoneNumber(id.phone)}`;
+  const otpKey = (id: Identity) => `honebill:otp:${normalizePhoneNumber(id.phone)}`;
+  const attemptsKey = (id: Identity) => `honebill:otp:attempts:${normalizePhoneNumber(id.phone)}`;
 
   async function buildApp(): Promise<INestApplication> {
     const moduleRef = await Test.createTestingModule({

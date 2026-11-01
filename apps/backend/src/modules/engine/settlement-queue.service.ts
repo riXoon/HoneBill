@@ -2,22 +2,23 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { createHash } from 'node:crypto';
-import { parseSettlementSmsBody } from '../settlements/settlements.util.js';
+import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
+import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME, type SettlementJobData } from '../settlements/settlement-queue.constants.js';
 
-export const ENGINE_SETTLEMENT_QUEUE = 'engine-settlement';
-export const ENGINE_SETTLEMENT_JOB = 'process-offline-voucher';
+export const ENGINE_SETTLEMENT_QUEUE = SETTLEMENT_QUEUE_NAME;
+export const ENGINE_SETTLEMENT_JOB = SETTLEMENT_JOB_NAME;
 
 @Injectable()
 export class SettlementQueueService {
   constructor(@InjectQueue(ENGINE_SETTLEMENT_QUEUE) private readonly queue: Queue) {}
 
-  async enqueue(smsBody: string): Promise<{ jobId: string }> {
+  async enqueue(smsBody: string, metadata: Pick<SettlementJobData, 'senderPhone' | 'traceId'> = {}): Promise<{ jobId: string }> {
     // Validate and canonicalize the idempotency key before storing an untrusted job.
-    const { nonce } = parseSettlementSmsBody(smsBody);
+    const { nonce } = parseOfflineVoucher(smsBody);
     const jobId = `settlement-${createHash('sha256').update(nonce).digest('hex')}`;
     const job = await this.queue.add(
       ENGINE_SETTLEMENT_JOB,
-      { smsBody },
+      { ...metadata, smsBody } satisfies SettlementJobData,
       {
         jobId,
         attempts: 5,

@@ -21,7 +21,7 @@ describe('PIN lockout with real Redis (e2e)', () => {
   });
   // Unique phone per run, so leftover keys never affect the result.
   const phone = `0917${Math.floor(1000000 + Math.random() * 8999999)}`;
-  const failKey = `pijin:pin:fail:${toDbPhone(phone)}`;
+  const failKey = `honebill:pin:fail:${toDbPhone(phone)}`;
 
   const prisma = {
     account: {

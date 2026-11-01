@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { All, Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { TextbeeSignatureGuard } from './guards/textbee-signature.guard.js';
@@ -18,11 +18,17 @@ export class SmsController {
   @Post('dispatch')
   @HttpCode(HttpStatus.OK)
   @UseGuards(SmsDispatchSecretGuard)
-  async dispatch(@Body() body: SmsJob) {
-    if (typeof body?.to !== 'string' || typeof body?.message !== 'string' || !body.message) {
+  async dispatch(@Body() body: unknown) {
+    let job: SmsJob;
+    try {
+      job = typeof body === 'string' ? JSON.parse(body) as SmsJob : body as SmsJob;
+    } catch {
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
+    }
+    if (typeof job?.to !== 'string' || typeof job?.message !== 'string' || !job.message) {
       throw new ApiResponseException(400, { error: 'Job requires `to` and `message`' });
     }
-    return this.sms.dispatch(body);
+    return this.sms.dispatch(job);
   }
 
   /** Exposes non-secret webhook configuration metadata for gateway health checks. */
@@ -44,4 +50,9 @@ export class SmsController {
     if (typeof result.error === 'string') throw new ApiResponseException(400, result);
     return result;
   }
+
+  /** Preserve Next.js's empty 405 response after the supported routes are matched. */
+  @All(['webhook', 'dispatch'])
+  @HttpCode(HttpStatus.METHOD_NOT_ALLOWED)
+  unsupportedMethod(): void {}
 }

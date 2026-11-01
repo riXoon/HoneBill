@@ -213,7 +213,16 @@ Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `Wallet
 - [x] TextBee client with fallback device; `TextbeeSignatureGuard`
 - [x] SMS dispatch queue producer/worker (BullMQ), inbound webhook and nonce deduplication
 - [x] Shared offline voucher parser and XDR/signature verification helper
-- [ ] Port remaining legacy `sms-security.test.ts`, `sms-delivery.test.ts`, `offline-voucher-security.test.ts` cases and complete route parity checks
+- [x] Port remaining legacy `sms-security.test.ts`, `sms-delivery.test.ts`, `offline-voucher-security.test.ts` cases and complete route parity checks ([coverage and limits](05-sms-test-porting.md); 26 safe live SMS comparisons passed)
+- [x] Verify primary TextBee handset delivery (user confirmed `MESSAGE_DELIVERED`)
+- [ ] Verify TextBee fallback delivery (the free plan currently allows only one active device)
+- [x] Verify public webhook ingress with a signed synthetic request (public tunnel returned HTTP 200, `Delivery receipt ignored`)
+- [ ] Verify live BullMQ processing and Redis-backed retry scheduling against the running app worker
+- [ ] Verify a funded Stellar voucher settlement
+
+Verification follow-up (2026-11-01): SMS and engine share `SettlementQueueService`, queue `engine-settlement`, job `process-offline-voucher`, and the typed `smsBody` payload with optional sender/trace metadata. Nonce-cache markers are written only after successful publication; concurrent and ambiguously acknowledged publishes converge on a job ID derived from decoded nonce bytes. The producer retains five attempts with exponential backoff, and permanent worker errors remain unrecoverable. The full backend Jest suite passes (30 suites / 233 tests), typecheck and production build pass, and safe live parity passes (26 OK / 0 DIFF / 0 BLOCKED). Ten integration cases exercise real HTTP guards/services/producer/processor and signature verification with queue/cache, database, and Stellar submission mocked.
+
+Phase 5 remains in progress. The remaining legacy cases and safe SMS route parity comparisons were completed on 2026-11-01; see the [coverage mapping and validation report](05-sms-test-porting.md). The user confirmed a primary-device message was delivered, and a signed synthetic webhook probe reached the public tunnel. Real fallback delivery, provider-originated callback delivery records, live production-worker processing/retries, and Stellar submission/confirmation remain unverified. The free TextBee plan allows only one active device, so fallback needs another enabled device or a plan that permits it. Any jobs already buffered in the obsolete `pijin-settlements` queue require inspection and controlled replay into the shared producer; this code change does not migrate existing Redis jobs.
 
 ### Phase 6: Anchor (SEP-1 / SEP-24)
 - [ ] `stellar.toml`, `sep24/info`, `sep24/transaction`
@@ -269,6 +278,9 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 
 | Date | PR / commit | Phase | Change |
 |---|---|---|---|
+| 2026-11-01 | SMS legacy test-porting completion | 5 (in progress: live flow pending) | Completed legacy security/delivery/voucher assertion mapping, added dispatch-worker tests and reusable safe SMS parity script. Fixed unsupported-method 405 responses, dispatch authentication-before-JSON parsing, and legacy HTTP 500 error compatibility. Full backend suite 233/233, E2E 78/78, typecheck/build pass; fresh-build SMS parity 26 OK / 0 DIFF / 0 BLOCKED. Real handset/queue/chain checks remain unchecked. |
+| 2026-11-01 | Production OTP parser parity fix | 2 / 5 | Replaced the separate parser setup in `main.ts` with the shared request-body middleware used by E2E tests. The production startup had omitted OTP malformed-JSON handling and unsupported-method 405 responses. Fresh compiled server on 3002 versus legacy on 3000: 62 OK / 0 DIFF / 1 BLOCKED (OTP test-mode inputs absent), resolving all 18 prior failing assertions. Backend E2E 78/78, typecheck, and build pass. |
+| 2026-10-31 | Phase 5 settlement integration fix | 5 (in progress) | Unified SMS/engine producer and typed worker contract; moved nonce-cache writes after durable publish; retained five-attempt backoff and permanent-error handling. Added ten mocked-boundary integration cases; all 199 backend tests, typecheck, and build pass. Live queue/gateway/chain and legacy route parity checks remain pending. |
 | 2026-10-23 | `chores` branch | 0 | Legacy freeze: moved Next.js backend to `apps/_legacy/backend`, CI/workspace updates, this plan |
 | 2026-10-25 | setup-first migration pass | 1 | Completed Nest scaffold, workspace wiring, Prisma baseline, env validation, runtime bootstrap, Redis/BullMQ/lock/Stellar infra, Swagger/health/Docker, and readiness checks before feature migration |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Expanded account and registration parity: normalized repeated query handling; matched validation/error shapes; mapped adapter unique-constraint races; retried short-ID collisions and preserved the legacy 500 on exhaustion; normalized blank optional names/email to `null`; aligned empty, primitive, and malformed registration bodies. Added focused controller, service, and registration E2E coverage. |

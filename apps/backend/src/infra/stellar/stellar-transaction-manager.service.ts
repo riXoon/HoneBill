@@ -45,7 +45,7 @@ export interface TransactionPollResult {
 @Injectable()
 export class StellarTransactionManager {
   private readonly logger = new Logger(StellarTransactionManager.name);
-  private readonly lockKey = 'pijin:relayer:lock';
+  private readonly lockKey = 'honebill:relayer:lock';
 
   constructor(
     private readonly stellar: StellarService,

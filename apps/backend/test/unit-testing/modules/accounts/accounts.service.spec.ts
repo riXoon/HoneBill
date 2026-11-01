@@ -72,7 +72,7 @@ describe('AccountsService PIN lockout', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('INCR', KEYS[1])"),
       1,
-      'pijin:pin:fail:639000000001',
+      'honebill:pin:fail:639000000001',
       '5',
       '900',
     );
@@ -96,7 +96,7 @@ describe('AccountsService PIN lockout', () => {
 
     await expect(service.verifyPin('09000000001', '1234')).resolves.toEqual({ success: true });
 
-    expect(redis.del).toHaveBeenCalledWith('pijin:pin:fail:639000000001');
+    expect(redis.del).toHaveBeenCalledWith('honebill:pin:fail:639000000001');
     expect(getFailures()).toBe(0);
   });
 

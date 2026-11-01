@@ -9,7 +9,7 @@ export type SmsDeviceStatus = {
   detail?: string;
 };
 
-const CACHE_KEY = 'pijin:health:textbee';
+const CACHE_KEY = 'honebill:health:textbee';
 const CACHE_TTL_SECONDS = 30;
 const STALE_HEARTBEAT_MS = 10 * 60 * 1000;
 

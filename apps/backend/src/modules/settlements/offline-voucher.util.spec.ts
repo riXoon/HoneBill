@@ -20,6 +20,7 @@ describe('offline voucher parser and signature helpers', () => {
       amountBase62: '3v5K',
     });
     expect(parsed.nonce).toHaveLength(32);
+    expect(parsed.amountStroops).toBeGreaterThan(0n);
     expect(parsed.signature).toHaveLength(64);
   });
 
@@ -28,6 +29,7 @@ describe('offline voucher parser and signature helpers', () => {
     const urlSafeSignature = signatureB64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     expect(parseOfflineVoucher(`1:aB3x9Q:Zx7mNk:3v5K:${urlSafeNonce}:${urlSafeSignature}`).nonce).toHaveLength(32);
     expect(() => parseOfflineVoucher('1:2:3')).toThrow('expected 6 parts, got 3');
+    expect(() => parseOfflineVoucher('')).toThrow('expected 6 parts');
     expect(() => parseOfflineVoucher(`${voucher}:extra`)).toThrow('expected 6 parts, got 7');
   });
 
@@ -38,6 +40,7 @@ describe('offline voucher parser and signature helpers', () => {
     for (const shortId of ['short', 'tooLong1', 'aB-3x9', 'aB3x_9']) {
       expect(() => parseOfflineVoucher(`1:${shortId}:Zx7mNk:3v5K:${nonceB64}:${signatureB64}`)).toThrow('senderShortId');
     }
+    expect(() => parseOfflineVoucher(`1:aB3x9Q:Zx_mNk:3v5K:${nonceB64}:${signatureB64}`)).toThrow('receiverShortId');
   });
 
   it('rejects nonpositive and out-of-range amounts', () => {
@@ -81,5 +84,16 @@ describe('offline voucher parser and signature helpers', () => {
       tokenContractId: 'CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3',
     });
     expect(xdr.subarray(0, 12).toString('hex')).toBe('000000100000000100000006');
+  });
+
+  it('rejects the golden signature when its contract domain is changed', () => {
+    const tampered = buildOfflineSignatureXdr({
+      amountStroops: 100_000_000n, tollStroops: 5_000_000n, nonce: Buffer.alloc(32, 0x2a), receiverShortId: 'aB3x9Q',
+      gatewayPublicKey: 'GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U',
+      tokenContractId: 'CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3',
+      contractAddress: 'CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3',
+    });
+    expect(verifyOfflineVoucherSignature('GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR', tampered,
+      Buffer.from('a2f6e1452c92032e858eb4c4bb293cc5eecd8ba622ae5283004559723c842f9d73b3f4ce9e937171201cd22cb9992939d80d7f172a11803df9cccd0dae88a700', 'hex'))).toBe(false);
   });
 });

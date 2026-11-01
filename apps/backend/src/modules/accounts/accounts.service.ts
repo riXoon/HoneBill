@@ -223,7 +223,7 @@ export class AccountsService {
     }
 
     const dbPhone = toDbPhone(phoneNumber);
-    const failKey = `pijin:pin:fail:${dbPhone}`;
+    const failKey = `honebill:pin:fail:${dbPhone}`;
     const redis = this.redisService.getClient();
     let currentFailures: number;
     let retryAfter: number;

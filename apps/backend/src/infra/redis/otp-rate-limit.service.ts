@@ -46,9 +46,9 @@ export class OtpRateLimitService {
   async enforceSendLimits(ip: string, phone: string) {
     const globalLimit = Number(this.config.get('OTP_GLOBAL_LIMIT_PER_HOUR') ?? 300);
     const checks: Array<[string, number, number]> = [
-      [`pijin:api:otp:ratelimit:${ip}_${phone}`, 3, 5 * 60_000],
-      [`pijin:api:otp:phone:${phone}`, 5, 60 * 60_000],
-      [`pijin:api:otp:global:all`, globalLimit, 60 * 60_000],
+      [`honebill:api:otp:ratelimit:${ip}_${phone}`, 3, 5 * 60_000],
+      [`honebill:api:otp:phone:${phone}`, 5, 60 * 60_000],
+      [`honebill:api:otp:global:all`, globalLimit, 60 * 60_000],
     ];
     for (const [key, limit, windowMs] of checks) {
       const wait = await this.hit(key, limit, windowMs);

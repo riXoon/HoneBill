@@ -73,17 +73,17 @@ describe('OtpService', () => {
     const { service, redis, rateLimiter, valuesStore } = createService({}, sendSms);
 
     const response = await service.send('09000000001', '203.0.113.1');
-    const storedCode = valuesStore.get('pijin:otp:+639000000001');
+    const storedCode = valuesStore.get('honebill:otp:+639000000001');
 
     expect(redis.set).toHaveBeenCalledWith(
-      'pijin:otp:+639000000001',
+      'honebill:otp:+639000000001',
       expect.stringMatching(/^\d{6}$/),
       'EX',
       300,
     );
     expect(sendSms).toHaveBeenCalledWith(
       '+639000000001',
-      expect.stringMatching(/^Pijin: Your verification code is \d{6}\. Valid for 5 minutes\./),
+      expect.stringMatching(/^HoneBill: Your verification code is \d{6}\. Valid for 5 minutes\./),
       { retries: 1, timeoutMs: 4000, deadlineMs: 8000 },
     );
     expect(rateLimiter.enforceSendLimits).toHaveBeenCalledWith('203.0.113.1', '+639000000001');
@@ -102,7 +102,7 @@ describe('OtpService', () => {
       error: "We couldn't send the SMS. Please try again.",
       code: 'SMS_FAILED',
     });
-    expect(valuesStore.has('pijin:otp:+639000000002')).toBe(false);
+    expect(valuesStore.has('honebill:otp:+639000000002')).toBe(false);
   });
 
   it('uses the fixed code only for an allow-listed test phone and skips TextBee', async () => {
@@ -121,7 +121,7 @@ describe('OtpService', () => {
       message: 'OTP sent successfully.',
     });
     expect(sendSms).not.toHaveBeenCalled();
-    expect(valuesStore.get('pijin:otp:+639000000001')).toBe('012345');
+    expect(valuesStore.get('honebill:otp:+639000000001')).toBe('012345');
   });
 
   it('does not use the fixed test code for a phone outside the allow-list', async () => {
@@ -159,8 +159,8 @@ describe('OtpService', () => {
     expect(redis.eval).toHaveBeenCalledWith(
       expect.stringContaining("redis.call('INCR', KEYS[2])"),
       2,
-      'pijin:otp:+639000000003',
-      'pijin:otp:attempts:+639000000003',
+      'honebill:otp:+639000000003',
+      'honebill:otp:attempts:+639000000003',
       '300',
       '5',
     );
@@ -170,8 +170,8 @@ describe('OtpService', () => {
     expect((locked as HttpException).getResponse()).toEqual({
       error: 'Too many incorrect attempts. Please request a new code.',
     });
-    expect(valuesStore.has('pijin:otp:+639000000003')).toBe(false);
-    expect(valuesStore.has('pijin:otp:attempts:+639000000003')).toBe(false);
+    expect(valuesStore.has('honebill:otp:+639000000003')).toBe(false);
+    expect(valuesStore.has('honebill:otp:attempts:+639000000003')).toBe(false);
   });
 
   it('rejects expired codes and binds verification JWTs to the verified phone', async () => {
@@ -203,7 +203,7 @@ describe('OtpService', () => {
         'fake-otp-secret',
       ),
     ).toBe(false);
-    expect(valuesStore.has('pijin:otp:+639000000004')).toBe(false);
+    expect(valuesStore.has('honebill:otp:+639000000004')).toBe(false);
   });
 
   it('returns 503 when Redis is unavailable', async () => {

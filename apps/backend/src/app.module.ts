@@ -17,7 +17,6 @@ import { OtpModule } from './modules/otp/otp.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { CommonModule } from './common/common.module';
-import { SmsModule } from './modules/sms/sms.module';
 import { EngineModule } from './modules/engine/engine.module.js';
 
 @Module({
@@ -44,7 +43,6 @@ import { EngineModule } from './modules/engine/engine.module.js';
     AccountsModule,
     WalletModule,
     SettlementsModule,
-    SmsModule.register(process.env.QUEUE_ENABLED === 'true'),
     EngineModule,
     HealthModule,
   ],
@@ -54,4 +52,5 @@ import { EngineModule } from './modules/engine/engine.module.js';
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
   ],
 })
+/** Composes the shared infrastructure and feature modules for the Nest API. */
 export class AppModule {}
