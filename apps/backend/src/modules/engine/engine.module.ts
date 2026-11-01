@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module.js';
 import { PrismaModule } from '../../infra/prisma/prisma.module.js';
 import { StellarModule } from '../../infra/stellar/stellar.module.js';
@@ -8,9 +7,11 @@ import { Ed25519SignatureGuard } from '../../common/guards/ed25519-signature.gua
 import { EngineController } from './engine.controller.js';
 import { EngineService } from './engine.service.js';
 import { TransactionManagerModule } from './transaction-manager.module.js';
-import { ENGINE_SETTLEMENT_QUEUE, SettlementQueueService } from './settlement-queue.service.js';
+import { SettlementQueueModule } from './settlement-queue.module.js';
 import { SettlementProcessor } from './settlement.processor.js';
+import { SmsModule } from '../sms/sms.module.js';
 
+/** Controls whether BullMQ settlement and SMS workers are registered at startup. */
 const settlementQueueEnabled = process.env.QUEUE_ENABLED === 'true';
 
 @Module({
@@ -20,14 +21,16 @@ const settlementQueueEnabled = process.env.QUEUE_ENABLED === 'true';
     StellarModule,
     TransactionManagerModule,
     SettlementsModule,
-    ...(settlementQueueEnabled ? [BullModule.registerQueue({ name: ENGINE_SETTLEMENT_QUEUE })] : []),
+    SettlementQueueModule.register(settlementQueueEnabled),
+    SmsModule.register(settlementQueueEnabled),
   ],
   controllers: [EngineController],
   providers: [
     EngineService,
     Ed25519SignatureGuard,
-    ...(settlementQueueEnabled ? [SettlementQueueService, SettlementProcessor] : []),
+    ...(settlementQueueEnabled ? [SettlementProcessor] : []),
   ],
-  exports: [EngineService, ...(settlementQueueEnabled ? [SettlementQueueService] : [])],
+  exports: [EngineService, SettlementQueueModule],
 })
+/** Provides engine endpoints and, when enabled, the settlement queue worker. */
 export class EngineModule {}

@@ -242,7 +242,7 @@ if (only.has('pin') && process.env.PARITY_PIN_PHONE) {
     const { default: Redis } = await import('ioredis');
     const redis = new Redis(process.env.REDIS_URL);
     try {
-      await redis.del(`pijin:pin:fail:${process.env.PARITY_PIN_DBPHONE}`);
+      await redis.del(`honebill:pin:fail:${process.env.PARITY_PIN_DBPHONE}`);
     } finally {
       redis.disconnect();
     }

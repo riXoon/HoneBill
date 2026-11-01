@@ -41,7 +41,7 @@ export interface PreparedRelayerTransaction {
   transaction: Transaction;
 }
 
-const RELAYER_LOCK_KEY = 'pijin:relayer:lock';
+const RELAYER_LOCK_KEY = 'honebill:relayer:lock';
 
 @Injectable()
 export class StellarTransactionManager {

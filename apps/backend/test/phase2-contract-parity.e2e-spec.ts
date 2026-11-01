@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { LegacyBodyException } from '../src/common/exceptions/legacy-body.exception.js';
-import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
+import { ApiResponseException } from '../src/common/exceptions/api-response.exception.js';
+import { ApiExceptionFilter } from '../src/common/filters/api-exception.filter.js';
 import { AuthController } from '../src/modules/auth/auth.controller.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
 import { AccountsController } from '../src/modules/accounts/accounts.controller.js';
@@ -51,7 +51,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalFilters(new LegacyHttpExceptionFilter());
+    app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
 
@@ -88,7 +88,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
 
   it('POST /api/auth preserves the scoped legacy unfunded-account body', async () => {
     authService.issueToken.mockRejectedValueOnce(
-      new LegacyBodyException(401, {
+      new ApiResponseException(401, {
         error: 'Unauthorized',
         message:
           'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',

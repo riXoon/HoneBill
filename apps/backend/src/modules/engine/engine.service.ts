@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -16,7 +15,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { shortIdToBuffer } from '../../common/utils/short-id.util.js';
 import {
   authorizedInvocation,
@@ -123,7 +122,7 @@ export class EngineService {
       throw new BadRequestException('Missing required fields: senderPublicKey, recipientPublicKey, tokenAddress, amountStroops');
     }
     if (body.paymentMode !== 'online' || body.clientProtocol !== ONLINE_TRANSFER_PROTOCOL) {
-      throw new LegacyBodyException(426, {
+      throw new ApiResponseException(426, {
         error: 'Client upgrade required: explicit online transfer intent is missing.',
         code: 'ONLINE_TRANSFER_PROTOCOL_REQUIRED',
       });
@@ -174,7 +173,7 @@ export class EngineService {
       });
       return { xdr: xdrEnvelope, txHash };
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof LegacyBodyException) throw error;
+      if (error instanceof BadRequestException || error instanceof ApiResponseException) throw error;
       throw new InternalServerErrorException(`Failed to prepare transfer transaction: ${errorMessage(error)}`);
     }
   }
@@ -216,7 +215,7 @@ export class EngineService {
     const contract = await this.stellar.getContract();
     const onChain = await contract.get_offline_key({ sender: accountPublicKey }, { publicKey: this.relayerPublicKey() });
     if (!onChain.result || !Buffer.from(onChain.result).equals(rawKey)) {
-      throw new LegacyBodyException(409, { error: 'The submitted device key is not confirmed on-chain' });
+      throw new ApiResponseException(409, { error: 'The submitted device key is not confirmed on-chain' });
     }
     await this.prisma.account.update({ where: { stellarPublicKey: accountPublicKey }, data: { offlineDeviceKey: publicKey } });
     return { status: 'synced' };
@@ -236,7 +235,7 @@ export class EngineService {
     if (configured.result !== registrar.publicKey()) throw new InternalServerErrorException('Backend registrar does not match the registrar configured on-chain');
     const existing = await contract.get_recipient({ short_id: shortId }, { publicKey: registrar.publicKey() });
     if (existing.result && existing.result !== account.stellarPublicKey) {
-      throw new LegacyBodyException(409, { error: 'Short ID is already registered to a different Stellar address' });
+      throw new ApiResponseException(409, { error: 'Short ID is already registered to a different Stellar address' });
     }
     let status = 'already_registered';
     let txHash: string | undefined;
