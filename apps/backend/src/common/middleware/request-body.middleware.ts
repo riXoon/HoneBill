@@ -50,6 +50,18 @@ export function configureRequestBodyParsing(app: NestExpressApplication): void {
   // uses the endpoint's validation response rather than Express's syntax error.
   app.use('/api/auth/pin/verify', express.text({ type: () => true }), parseJsonOrNull);
   app.use('/api/otp', express.text({ type: () => true }), parseJsonOrNull);
+  // These routes parse JSON in their legacy handlers and return route-specific
+  // 400 bodies for malformed input. Normalize syntax errors before Express's
+  // general JSON parser can emit its framework-specific response.
+  const jsonOnly = (incoming: Request): boolean => {
+    const contentType = String(incoming.headers['content-type'] ?? '').toLowerCase();
+    return !contentType.includes('multipart/form-data') && !contentType.includes('application/x-www-form-urlencoded');
+  };
+  app.use('/api/sep24/transactions/deposit/interactive', express.text({ type: jsonOnly }), parseJsonOrNull);
+  app.use('/api/sep24/transactions/withdraw/interactive', express.text({ type: jsonOnly }), parseJsonOrNull);
+  app.use('/api/anchor/submit-withdraw', express.text({ type: () => true }), parseJsonOrNull);
+  app.use('/api/anchor/confirm-withdraw', express.text({ type: () => true }), parseJsonOrNull);
+  app.use('/api/anchor/simulate-payment', express.text({ type: () => true }), parseJsonOrNull);
   // Match the legacy empty 405 response for unsupported OTP methods. OPTIONS
   // continues so CORS preflight handling can respond; no Allow header is added.
   app.use('/api/otp', (req: Request, res: Response, next: NextFunction) => {

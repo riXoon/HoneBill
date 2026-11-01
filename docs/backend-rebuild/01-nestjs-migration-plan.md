@@ -122,14 +122,14 @@ Shared libs: `lib/sms.ts`, `lib/sms-security.ts`, `lib/sms-health.ts`, `lib/text
 
 | Method | Path | Legacy file | Nest module | Guard / limits | Status | Notes |
 |---|---|---|---|---|---|---|
-| GET | `/.well-known/stellar.toml` | `app/.well-known/stellar.toml/route.ts` | `AnchorModule` | none | ☐ | Must be excluded from the `/api` prefix. `text/plain`, CORS `*`. |
-| GET | `/api/sep24/info` | `app/api/sep24/info/route.ts` | `AnchorModule` | none | ☐ | |
-| GET | `/api/sep24/transaction` | `app/api/sep24/transaction/route.ts` | `AnchorModule` | `Sep10JwtGuard` | ☐ | |
-| POST | `/api/sep24/transactions/deposit/interactive` | `app/api/sep24/transactions/deposit/interactive/route.ts` | `AnchorModule` | `Sep10JwtGuard` | ☐ | Returns interactive URL → needs the deferred web pages. |
-| POST | `/api/sep24/transactions/withdraw/interactive` | `app/api/sep24/transactions/withdraw/interactive/route.ts` | `AnchorModule` | `Sep10JwtGuard` | ☐ | Same as above. |
-| POST | `/api/anchor/submit-withdraw` | `app/api/anchor/submit-withdraw/route.ts` | `AnchorModule` | interactive-URL JWT | ☐ | |
-| POST | `/api/anchor/confirm-withdraw` | `app/api/anchor/confirm-withdraw/route.ts` | `AnchorModule` | `Sep10JwtGuard` + interactive JWT | ☐ | |
-| POST | `/api/anchor/simulate-payment` | `app/api/anchor/simulate-payment/route.ts` | `AnchorModule` | rate limit; testnet only | ☐ | Uses distributor secrets. Disable in production. |
+| GET | `/.well-known/stellar.toml` | `app/.well-known/stellar.toml/route.ts` | `AnchorModule` | none | ☑ | HTTP E2E checks body, content type, CORS, and cache header; service unit test covers configuration failure; safe live legacy parity matched. |
+| GET | `/api/sep24/info` | `app/api/sep24/info/route.ts` | `AnchorModule` | none | ☑ | HTTP E2E/unit cover fields, CORS/cache headers, kill switches; safe live legacy parity matched. |
+| GET | `/api/sep24/transaction` | `app/api/sep24/transaction/route.ts` | `AnchorModule` | `Sep10JwtGuard` | ◐ | Unit/E2E cover auth, missing id, owner/foreign transaction, and response fields; live parity compared unauthenticated response only (valid owner lookup needs safe seeded DB data). |
+| POST | `/api/sep24/transactions/deposit/interactive` | `app/api/sep24/transactions/deposit/interactive/route.ts` | `AnchorModule` | SEP-10 JWT; short-lived interactive URL JWT | ◐ | HTTP E2E covers creation, auth/asset errors, JSON/form bodies, and 15-minute HS256 claims; live parity compared safe unauthenticated response. Deferred deposit page pending. |
+| POST | `/api/sep24/transactions/withdraw/interactive` | `app/api/sep24/transactions/withdraw/interactive/route.ts` | `AnchorModule` | SEP-10 JWT; short-lived interactive URL JWT | ◐ | HTTP E2E covers creation, auth/asset errors, multipart form, and 15-minute HS256 claims; live parity compared safe unauthenticated response. Deferred withdrawal page pending. |
+| POST | `/api/anchor/submit-withdraw` | `app/api/anchor/submit-withdraw/route.ts` | `AnchorModule` | interactive-URL JWT; ramp caps | ◐ | HTTP E2E covers state update, amount/GCash validation, ownership/session, expiry/signature/claim failures, caps, and malformed JSON; live parity compared safe auth/malformed-body responses only. |
+| POST | `/api/anchor/confirm-withdraw` | `app/api/anchor/confirm-withdraw/route.ts` | `AnchorModule` | SEP-10 JWT; Testnet Horizon payment verification | ◐ | HTTP E2E covers matching/mismatched mocked Horizon data, auth/hash errors, idempotency, and state transition; live parity compared safe auth/malformed-body responses only. |
+| POST | `/api/anchor/simulate-payment` | `app/api/anchor/simulate-payment/route.ts` | `AnchorModule` | interactive-URL JWT; single-use Redis claim; testnet only | ◐ | HTTP E2E covers mocked Testnet submission, persistence, replay, invalid input, and Mainnet rejection; live parity compared safe unauthenticated/malformed-body responses only. No live payment sent. |
 
 Shared lib: `lib/ramp-config.ts`.
 
@@ -204,12 +204,10 @@ Additional checks on this checkpoint: `npm run typecheck --workspace=backend` an
 Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `WalletModule` and `SettlementsModule` with full legacy parity (balance from Horizon trustlines with 404 fallback to zero, aggregated history across settlements/anchors/transfers with BigInt precision, vault balance querying Soroban and Horizon, transactions list with metadata, Soroban RPC-verified transfer confirmation, and offline voucher signature verification). Tests passing: `reconciliation.test.ts`, `reconciliation.service.spec.ts`, `wallet.service.spec.ts`, `settlements.service.spec.ts`, and `phase3-wallet-smoke.spec.ts` (19/19 Phase 3 tests passing, 155/155 backend unit tests passing).
 
 ### Phase 4: Engine / Soroban (highest risk)
-- [x] Port and run Phase 4 concurrency-lock, retry-classifier, and transaction-manager unit coverage in Jest
-- [x] `Ed25519SignatureGuard`
-- [x] deposit, transfer, withdraw, offline-key, recipient-registry
-- [x] settle as a BullMQ processor
-
-Phase 4 implementation complete (2026-11-01; integration validation pending): added the signed-intent guard and engine routes, moved settlement submission to a relayer-locked two-phase transaction manager that persists signed XDR before broadcast, and added an idempotent BullMQ settlement producer/processor with retry classification. Jest unit coverage passes (full backend suite: 173 tests); HTTP route e2e smoke coverage passes (3 tests). Docker-backed Postgres/Redis integration tests were not run because the Docker engine was unavailable. Legacy-versus-Nest contract checks remain pending until test-only staging URLs are supplied; transaction-changing endpoints must use disposable accounts.
+- [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts` (Nest lock and retry-classifier coverage plus transaction construction/submission/polling tests are in place; friendbot and settlement normalization cases remain pending their feature services)
+- [x] `Ed25519SignatureGuard` (canonical deposit/withdraw/online-transfer message verification; covered by E2E tests)
+- [ ] deposit, transfer, withdraw, offline-key, recipient-registry
+- [ ] settle as a BullMQ processor
 
 ### Phase 5: SMS and queues
 - [x] TextBee client with fallback device; `TextbeeSignatureGuard`
@@ -227,10 +225,11 @@ Verification follow-up (2026-11-01): SMS and engine share `SettlementQueueServic
 Phase 5 remains in progress. The remaining legacy cases and safe SMS route parity comparisons were completed on 2026-11-01; see the [coverage mapping and validation report](05-sms-test-porting.md). The user confirmed a primary-device message was delivered, and a signed synthetic webhook probe reached the public tunnel. Real fallback delivery, provider-originated callback delivery records, live production-worker processing/retries, and Stellar submission/confirmation remain unverified. The free TextBee plan allows only one active device, so fallback needs another enabled device or a plan that permits it. Any jobs already buffered in the obsolete `pijin-settlements` queue require inspection and controlled replay into the shared producer; this code change does not migrate existing Redis jobs.
 
 ### Phase 6: Anchor (SEP-1 / SEP-24)
-- [ ] `stellar.toml`, `sep24/info`, `sep24/transaction`
-- [ ] Interactive deposit/withdraw + interactive-URL JWT
-- [ ] submit/confirm withdraw, simulate-payment (testnet only)
-- [ ] Port `ramp-security.test.ts`
+- [ ] `stellar.toml`, `sep24/info`, `sep24/transaction` (implementation and automated contract tests present; live legacy parity pending)
+- [x] SEP-1 `stellar.toml` OPTIONS preflight parity (204, exact CORS headers; HTTP E2E covered)
+- [ ] Interactive deposit/withdraw + interactive-URL JWT (API tests pass; live parity and deferred web pages pending)
+- [ ] submit/confirm withdraw, simulate-payment (mocked HTTP E2E passes; live legacy/Testnet parity pending)
+- [x] Port `ramp-security.test.ts` scenarios as Nest route E2E coverage (kill switches, interactive JWT claims/signature/expiry, caps, and one-time claim/replay)
 - [ ] Blocked on the deferred web pages for the interactive flow
 
 ### Phase 7: Demo, friendbot, scripts
@@ -282,6 +281,11 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 |---|---|---|---|
 | 2026-11-01 | SMS legacy test-porting completion | 5 (in progress: live flow pending) | Completed legacy security/delivery/voucher assertion mapping, added dispatch-worker tests and reusable safe SMS parity script. Fixed unsupported-method 405 responses, dispatch authentication-before-JSON parsing, and legacy HTTP 500 error compatibility. Full backend suite 233/233, E2E 78/78, typecheck/build pass; fresh-build SMS parity 26 OK / 0 DIFF / 0 BLOCKED. Real handset/queue/chain checks remain unchecked. |
 | 2026-11-01 | Production OTP parser parity fix | 2 / 5 | Replaced the separate parser setup in `main.ts` with the shared request-body middleware used by E2E tests. The production startup had omitted OTP malformed-JSON handling and unsupported-method 405 responses. Fresh compiled server on 3002 versus legacy on 3000: 62 OK / 0 DIFF / 1 BLOCKED (OTP test-mode inputs absent), resolving all 18 prior failing assertions. Backend E2E 78/78, typecheck, and build pass. |
+| 2026-11-01 | SEP-1 stellar.toml OPTIONS preflight parity | 6 (in progress) | Registered the exact `/.well-known/stellar.toml` OPTIONS response before global CORS middleware: 204 with `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET, OPTIONS`, and `Access-Control-Allow-Headers: *`. Added an HTTP E2E regression test that checks those headers and an empty body. Focused anchor E2E: 6/6; typecheck passed; unit suite: 34 suites / 259 tests passed; production build passed. Full E2E passed: 14 suites / 84 tests, using local Docker Redis with `QUEUE_ENABLED=false`. |
+| 2026-11-01 | SEP-24 interactive deposit and withdrawal initiation | 6 (in progress) | Added authenticated deposit/withdraw initiation routes that create incomplete anchor transactions and sign separate 15-minute HS256 interactive URL JWTs bound to the account and transaction. Typecheck passes. Unit/E2E tests and live legacy parity are pending; the deferred `/deposit` and `/withdraw` pages remain a Phase 6 ship blocker. |
+| 2026-11-01 | SEP-24 withdrawal submit/confirm and testnet payment | 6 (in progress) | Added the three missing Anchor routes. Withdrawal submission validates the interactive JWT, amount, GCash number, ownership, ramp limits, and state transition. Confirmation verifies the SEP-10 owner and matching Testnet Horizon payment before advancing status. Simulated deposit settlement uses a one-time Redis claim and Testnet-only Horizon/passphrase. Typecheck passes; endpoint tests and legacy parity remain pending. |
+| 2026-11-02 | SEP-24 route parity review | 6 (in progress) | Compared the three Anchor handlers with their legacy routes. Fixed escaped withdrawal validation regexes, preserved the mock transaction fallback and Redis fail-open behavior, separated distributor/issuer configuration errors from Horizon submission failures, and kept a successful on-chain payment response successful if the post-submit DB update fails. Testnet enforcement is intentionally stricter when the configured network passphrase is Mainnet. Added malformed-JSON route parsing to retain legacy error bodies. |
+| 2026-11-02 | Phase 6 Anchor automated and safe live verification | 6 (in progress) | Expanded Anchor HTTP E2E coverage for discovery, initiation/JWT issuance, withdrawal submit/confirm, simulate-payment, malformed JSON, supported form content types, ramp caps/kill switches, replay protection, and post-payment DB failure. Focused Anchor E2E 29/29 and service unit 8/8; full backend unit 34 suites / 259 tests; full E2E 14 suites / 107 tests using local Docker Redis and `QUEUE_ENABLED=false`; typecheck and build pass. Safe live legacy-vs-Nest parity: 11/11 requests matched (public metadata and non-mutating auth/validation cases). Stellar submission/Horizon were mocked in E2E; no live payment was sent. Valid DB-backed transaction parity and interactive pages remain pending. |
 | 2026-10-31 | Phase 5 settlement integration fix | 5 (in progress) | Unified SMS/engine producer and typed worker contract; moved nonce-cache writes after durable publish; retained five-attempt backoff and permanent-error handling. Added ten mocked-boundary integration cases; all 199 backend tests, typecheck, and build pass. Live queue/gateway/chain and legacy route parity checks remain pending. |
 | 2026-10-23 | `chores` branch | 0 | Legacy freeze: moved Next.js backend to `apps/_legacy/backend`, CI/workspace updates, this plan |
 | 2026-10-25 | setup-first migration pass | 1 | Completed Nest scaffold, workspace wiring, Prisma baseline, env validation, runtime bootstrap, Redis/BullMQ/lock/Stellar infra, Swagger/health/Docker, and readiness checks before feature migration |
@@ -300,4 +304,4 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
-| 2026-11-01 | Phase 4 implementation and unit verification | 4 (integration validation pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Full Jest suite passes (173 tests), Phase 4 HTTP smoke tests pass (3 tests), typecheck passes; Docker integration and staging contract checks remain pending. |
+| 2026-10-31 | Phase 4 implementation | 4 (implementation complete; tests pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Backend build passes; Phase 4 tests remain pending. |

@@ -1,7 +1,7 @@
 import { INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 export function configureApp(app: INestApplication): void {
   const configService = app.get(ConfigService);
@@ -10,6 +10,26 @@ export function configureApp(app: INestApplication): void {
   app.setGlobalPrefix('api', {
     exclude: [{ path: '.well-known/(.*)', method: RequestMethod.ALL }],
   });
+
+  const express = app.getHttpAdapter().getInstance();
+  express.options(
+    '/.well-known/stellar.toml',
+    (request: Request, response: Response, next: NextFunction) => {
+      // Handle only this exact preflight before the global CORS middleware runs.
+      if (request.path !== '/.well-known/stellar.toml') {
+        next();
+        return;
+      }
+      response
+        .status(204)
+        .set({
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        })
+        .end();
+    },
+  );
 
   app.enableCors({
     origin: corsOrigin,
@@ -41,7 +61,6 @@ export function configureApp(app: INestApplication): void {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  const express = app.getHttpAdapter().getInstance();
   express.get('/api/swagger', (_req: unknown, res: Response) => {
     res.json(document);
   });

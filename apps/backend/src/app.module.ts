@@ -18,6 +18,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { SettlementsModule } from './modules/settlements/settlements.module';
 import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module.js';
+import { AnchorModule } from './modules/anchor/anchor.module.js';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { EngineModule } from './modules/engine/engine.module.js';
     WalletModule,
     SettlementsModule,
     EngineModule,
+    AnchorModule,
     HealthModule,
   ],
   providers: [
