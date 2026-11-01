@@ -9,7 +9,11 @@ function makeService() {
   const senderKey = Keypair.random();
   const gateway = Keypair.random();
   const prisma = {
-    settlement: { findUnique: jest.fn<(...args: any[]) => Promise<any>>(), create: jest.fn<(...args: any[]) => Promise<any>>() },
+    settlement: {
+      findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
+      create: jest.fn<(...args: any[]) => Promise<any>>(),
+      update: jest.fn<(...args: any[]) => Promise<any>>(),
+    },
     account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
     token: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
   };

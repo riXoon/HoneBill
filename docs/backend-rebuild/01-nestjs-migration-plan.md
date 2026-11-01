@@ -204,10 +204,12 @@ Additional checks on this checkpoint: `npm run typecheck --workspace=backend` an
 Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `WalletModule` and `SettlementsModule` with full legacy parity (balance from Horizon trustlines with 404 fallback to zero, aggregated history across settlements/anchors/transfers with BigInt precision, vault balance querying Soroban and Horizon, transactions list with metadata, Soroban RPC-verified transfer confirmation, and offline voucher signature verification). Tests passing: `reconciliation.test.ts`, `reconciliation.service.spec.ts`, `wallet.service.spec.ts`, `settlements.service.spec.ts`, and `phase3-wallet-smoke.spec.ts` (19/19 Phase 3 tests passing, 155/155 backend unit tests passing).
 
 ### Phase 4: Engine / Soroban (highest risk)
-- [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts` (Nest lock and retry-classifier coverage plus transaction construction/submission/polling tests are in place; friendbot and settlement normalization cases remain pending their feature services)
-- [x] `Ed25519SignatureGuard` (canonical deposit/withdraw/online-transfer message verification; covered by E2E tests)
-- [ ] deposit, transfer, withdraw, offline-key, recipient-registry
-- [ ] settle as a BullMQ processor
+- [x] Port and run Phase 4 concurrency-lock, retry-classifier, and transaction-manager unit coverage in Jest
+- [x] `Ed25519SignatureGuard`
+- [x] deposit, transfer, withdraw, offline-key, recipient-registry
+- [x] settle as a BullMQ processor
+
+Phase 4 implementation complete (2026-11-01; integration validation pending): added the signed-intent guard and engine routes, moved settlement submission to a relayer-locked two-phase transaction manager that persists signed XDR before broadcast, and added an idempotent BullMQ settlement producer/processor with retry classification. Jest unit coverage passes (full backend suite: 173 tests); HTTP route e2e smoke coverage passes (3 tests). Docker-backed Postgres/Redis integration tests were not run because the Docker engine was unavailable. Legacy-versus-Nest contract checks remain pending until test-only staging URLs are supplied; transaction-changing endpoints must use disposable accounts.
 
 ### Phase 5: SMS and queues
 - [x] TextBee client with fallback device; `TextbeeSignatureGuard`
@@ -298,4 +300,4 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
-| 2026-10-31 | Phase 4 implementation | 4 (implementation complete; tests pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Backend build passes; Phase 4 tests remain pending. |
+| 2026-11-01 | Phase 4 implementation and unit verification | 4 (integration validation pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Full Jest suite passes (173 tests), Phase 4 HTTP smoke tests pass (3 tests), typecheck passes; Docker integration and staging contract checks remain pending. |
