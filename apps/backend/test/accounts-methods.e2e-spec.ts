@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, jest } from '@jest/globals';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../src/common/filters/api-exception.filter.js';
 import { AccountsController } from '../src/modules/accounts/accounts.controller.js';
 import { AccountsService } from '../src/modules/accounts/accounts.service.js';
 
@@ -22,7 +22,7 @@ describe('/api/users/check unsupported methods (e2e)', () => {
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalFilters(new LegacyHttpExceptionFilter());
+    app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
 

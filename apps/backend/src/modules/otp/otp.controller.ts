@@ -1,6 +1,8 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { OtpService } from './otp.service.js';
+import { PinVerifyRateLimitGuard } from '../../common/guards/pin-verify-rate-limit.guard.js';
+import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto.js';
 
 @Controller('otp')
 export class OtpController {
@@ -8,8 +10,8 @@ export class OtpController {
 
   @Post('send')
   @HttpCode(HttpStatus.OK)
-  send(@Body() body: Record<string, unknown> | undefined, @Req() req: Request) {
-    const phone = typeof body?.phoneNumber === 'string' ? body.phoneNumber : '';
+  send(@Body() body: SendOtpDto, @Req() req: Request) {
+    const phone = body.phoneNumber;
     const forwardedFor = req.headers['x-forwarded-for'];
     const firstForwardedIp = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)
       ?.split(',')[0]
@@ -21,9 +23,8 @@ export class OtpController {
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
-  verify(@Body() body: Record<string, unknown> | undefined) {
-    const phone = typeof body?.phoneNumber === 'string' ? body.phoneNumber : '';
-    const code = typeof body?.code === 'string' ? body.code : '';
-    return this.otpService.verify(phone, code);
+  @UseGuards(PinVerifyRateLimitGuard)
+  verify(@Body() body: VerifyOtpDto) {
+    return this.otpService.verify(body.phoneNumber, body.code);
   }
 }

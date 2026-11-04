@@ -8,7 +8,7 @@ export class PinVerifyRateLimitGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    await this.limiter.enforce(`pijin:api:pin:verify:${req.ip ?? 'unknown'}`, 30, 60_000);
+    await this.limiter.enforce(`honebill:api:pin:verify:${req.ip ?? 'unknown'}`, 30, 60_000);
     return true;
   }
 }
