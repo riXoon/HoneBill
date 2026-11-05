@@ -6,14 +6,8 @@ import {
   SignedIntent,
 } from '../../common/guards/ed25519-signature.guard.js';
 import { EngineService } from './engine.service.js';
-import {
-  DepositRequestDto,
-  OfflineKeyRequestDto,
-  TransferRequestDto,
-  WithdrawRequestDto,
-} from './dto/engine-request.dto.js';
 
-type AuthenticatedRequest = Request & { user?: { sub?: string } };
+type AuthenticatedRequest = Request & { user?: { sub?: unknown } };
 type EngineBody = Record<string, unknown>;
 
 @Controller('engine')
@@ -24,7 +18,7 @@ export class EngineController {
   @UseGuards(Ed25519SignatureGuard)
   @SignedIntent((body) => hasFields(body, ['senderPublicKey', 'amountStroops'])
     ? `deposit:${body.senderPublicKey}:${body.amountStroops}` : null)
-  deposit(@Body() body: DepositRequestDto) {
+  deposit(@Body() body: EngineBody) {
     return this.engine.prepareDeposit(body ?? {});
   }
 
@@ -36,7 +30,7 @@ export class EngineController {
       ? `transfer:v2:online:${body.tokenAddress}:${body.senderPublicKey}:${body.recipientPublicKey}:${body.amountStroops}`
       : null;
   })
-  transfer(@Body() body: TransferRequestDto) {
+  transfer(@Body() body: EngineBody) {
     return this.engine.prepareTransfer(body ?? {});
   }
 
@@ -44,19 +38,19 @@ export class EngineController {
   @UseGuards(Ed25519SignatureGuard)
   @SignedIntent((body) => hasFields(body, ['senderPublicKey', 'amountStroops'])
     ? `withdraw:${body.senderPublicKey}:${body.amountStroops}` : null)
-  withdraw(@Body() body: WithdrawRequestDto) {
+  withdraw(@Body() body: EngineBody) {
     return this.engine.prepareWithdraw(body ?? {});
   }
 
   @Post('offline-key')
   @UseGuards(Sep10JwtGuard)
-  prepareOfflineKey(@Req() request: AuthenticatedRequest, @Body() body: OfflineKeyRequestDto) {
+  prepareOfflineKey(@Req() request: AuthenticatedRequest, @Body() body: EngineBody) {
     return this.engine.prepareOfflineKey(authenticatedSubject(request), body ?? {});
   }
 
   @Patch('offline-key')
   @UseGuards(Sep10JwtGuard)
-  confirmOfflineKey(@Req() request: AuthenticatedRequest, @Body() body: OfflineKeyRequestDto) {
+  confirmOfflineKey(@Req() request: AuthenticatedRequest, @Body() body: EngineBody) {
     return this.engine.confirmOfflineKey(authenticatedSubject(request), body ?? {});
   }
 
