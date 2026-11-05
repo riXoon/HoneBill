@@ -4,10 +4,10 @@ import { INestApplication } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import request from 'supertest';
 import { Keypair } from '@stellar/stellar-sdk';
-import { EngineController } from '../src/modules/engine/engine.controller.js';
-import { EngineService } from '../src/modules/engine/engine.service.js';
-import { Ed25519SignatureGuard } from '../src/common/guards/ed25519-signature.guard.js';
-import { Sep10JwtGuard } from '../src/common/guards/sep10-jwt.guard.js';
+import { EngineController } from '../../src/modules/engine/engine.controller.js';
+import { EngineService } from '../../src/modules/engine/engine.service.js';
+import { Ed25519SignatureGuard } from '../../src/common/guards/ed25519-signature.guard.js';
+import { Sep10JwtGuard } from '../../src/common/guards/sep10-jwt.guard.js';
 
 describe('Engine routes (HTTP e2e)', () => {
   let app: INestApplication;

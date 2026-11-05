@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { isRetryableSettlementError } from '../../../../src/infra/stellar/settlement-retry.util';
+import { isRetryableSettlementError } from '../../../../src/modules/engine/engine-retry.util';
 
 describe('isRetryableSettlementError', () => {
   it.each([

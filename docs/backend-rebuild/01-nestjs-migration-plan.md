@@ -206,8 +206,9 @@ Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `Wallet
 ### Phase 4: Engine / Soroban (highest risk)
 - [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts` (Nest lock and retry-classifier coverage plus transaction construction/submission/polling tests are in place; friendbot and settlement normalization cases remain pending their feature services)
 - [x] `Ed25519SignatureGuard` (canonical deposit/withdraw/online-transfer message verification; covered by E2E tests)
-- [ ] deposit, transfer, withdraw, offline-key, recipient-registry
-- [ ] settle as a BullMQ processor
+- [x] deposit, transfer, withdraw, offline-key, recipient-registry (implemented; `EngineService` unit-tested; live testnet check and legacy contract check still pending)
+- [x] settle as a BullMQ processor (`SettlementProcessor`, queue `engine-settlement`; live Redis worker run still pending, see Phase 5)
+- [ ] Live testnet verification of every engine route (see the Phase 4 test guide) and legacy-vs-Nest contract check
 
 ### Phase 5: SMS and queues
 - [x] TextBee client with fallback device; `TextbeeSignatureGuard`
@@ -304,4 +305,5 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
+| 2026-11-04 | Phase 4 audit and cleanup | 4 (in progress: live verification pending) | Removed the unused duplicate `StellarTransactionManager` and retry util from `infra/stellar` (the live copies are in `modules/engine`); `StellarModule` now only provides `StellarService`. Moved the stray `test/engine.e2e-spec.ts` into `test/e2e-testing`, retargeted the manager and retry specs at the live code, removed a duplicate stale `test:e2e:phase2` script. Added `engine.service.spec.ts` (validation, 426 gate, inactive token, offline-key sync/409, registrar checks). Typecheck, build, 35 suites / 288 tests, and contract `cargo test` (29) pass. |
 | 2026-10-31 | Phase 4 implementation | 4 (implementation complete; tests pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Backend build passes; Phase 4 tests remain pending. |
