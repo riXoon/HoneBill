@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { Mascot } from '../components/mascot/Mascot';
 import { MPIN_LENGTH, mockUser } from '../mocks/user';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
 import { colors, fonts, radius } from '../theme';
 
 // Figma: Login Page (870:3055), 402x874.
@@ -32,14 +33,36 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
   const insets = useSafeAreaInsets();
   const [pin, setPin] = useState('');
 
+  const [biometric, setBiometric] = useState(false);
+
+  const signIn = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
+
+  // Mock-only: a real build would unlock a key kept in SecureStore behind this check instead of just signing in.
+  const signInWithBiometrics = useCallback(async () => {
+    if (await authenticateWithBiometrics()) signIn();
+  }, [signIn]);
+
+  // Offer the fingerprint button when the phone supports it, and prompt once on arrival. Cancelling falls back to the MPIN.
+  useEffect(() => {
+    let active = true;
+    void isBiometricAvailable().then((ok) => {
+      if (!active || !ok) return;
+      setBiometric(true);
+      void signInWithBiometrics();
+    });
+    return () => {
+      active = false;
+    };
+  }, [signInWithBiometrics]);
+
   const onDigit = useCallback(
     (digit: string) => {
       // MPIN is not verified yet (mock-only frontend): any complete PIN signs in.
       const next = pin.length < MPIN_LENGTH ? pin + digit : pin;
       setPin(next);
-      if (next.length === MPIN_LENGTH) navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+      if (next.length === MPIN_LENGTH) signIn();
     },
-    [navigation, pin],
+    [signIn, pin],
   );
   const onDelete = useCallback(() => setPin((p) => p.slice(0, -1)), []);
 
@@ -68,7 +91,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
       </View>
 
       <View style={[styles.keypad, { paddingBottom: Math.max(24, insets.bottom) }]}>
-        <Keypad onDigit={onDigit} onDelete={onDelete} />
+        <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={biometric ? signInWithBiometrics : undefined} />
       </View>
     </View>
   );

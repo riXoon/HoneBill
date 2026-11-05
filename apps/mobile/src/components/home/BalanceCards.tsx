@@ -26,13 +26,20 @@ const SLIDE_MS = 600;
 /** How far the leaving card rises before it drops behind. */
 const LIFT = 70;
 
-// Card fills are images exported from the Figma card components (511:820 online, 511:822 offline),
-// with the text, icons and chip painted out. They keep Figma's translucency, so the card in front
-// shows the other card through its right side, exactly as in the design. The 5 dp backdrop blur is
-// the only effect not reproduced.
+// Card fills come from the asset pack (`Card online bg` / `Card offline bg`). Each 1128x641 PNG has
+// the 1025x538 card face at (51, 45) plus its drop-shadow bleed, so the image is drawn larger and
+// offset to put the face exactly on the card; the card's overflow clip trims the bleed.
 const FILL = {
   online: require('../../../assets/home/card-online.png'),
   offline: require('../../../assets/home/card-offline.png'),
+} as const;
+const FILL_SCALE = CARD_W / 1025;
+const FILL_STYLE = {
+  position: 'absolute',
+  left: -51 * FILL_SCALE,
+  top: -45 * FILL_SCALE,
+  width: 1128 * FILL_SCALE,
+  height: 641 * FILL_SCALE,
 } as const;
 
 /** Sprite icons are centred on (11.86, 144.83) in the Figma icon sheet. */
@@ -112,7 +119,7 @@ function BalanceCard({ mode, amount }: BalanceCardProps) {
   const amountText = `₱${whole}.`;
   return (
     <View style={styles.card}>
-      <Image source={FILL[mode]} style={StyleSheet.absoluteFill} contentFit="fill" />
+      <Image source={FILL[mode]} style={FILL_STYLE} contentFit="fill" />
 
       <View style={styles.header}>
         <View style={styles.label}>

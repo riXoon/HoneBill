@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SOURCE_LABEL, type Transaction } from '../../mocks/transactions';
 import { splitPesos } from '../../mocks/home';
@@ -7,11 +7,16 @@ import { colors, fonts } from '../../theme';
 import { OfflineFundsBadge } from '../ui/smallIcons';
 
 /** Figma "Content" card (870:3181): source pill and time, description, signed amount. */
-export const TransactionCard = memo(function TransactionCard({ tx }: { tx: Transaction }) {
+export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { tx: Transaction; onPress?: (id: string) => void }) {
   const sign = tx.direction === 'in' ? '+' : '-';
   const amount = `${sign} ₱${splitPesos(tx.amount).whole}`;
   return (
-    <View style={styles.card} accessible accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${tx.time}. ${tx.description}. ${amount}`}>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      onPress={onPress ? () => onPress(tx.id) : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${tx.time}. ${tx.description}. ${amount}`}
+    >
       <View style={styles.status}>
         <View style={styles.pill}>
           <Text style={styles.pillText}>{SOURCE_LABEL[tx.source]}</Text>
@@ -25,7 +30,7 @@ export const TransactionCard = memo(function TransactionCard({ tx }: { tx: Trans
         </View>
         {tx.source === 'offline' ? <OfflineFundsBadge /> : null}
       </View>
-    </View>
+    </Pressable>
   );
 });
 
@@ -46,6 +51,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 1,
   },
+  pressed: { opacity: 0.7 },
   status: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   pill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.text },
   pillText: { fontFamily: fonts.regular, fontSize: 8, lineHeight: 10, includeFontPadding: false, color: colors.surface, textAlign: 'center' },

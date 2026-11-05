@@ -24,7 +24,7 @@ const QUICK_ACTION_ROUTE = {
   receive: 'ReceiveAmount',
   online: 'TransferOnline',
   offline: 'TransferOffline',
-} as const satisfies Record<QuickActionKey, keyof RootStackParamList>;
+} as const satisfies Partial<Record<QuickActionKey, keyof RootStackParamList>>;
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -75,7 +75,11 @@ export function HomeScreen() {
           onToggle={toggle}
         />
 
-        <QuickActions online={online} onPress={(key) => navigation.navigate(QUICK_ACTION_ROUTE[key])} />
+        <QuickActions online={online} onPress={(key) => {
+            // Top-up has no screen yet.
+            if (key !== 'topup') navigation.navigate(QUICK_ACTION_ROUTE[key]);
+          }}
+        />
 
         <View style={styles.activity}>
           {online ? (
