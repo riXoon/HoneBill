@@ -1,18 +1,25 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+
+import { clearStoredAccount, saveStoredAccount } from '../services/accountStorage';
 
 /**
- * Frontend-only auth: everything lives in memory, nothing touches the backend,
- * storage or Stellar. Same surface as the real provider so screens can use
- * `useAuth()` now and the real implementation can be restored later.
+ * Who is signed in. The app has no server session yet (that needs the SEP-10 sign-in), so this is
+ * local state: the account the MPIN just unlocked, held in memory for the screens to read.
  */
 
 export type UserMode = 'customer' | 'merchant';
 
-export type StoredAccount = {
+/** What the screens show about the account. Comes from `/users/lookup` or `/register`. */
+export type AccountProfile = {
   shortId: string;
-  role: string;
   stellarPublicKey: string;
+  firstName: string;
+  lastName: string;
+  /** E.164, e.g. +639123456789. */
+  phone: string | null;
 };
+
+export type StoredAccount = AccountProfile & { role: string };
 
 type AuthContextType = {
   activeAccount: StoredAccount | null;
@@ -20,7 +27,7 @@ type AuthContextType = {
   jwt: string | null;
   userMode: UserMode;
   isAppReady: boolean;
-  login: (publicKey: string, shortId: string, jwt?: string) => Promise<void>;
+  login: (profile: AccountProfile) => Promise<void>;
   logout: () => Promise<void>;
   setUserMode: (mode: UserMode) => void;
 };
@@ -31,31 +38,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeAccount, setActiveAccount] = useState<StoredAccount | null>(null);
   const [userMode, setUserMode] = useState<UserMode>('customer');
 
-  const login = async (publicKey: string, shortId: string) => {
-    setActiveAccount({ shortId, role: 'USER', stellarPublicKey: publicKey });
+  const login = useCallback(async (profile: AccountProfile) => {
+    setActiveAccount({ ...profile, role: 'USER' });
     setUserMode('customer');
-  };
+    await saveStoredAccount(profile);
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     setActiveAccount(null);
-  };
+    await clearStoredAccount();
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        activeAccount,
-        connectedWalletPublicKey: activeAccount?.stellarPublicKey ?? null,
-        jwt: null,
-        userMode,
-        isAppReady: true,
-        login,
-        logout,
-        setUserMode,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextType>(
+    () => ({
+      activeAccount,
+      connectedWalletPublicKey: activeAccount?.stellarPublicKey ?? null,
+      jwt: null,
+      userMode,
+      isAppReady: true,
+      login,
+      logout,
+      setUserMode,
+    }),
+    [activeAccount, userMode, login, logout],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -64,4 +72,14 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
+}
+
+/** The first name for the tab banners; falls back to a neutral word so the greeting never reads "Hello, !". */
+export function greetingName(account: StoredAccount | null): string {
+  return account?.firstName.trim() || 'there';
+}
+
+/** First and last name joined by a space. */
+export function fullName(account: StoredAccount | null): string {
+  return [account?.firstName, account?.lastName].filter(Boolean).join(' ').trim();
 }

@@ -45,7 +45,8 @@ function ChevronLeft() {
 
 type AuthChromeProps = {
   onBack: () => void;
-  step: StepDiamondProps['step'];
+  /** Omit outside the sign-up flow (e.g. finding an existing account to sign in). */
+  step?: StepDiamondProps['step'];
 };
 
 /** Back button (left) and step diamond (right), pinned over the top of a sign-up screen. */
@@ -62,9 +63,11 @@ export function AuthChrome({ onBack, step }: AuthChromeProps) {
       >
         <ChevronLeft />
       </Pressable>
-      <View pointerEvents="none" style={[styles.step, { top }]}>
-        <StepDiamond step={step} />
-      </View>
+      {step ? (
+        <View pointerEvents="none" style={[styles.step, { top }]}>
+          <StepDiamond step={step} />
+        </View>
+      ) : null}
     </>
   );
 }
