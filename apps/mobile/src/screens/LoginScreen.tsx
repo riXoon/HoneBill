@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -8,9 +9,15 @@ import { AppBackground } from '../components/ui/AppBackground';
 import { Keypad } from '../components/ui/Keypad';
 import { PinDots } from '../components/ui/PinDots';
 import { Mascot } from '../components/mascot/Mascot';
-import { MPIN_LENGTH, mockUser } from '../mocks/user';
+import { MPIN_LENGTH } from '../config/limits';
+import { useAuth, type AccountProfile } from '../context/AuthContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
+import { formatPhoneDisplay, getAccountPhone } from '../services/accountPhone';
+import { getStoredAccount } from '../services/accountStorage';
+import { verifyPin } from '../services/api/auth';
+import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import { lookupUserByPhone } from '../services/api/users';
 import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
 import { colors, fonts, radius } from '../theme';
 
@@ -29,42 +36,134 @@ function SwapIcon() {
   );
 }
 
+function pinErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401 && error.attemptsRemaining !== undefined) {
+      const left = error.attemptsRemaining;
+      return `Incorrect MPIN. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
+    }
+    if (error.status === 423) {
+      const minutes = Math.max(1, Math.ceil((error.retryAfter ?? 900) / 60));
+      return `Too many incorrect tries. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
+    }
+    if (error.status === 404) return 'No MPIN is set for this number. Tap the number to use another.';
+  }
+  return errorMessage(error);
+}
+
 export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
   const insets = useSafeAreaInsets();
+  const { login } = useAuth();
   const [pin, setPin] = useState('');
+  /** undefined while the saved number loads, null when this phone has none yet. */
+  const [phone, setPhone] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef<AbortController | null>(null);
 
-  const [biometric, setBiometric] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  /** The profile left by the last sign-in, which a fingerprint may reopen. */
+  const [stored, setStored] = useState<AccountProfile | null>(null);
+  const prompted = useRef(false);
+
+  useEffect(() => () => request.current?.abort(), []);
+
+  // Re-read on focus: coming back from "use another number" has just saved a new one.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void Promise.all([getAccountPhone(), getStoredAccount()]).then(([saved, account]) => {
+        if (active) {
+          setPhone(saved);
+          setStored(account);
+          setPin('');
+          setError(null);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  const changeNumber = useCallback(() => navigation.navigate('InputNumber', { mode: 'signin' }), [navigation]);
 
   const signIn = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
 
-  // Mock-only: a real build would unlock a key kept in SecureStore behind this check instead of just signing in.
-  const signInWithBiometrics = useCallback(async () => {
-    if (await authenticateWithBiometrics()) signIn();
-  }, [signIn]);
+  const submitPin = useCallback(
+    async (value: string) => {
+      if (!phone) return;
+      const controller = new AbortController();
+      request.current = controller;
+      setBusy(true);
+      setError(null);
+      try {
+        await verifyPin(phone, value, controller.signal);
+        // The PIN route returns no profile, so fetch the account it unlocked.
+        const account = await lookupUserByPhone(phone, controller.signal);
+        if (!account) throw new ApiError('http', 404, 'No account found for this number.');
+        await login({
+          shortId: account.shortId,
+          stellarPublicKey: account.stellarPublicKey,
+          firstName: account.firstName,
+          lastName: account.lastName,
+          phone,
+        });
+        signIn();
+      } catch (e) {
+        if (isAborted(e)) return;
+        setPin('');
+        setError(pinErrorMessage(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [login, phone, signIn],
+  );
 
-  // Offer the fingerprint button when the phone supports it, and prompt once on arrival. Cancelling falls back to the MPIN.
   useEffect(() => {
     let active = true;
     void isBiometricAvailable().then((ok) => {
-      if (!active || !ok) return;
-      setBiometric(true);
-      void signInWithBiometrics();
+      if (active) setBiometricSupported(ok);
     });
     return () => {
       active = false;
     };
-  }, [signInWithBiometrics]);
+  }, []);
+
+  // A fingerprint is a local unlock of the account that last signed in with its MPIN on this phone, so it is
+  // only offered when that account is the number shown here. It reopens the saved profile; it never creates one.
+  const unlockable = biometricSupported && stored !== null && phone != null && stored.phone === phone;
+
+  const signInWithBiometrics = useCallback(async () => {
+    if (!stored) return;
+    if (await authenticateWithBiometrics()) {
+      await login(stored);
+      signIn();
+    }
+  }, [stored, login, signIn]);
+
+  // Prompt once on arrival. Cancelling falls back to the MPIN.
+  useEffect(() => {
+    if (unlockable && !prompted.current) {
+      prompted.current = true;
+      void signInWithBiometrics();
+    }
+  }, [unlockable, signInWithBiometrics]);
 
   const onDigit = useCallback(
     (digit: string) => {
-      // MPIN is not verified yet (mock-only frontend): any complete PIN signs in.
+      if (busy || !phone) return;
       const next = pin.length < MPIN_LENGTH ? pin + digit : pin;
       setPin(next);
-      if (next.length === MPIN_LENGTH) signIn();
+      setError(null);
+      if (next.length === MPIN_LENGTH) void submitPin(next);
     },
-    [signIn, pin],
+    [busy, phone, pin, submitPin],
   );
-  const onDelete = useCallback(() => setPin((p) => p.slice(0, -1)), []);
+  const onDelete = useCallback(() => {
+    if (!busy) setPin((p) => p.slice(0, -1));
+  }, [busy]);
 
   return (
     <View style={styles.root}>
@@ -79,19 +178,31 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
         </View>
 
         <View style={styles.inputSection}>
-          <View style={styles.phonePill}>
-            <Text style={styles.phone}>{mockUser.phone}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={phone ? `Signing in as ${formatPhoneDisplay(phone)}. Use another number` : 'Enter your phone number'}
+            onPress={changeNumber}
+            disabled={busy}
+            style={styles.phonePill}
+          >
+            <Text style={styles.phone}>{phone ? formatPhoneDisplay(phone) : phone === null ? 'Enter your number' : ' '}</Text>
             <View style={styles.swap}>
               <SwapIcon />
             </View>
-          </View>
-          <Text style={styles.prompt}>Enter your MPIN</Text>
+          </Pressable>
+          {error ? (
+            <Text style={[styles.prompt, styles.error]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {error}
+            </Text>
+          ) : (
+            <Text style={styles.prompt}>{busy ? 'Signing in…' : 'Enter your MPIN'}</Text>
+          )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
         </View>
       </View>
 
       <View style={[styles.keypad, { paddingBottom: Math.max(24, insets.bottom) }]}>
-        <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={biometric ? signInWithBiometrics : undefined} />
+        <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={unlockable ? signInWithBiometrics : undefined} />
       </View>
     </View>
   );
@@ -118,5 +229,6 @@ const styles = StyleSheet.create({
   phone: { fontFamily: fonts.regular, fontSize: 18, color: colors.coral, textAlign: 'center' },
   swap: { position: 'absolute', right: 26, top: 0, bottom: 0, justifyContent: 'center' },
   prompt: { width: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 14, color: colors.primary },
+  error: { width: 280, fontFamily: fonts.regular, fontSize: 13, color: colors.coral },
   keypad: { width: '100%' },
 });
