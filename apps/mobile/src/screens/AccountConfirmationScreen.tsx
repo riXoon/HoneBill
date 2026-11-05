@@ -1,45 +1,105 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
+import { Button } from '../components/ui/Button';
 import { GradientTitle } from '../components/ui/GradientTitle';
-import { SwipeToEnter } from '../components/ui/SwipeToEnter';
+import { HiveEntrance } from '../components/transition/HiveEntrance';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
+import { afterNextPaint } from '../utils/async';
 
 // Figma: Account Confirmation (870:2950), 402x874.
 const combImage = require('../../assets/landing/comb.png');
 const wordmarkImage = require('../../assets/brand/logo-wordmark.png');
 
+/** "Enter HoneBill" plays the hive entrance (see HiveEntrance), then Home fades in. */
+const DURATION_MS = 1100;
+/** If the animation callback is ever lost, still leave rather than strand the user on this screen. */
+const FALLBACK_MS = DURATION_MS + 700;
+
 export function AccountConfirmationScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'AccountConfirmation'>) {
-  const enter = () => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+  const [entering, setEntering] = useState(false);
+  const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const left = useRef(false);
+
+  const leave = useCallback(() => {
+    if (left.current) return;
+    left.current = true;
+    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+  }, [navigation]);
+
+  useEffect(() => {
+    if (!entering) return;
+    const timer = setTimeout(leave, FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [entering, leave]);
+
+  const enter = async () => {
+    if (entering) return;
+    // With "reduce motion" on, go straight in.
+    if (reduceMotion) {
+      leave();
+      return;
+    }
+    // Mounting the tiles also stops Honi's looping animation; let both, and the pressed button, settle before it starts.
+    setEntering(true);
+    await afterNextPaint();
+    progress.value = withTiming(1, { duration: DURATION_MS, easing: Easing.linear }, (finished) => {
+      if (finished) scheduleOnRN(leave);
+    });
+  };
+
+  // The heading and button get out of the way first; the scene is covered by the honeycomb, then fades out beneath it.
+  const edgeStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.15], [1, 0], Extrapolation.CLAMP),
+  }));
+  const sceneStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0.05, 0.22], [1, 0], Extrapolation.CLAMP),
+  }));
 
   return (
     <View style={styles.root}>
       <AppBackground />
 
       <View style={styles.content}>
-        <View style={styles.titleBlock}>
+        <Animated.View style={[styles.titleBlock, edgeStyle]}>
           <GradientTitle size={32}>Vault Secured</GradientTitle>
           <Text style={styles.subtitle}>Your device is now primed for offline zero data transactions.</Text>
-        </View>
+        </Animated.View>
 
         {/* "mascot w bg": honeycomb, Honi, a faded mirrored copy and the wordmark, 400 dp tall. */}
-        <View style={styles.mascotArea} pointerEvents="none">
+        <Animated.View style={[styles.mascotArea, sceneStyle]} pointerEvents="none">
           <Image source={combImage} style={styles.comb} contentFit="contain" />
-          <Mascot mood="idlePlain" style={styles.honi} />
+          {/* Honi's looping vector animation stops once the transition starts, so it does not compete with it. */}
+          <Mascot mood="idlePlain" animated={!entering} style={styles.honi} />
           <Mascot mood="idlePlain" animated={false} style={styles.reflection} />
           <Image source={wordmarkImage} style={styles.wordmark} contentFit="contain" accessibilityLabel="HoneBill" />
-        </View>
+        </Animated.View>
 
-        <View style={styles.swipe}>
-          <SwipeToEnter onComplete={enter} />
-        </View>
+        <Animated.View style={[styles.action, edgeStyle]}>
+          <Button label="Enter HoneBill" size="large" onPress={() => void enter()} disabled={entering} />
+        </Animated.View>
       </View>
+
+      {/* Created only on tap, so this screen carries none of its cost until then. */}
+      {entering ? <HiveEntrance progress={progress} /> : null}
     </View>
   );
 }
@@ -54,5 +114,5 @@ const styles = StyleSheet.create({
   honi: { position: 'absolute', top: 87 },
   reflection: { position: 'absolute', top: 324, opacity: 0.5, transform: [{ scaleY: -1 }] },
   wordmark: { position: 'absolute', top: 322, width: 172, height: 56 },
-  swipe: { alignItems: 'center', marginTop: 54 },
+  action: { width: '100%', marginTop: 54 },
 });
