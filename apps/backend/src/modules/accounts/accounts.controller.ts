@@ -16,6 +16,9 @@ import { AccountsService } from './accounts.service.js';
 import { Throttle } from '@nestjs/throttler';
 import { queryString } from '../../common/utils/query-string.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { RegisterAccountDto } from './dto/register-account.dto.js';
+
+type QueryStringValue = string | string[] | Record<string, string>;
 
 @Controller()
 export class AccountsController {
@@ -39,11 +42,6 @@ export class AccountsController {
       throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
     return this.accountsService.register(body);
-  }
-
-  @All('register')
-  unsupportedRegisterMethod(@Res() response: Response): void {
-    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
   }
 
   @All('register')
