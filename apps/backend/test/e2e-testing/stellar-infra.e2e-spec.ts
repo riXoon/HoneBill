@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import request from 'supertest';
 import { LockService } from '../../src/infra/lock/lock.service.js';
 import { RedisService } from '../../src/infra/redis/redis.service.js';
-import { isRetryableSettlementError } from '../../src/infra/stellar/settlement-retry.util.js';
+import { isRetryableSettlementError } from '../../src/modules/engine/engine-retry.util.js';
 
 @Controller('test/stellar-infra')
 class StellarInfraHarnessController {

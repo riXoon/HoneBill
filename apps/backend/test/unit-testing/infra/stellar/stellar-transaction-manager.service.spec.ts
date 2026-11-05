@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { LockService } from '../../../../src/infra/lock/lock.service';
 import { PrismaService } from '../../../../src/infra/prisma/prisma.service';
 import { StellarService } from '../../../../src/infra/stellar/stellar.service';
-import { StellarTransactionManager, SpendOfflineContractArgs } from '../../../../src/infra/stellar/stellar-transaction-manager.service';
+import { StellarTransactionManager, SpendOfflineArgs } from '../../../../src/modules/engine/stellar-transaction-manager.service';
 
 describe('StellarTransactionManager', () => {
   let manager: StellarTransactionManager;
@@ -12,7 +12,7 @@ describe('StellarTransactionManager', () => {
   const relayer = Keypair.random();
   const sender = Keypair.random();
   const token = 'CD26OANM4I4GF2GBC47UYTSP3FUBZRQ7WGMGECEQHMZ2D6QV2LXJTNIS';
-  const args: SpendOfflineContractArgs = {
+  const args: SpendOfflineArgs = {
     gateway: relayer.publicKey(),
     sender: sender.publicKey(),
     token,
@@ -31,10 +31,10 @@ describe('StellarTransactionManager', () => {
       getTransaction: jest.fn(),
     };
     manager = new StellarTransactionManager(
-      { sorobanServer: rpcServer, networkPassphrase: Networks.TESTNET } as unknown as StellarService,
       {} as PrismaService,
+      { sorobanServer: rpcServer, networkPassphrase: Networks.TESTNET } as unknown as StellarService,
       {} as LockService,
-      { get: () => 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX' } as unknown as ConfigService,
+      { getOrThrow: () => 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX' } as unknown as ConfigService,
     );
   });
 
@@ -64,7 +64,7 @@ describe('StellarTransactionManager', () => {
   });
 
   it('surfaces submission error details from Soroban RPC', async () => {
-    rpcServer.sendTransaction.mockResolvedValue({ status: 'ERROR', errorResultXdr: 'AAAAAAA=' });
+    rpcServer.sendTransaction.mockResolvedValue({ status: 'ERROR', errorResult: 'AAAAAAA=' });
     const account = new Account(relayer.publicKey(), '1');
     const tx = new TransactionBuilder(account, { fee: '100', networkPassphrase: Networks.TESTNET })
       .addOperation(Operation.payment({ destination: sender.publicKey(), asset: (require('@stellar/stellar-sdk') as typeof import('@stellar/stellar-sdk')).Asset.native(), amount: '1' }))

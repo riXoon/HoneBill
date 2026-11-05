@@ -4,8 +4,6 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { TextbeeSignatureGuard } from './guards/textbee-signature.guard.js';
 import { SmsDispatchSecretGuard } from './guards/sms-dispatch-secret.guard.js';
 import { SmsService, type SmsJob } from './sms.service.js';
-import type { SmsDispatchInput } from './dto/sms-dispatch.dto.js';
-import { SmsDispatchBodyPipe } from './pipes/sms-dispatch-body.pipe.js';
 
 interface TextbeeRequest extends Request {
   rawBody?: Buffer;
@@ -20,8 +18,17 @@ export class SmsController {
   @Post('dispatch')
   @HttpCode(HttpStatus.OK)
   @UseGuards(SmsDispatchSecretGuard)
-  async dispatch(@Body(new SmsDispatchBodyPipe()) job: SmsDispatchInput) {
-    return this.sms.dispatch(job satisfies SmsJob);
+  async dispatch(@Body() body: unknown) {
+    let job: SmsJob;
+    try {
+      job = typeof body === 'string' ? JSON.parse(body) as SmsJob : body as SmsJob;
+    } catch {
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
+    }
+    if (typeof job?.to !== 'string' || typeof job?.message !== 'string' || !job.message) {
+      throw new ApiResponseException(400, { error: 'Job requires `to` and `message`' });
+    }
+    return this.sms.dispatch(job);
   }
 
   /** Exposes non-secret webhook configuration metadata for gateway health checks. */
