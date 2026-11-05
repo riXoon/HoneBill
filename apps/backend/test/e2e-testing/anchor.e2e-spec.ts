@@ -93,9 +93,9 @@ describe('Anchor routes (e2e)', () => {
     expect(response.headers['content-type']).toContain('text/plain');
     expect(response.headers['access-control-allow-origin']).toBe('*');
     expect(response.headers['cache-control']).toBe('public, max-age=3600, stale-while-revalidate=600');
-    expect(response.text).toContain('WEB_AUTH_ENDPOINT="https://anchor.example/api/auth"');
+    expect(response.text).toContain('WEB_AUTH_ENDPOINT="https://anchor.example/api/v2/auth"');
     expect(response.text).toContain(`SIGNING_KEY="${signer.publicKey()}"`);
-    expect(response.text).toContain('TRANSFER_SERVER_SEP0024="https://anchor.example/api/sep24"');
+    expect(response.text).toContain('TRANSFER_SERVER_SEP0024="https://anchor.example/api/v2/sep24"');
   });
 
   it('OPTIONS /.well-known/stellar.toml returns the exact SEP-1 CORS preflight response', async () => {
@@ -112,9 +112,9 @@ describe('Anchor routes (e2e)', () => {
     expect(response.text ?? '').toBe('');
   });
 
-  it('GET /api/sep24/info serves public capabilities with the expected cache and CORS headers', async () => {
+  it('GET /api/v2/sep24/info serves public capabilities with the expected cache and CORS headers', async () => {
     const response = await request(app.getHttpServer())
-      .get('/api/sep24/info')
+      .get('/api/v2/sep24/info')
       .expect(200);
 
     expect(response.headers['access-control-allow-origin']).toBe('*');
@@ -126,17 +126,17 @@ describe('Anchor routes (e2e)', () => {
     });
   });
 
-  it('GET /api/sep24/info reflects the deposit and withdrawal kill switches', async () => {
+  it('GET /api/v2/sep24/info reflects the deposit and withdrawal kill switches', async () => {
     configValues.DEPOSIT_ENABLED = 'false';
     configValues.WITHDRAW_ENABLED = 'false';
-    const response = await request(app.getHttpServer()).get('/api/sep24/info').expect(200);
+    const response = await request(app.getHttpServer()).get('/api/v2/sep24/info').expect(200);
     expect(response.body.deposit.PHPC.enabled).toBe(false);
     expect(response.body.withdraw.USDC.enabled).toBe(false);
   });
 
-  it('GET /api/sep24/transaction rejects missing SEP-10 authentication with the legacy body', async () => {
+  it('GET /api/v2/sep24/transaction rejects missing SEP-10 authentication with the legacy body', async () => {
     await request(app.getHttpServer())
-      .get('/api/sep24/transaction')
+      .get('/api/v2/sep24/transaction')
       .query({ id: 'tx-1' })
       .expect(401, {
         error: 'Unauthorized',
@@ -144,14 +144,14 @@ describe('Anchor routes (e2e)', () => {
       });
   });
 
-  it('GET /api/sep24/transaction requires id after authenticating', async () => {
+  it('GET /api/v2/sep24/transaction requires id after authenticating', async () => {
     const token = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).get('/api/sep24/transaction')
+    await request(app.getHttpServer()).get('/api/v2/sep24/transaction')
       .set('Authorization', `Bearer ${token}`)
       .expect(400, { error: 'Bad Request', message: "Missing required query parameter: 'id'" });
   });
 
-  it('GET /api/sep24/transaction returns SEP-24 fields for the authenticated owner', async () => {
+  it('GET /api/v2/sep24/transaction returns SEP-24 fields for the authenticated owner', async () => {
     const createdAt = new Date('2026-01-02T03:04:05.000Z');
     const updatedAt = new Date('2026-01-02T04:05:06.000Z');
     findUnique.mockResolvedValue({
@@ -171,7 +171,7 @@ describe('Anchor routes (e2e)', () => {
     const token = await jwt.signAsync({ sub: account });
 
     await request(app.getHttpServer())
-      .get('/api/sep24/transaction')
+      .get('/api/v2/sep24/transaction')
       .query({ id: 'tx-1' })
       .set('Authorization', `Bearer ${token}`)
       .expect(200, {
@@ -196,7 +196,7 @@ describe('Anchor routes (e2e)', () => {
     expect(findUnique).toHaveBeenCalledWith({ where: { id: 'tx-1' } });
   });
 
-  it('GET /api/sep24/transaction hides another account’s transaction behind 404', async () => {
+  it('GET /api/v2/sep24/transaction hides another account’s transaction behind 404', async () => {
     findUnique.mockResolvedValue({
       id: 'tx-foreign',
       stellarAccount: Keypair.random().publicKey(),
@@ -204,7 +204,7 @@ describe('Anchor routes (e2e)', () => {
     const token = await jwt.signAsync({ sub: account });
 
     await request(app.getHttpServer())
-      .get('/api/sep24/transaction')
+      .get('/api/v2/sep24/transaction')
       .query({ id: 'tx-foreign' })
       .set('Authorization', `Bearer ${token}`)
       .expect(404, { error: 'Not Found', message: 'Transaction not found.' });
@@ -214,7 +214,7 @@ describe('Anchor routes (e2e)', () => {
     create.mockResolvedValue({ id: 'deposit-e2e-1' } as never);
     const sep10 = await jwt.signAsync({ sub: account });
     const response = await request(app.getHttpServer())
-      .post('/api/sep24/transactions/deposit/interactive')
+      .post('/api/v2/sep24/transactions/deposit/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ asset_code: 'phpc', memo: 'memo-1', memo_type: 'text' })
       .expect(200);
@@ -233,11 +233,11 @@ describe('Anchor routes (e2e)', () => {
   });
 
   it('preserves SEP-10 authentication and unsupported asset errors for interactive initiation', async () => {
-    await request(app.getHttpServer()).post('/api/sep24/transactions/deposit/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/deposit/interactive')
       .send({ asset_code: 'PHPC' })
       .expect(401, { error: 'Unauthorized', message: 'A valid SEP-10 bearer token is required.' });
     const sep10 = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).post('/api/sep24/transactions/withdraw/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/withdraw/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ asset_code: 'BTC' })
       .expect(400, { error: 'invalid_request', message: 'asset_code must be PHPC or USDC.' });
@@ -245,7 +245,7 @@ describe('Anchor routes (e2e)', () => {
 
   it('maps malformed interactive initiation JSON to the legacy validation response', async () => {
     const sep10 = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).post('/api/sep24/transactions/deposit/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/deposit/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .set('Content-Type', 'application/json')
       .send('{bad json')
@@ -256,7 +256,7 @@ describe('Anchor routes (e2e)', () => {
     create.mockResolvedValue({ id: 'withdraw-e2e-1' } as never);
     const sep10 = await jwt.signAsync({ sub: account });
     const response = await request(app.getHttpServer())
-      .post('/api/sep24/transactions/withdraw/interactive')
+      .post('/api/v2/sep24/transactions/withdraw/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ asset_code: ' usdc ' })
       .expect(200);
@@ -275,11 +275,11 @@ describe('Anchor routes (e2e)', () => {
   it('accepts the URL-encoded and multipart form bodies supported by the legacy initiation routes', async () => {
     const sep10 = await jwt.signAsync({ sub: account });
     create.mockResolvedValue({ id: 'form-deposit' } as never);
-    await request(app.getHttpServer()).post('/api/sep24/transactions/deposit/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/deposit/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .type('form').send({ asset_code: 'PHPC', memo_type: 'text' }).expect(200);
     create.mockResolvedValue({ id: 'multipart-withdraw' } as never);
-    await request(app.getHttpServer()).post('/api/sep24/transactions/withdraw/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/withdraw/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .field('asset_code', 'USDC').expect(200);
   });
@@ -290,7 +290,7 @@ describe('Anchor routes (e2e)', () => {
     const interactive = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-submit-1' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'withdraw-submit-1', amount: '125.50', gcash_number: '+63 9-123-456-789' })
       .expect(200, { success: true });
@@ -304,34 +304,34 @@ describe('Anchor routes (e2e)', () => {
     const interactive = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-submit-2' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'withdraw-submit-2', amount: '1.00000000', gcash_number: '09123456789' })
       .expect(400, { success: false, error: 'amount must be positive and have at most 7 decimal places.' });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'other-id', amount: '1', gcash_number: '09123456789' })
       .expect(403, { success: false, error: 'The transaction does not match this signed session.' });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', 'Bearer not-a-jwt')
       .send({})
       .expect(401, { success: false, error: 'This withdrawal session is invalid or has expired.' });
     const missingClaim = await jwt.signAsync({ sub: account }, { secret: INTERACTIVE_SECRET, algorithm: 'HS256' });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${missingClaim}`)
       .send({ transaction_id: 'withdraw-submit-2', amount: '1', gcash_number: '09123456789' })
       .expect(401, { success: false, error: 'This withdrawal session is invalid or has expired.' });
     const wrongSignature = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-submit-2' }, {
       secret: 'different-secret', algorithm: 'HS256', expiresIn: 900,
     });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${wrongSignature}`)
       .send({ transaction_id: 'withdraw-submit-2', amount: '1', gcash_number: '09123456789' })
       .expect(401, { success: false, error: 'This withdrawal session is invalid or has expired.' });
     const expired = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-submit-2' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: -1,
     });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${expired}`)
       .send({ transaction_id: 'withdraw-submit-2', amount: '1', gcash_number: '09123456789' })
       .expect(401, { success: false, error: 'This withdrawal session is invalid or has expired.' });
@@ -343,7 +343,7 @@ describe('Anchor routes (e2e)', () => {
     const interactive = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-cap-1' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    const response = await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    const response = await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'withdraw-cap-1', amount: '101', gcash_number: '09123456789' })
       .expect(400);
@@ -358,7 +358,7 @@ describe('Anchor routes (e2e)', () => {
     const interactive = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-daily-1' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    const limited = await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    const limited = await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'withdraw-daily-1', amount: '3', gcash_number: '09123456789' })
       .expect(400);
@@ -366,7 +366,7 @@ describe('Anchor routes (e2e)', () => {
     expect(updateMany).not.toHaveBeenCalled();
 
     findMany.mockResolvedValue([] as never);
-    const invalidPhone = await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    const invalidPhone = await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`)
       .send({ transaction_id: 'withdraw-daily-1', amount: '3', gcash_number: '12345' })
       .expect(400);
@@ -376,13 +376,13 @@ describe('Anchor routes (e2e)', () => {
   it('enforces ramp kill switches on interactive actions', async () => {
     configValues.WITHDRAW_ENABLED = 'false';
     const sep10 = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).post('/api/sep24/transactions/withdraw/interactive')
+    await request(app.getHttpServer()).post('/api/v2/sep24/transactions/withdraw/interactive')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ asset_code: 'PHPC' })
       .expect(503, { code: 'RAMP_LOCKED', error: 'Withdrawals are temporarily disabled for maintenance.' });
     configValues.WITHDRAW_ENABLED = 'true';
     configValues.RAMP_ENABLED = 'false';
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .send({ transaction_id: 'mock-disabled', amount: '1' })
       .expect(503, { code: 'RAMP_LOCKED', error: 'On/Off Ramp is temporarily disabled for maintenance.' });
   });
@@ -390,7 +390,7 @@ describe('Anchor routes (e2e)', () => {
   it('confirms pending_external withdrawals idempotently', async () => {
     findFirst.mockResolvedValue({ status: 'pending_external' } as never);
     const sep10 = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ transaction_id: 'withdraw-confirm-1', stellar_transaction_id: 'a'.repeat(64) })
       .expect(200, { success: true, status: 'pending_external' });
@@ -414,7 +414,7 @@ describe('Anchor routes (e2e)', () => {
     } as never);
     try {
       const sep10 = await jwt.signAsync({ sub: account });
-      await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+      await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
         .set('Authorization', `Bearer ${sep10}`)
         .send({ transaction_id: 'withdraw-confirm-valid', stellar_transaction_id: 'b'.repeat(64) })
         .expect(200, { success: true, status: 'pending_external' });
@@ -442,7 +442,7 @@ describe('Anchor routes (e2e)', () => {
     } as never);
     try {
       const sep10 = await jwt.signAsync({ sub: account });
-      await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+      await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
         .set('Authorization', `Bearer ${sep10}`)
         .send({ transaction_id: 'withdraw-confirm-mismatch', stellar_transaction_id: 'c'.repeat(64) })
         .expect(422, { success: false, error: 'The Stellar payment does not match this withdrawal.' });
@@ -454,11 +454,11 @@ describe('Anchor routes (e2e)', () => {
   });
 
   it('rejects confirmation without SEP-10 auth or with an invalid Stellar transaction hash', async () => {
-    await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
       .send({ transaction_id: 'withdraw-confirm-1', stellar_transaction_id: 'bad' })
       .expect(401, { success: false, error: 'A valid SEP-10 token is required.' });
     const sep10 = await jwt.signAsync({ sub: account });
-    await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
       .set('Authorization', `Bearer ${sep10}`)
       .send({ transaction_id: 'withdraw-confirm-1', stellar_transaction_id: 'bad' })
       .expect(400, { success: false, error: 'Valid transaction IDs are required.' });
@@ -469,32 +469,32 @@ describe('Anchor routes (e2e)', () => {
     const interactive = await jwt.signAsync({ sub: account, transaction_id: 'withdraw-malformed' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    await request(app.getHttpServer()).post('/api/anchor/submit-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/submit-withdraw')
       .set('Authorization', `Bearer ${interactive}`).set('Content-Type', 'application/json').send('{bad')
       .expect(400, { success: false, error: 'The request body must be valid JSON.' });
-    await request(app.getHttpServer()).post('/api/anchor/confirm-withdraw')
+    await request(app.getHttpServer()).post('/api/v2/anchor/confirm-withdraw')
       .set('Authorization', `Bearer ${sep10}`).set('Content-Type', 'application/json').send('{bad')
       .expect(400, { success: false, error: 'The request body must be valid JSON.' });
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .set('Content-Type', 'application/json').send('{bad')
       .expect(400, { success: false, error: 'Invalid JSON body.' });
   });
 
   it('rejects simulate-payment under Mainnet configuration even when the request asks for Testnet', async () => {
     configValues.STELLAR_NETWORK_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .send({ transaction_id: 'mock-client-value', amount: '2', network: 'testnet', token: 'ignored' })
       .expect(503, { success: false, error: 'This endpoint is only available on Stellar Testnet.' });
   });
 
   it('requires an interactive JWT for a non-mock simulate-payment request', async () => {
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .send({ transaction_id: 'deposit-no-token', amount: '5', network: 'testnet' })
       .expect(401, { success: false, error: 'Unauthorized: missing SEP-24 interactive token.' });
   });
 
   it('rejects missing and non-positive simulate-payment amounts before touching persistence', async () => {
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .send({ transaction_id: 'deposit-invalid', amount: '0' })
       .expect(400, { success: false, error: 'Amount must be a positive number.' });
     expect(findUnique).not.toHaveBeenCalled();
@@ -520,7 +520,7 @@ describe('Anchor routes (e2e)', () => {
       const token = await jwt.signAsync({ sub: account, transaction_id: 'deposit-settle-1' }, {
         secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
       });
-      await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+      await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
         .set('Authorization', `Bearer ${token}`)
         .send({ transaction_id: 'deposit-settle-1', amount: '12.5' })
         .expect(200, {
@@ -554,7 +554,7 @@ describe('Anchor routes (e2e)', () => {
       const token = await jwt.signAsync({ sub: account, transaction_id: 'deposit-db-failure-1' }, {
         secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
       });
-      await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+      await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
         .set('Authorization', `Bearer ${token}`)
         .send({ transaction_id: 'deposit-db-failure-1', amount: '3' })
         .expect(200, {
@@ -574,7 +574,7 @@ describe('Anchor routes (e2e)', () => {
     const token = await jwt.signAsync({ sub: account, transaction_id: 'deposit-replay-1' }, {
       secret: INTERACTIVE_SECRET, algorithm: 'HS256', expiresIn: 900,
     });
-    await request(app.getHttpServer()).post('/api/anchor/simulate-payment')
+    await request(app.getHttpServer()).post('/api/v2/anchor/simulate-payment')
       .set('Authorization', `Bearer ${token}`)
       .send({ transaction_id: 'deposit-replay-1', amount: '2' })
       .expect(409, { success: false, error: 'Interactive deposit session has already been submitted.' });

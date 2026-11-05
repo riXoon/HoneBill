@@ -1,3 +1,4 @@
+import { API_BASE_PATH } from '../../common/api-prefix';
 import {
   Injectable,
   InternalServerErrorException,
@@ -53,9 +54,9 @@ export class AnchorService {
 # See: https://stellar.org/protocol/sep-1
 
 NETWORK_PASSPHRASE="${this.config.get<string>('STELLAR_NETWORK_PASSPHRASE', 'Test SDF Network ; September 2015')}"
-WEB_AUTH_ENDPOINT="${appUrl}/api/auth"
+WEB_AUTH_ENDPOINT="${appUrl}${API_BASE_PATH}/auth"
 SIGNING_KEY="${signingKey}"
-TRANSFER_SERVER_SEP0024="${appUrl}/api/sep24"
+TRANSFER_SERVER_SEP0024="${appUrl}${API_BASE_PATH}/sep24"
 
 [[CURRENCIES]]
 code="PHPC"

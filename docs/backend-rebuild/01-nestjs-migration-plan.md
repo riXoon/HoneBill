@@ -17,7 +17,7 @@
 ## Ground rules
 
 1. **Legacy is read-only.** Read `apps/_legacy/backend` for reference, copy logic into Nest, never import across the boundary and never edit it.
-2. **API contract parity.** Keep the global prefix `/api`, the same paths, methods, request/response JSON, status codes and error shape. The mobile client in `apps/mobile/src/_legacy/services/api/*` must work against Nest without changes. Any intentional break goes in the Decision log first.
+2. **API contract parity.** Keep the same paths after the global prefix (now `/api/v2`, see Decision log), methods, request/response JSON, status codes and error shape. The mobile client in `apps/mobile/src/_legacy/services/api/*` must work against Nest without changes. Any intentional break goes in the Decision log first.
 3. **Same database.** Copy `prisma/schema.prisma` and `prisma/migrations/` as-is. No schema changes during the migration; new migrations only after cutover.
 4. **Port tests with the code.** A module is not ☑ until its legacy tests are ported and passing.
 5. **Secrets stay out of git.** Same env var names as legacy unless the Decision log says otherwise.
@@ -302,6 +302,7 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-27 | Compare unknown-route behavior by status only; retain each framework's native 404 body | Next.js and NestJS format unmatched-route bodies differently, while both correctly return 404 |
 | 2026-10-29 | Preserve public transfer confirmation and settlement routes during Phase 3; confirm only advances a stored transfer after Soroban RPC success, while settlement requires a valid sender Ed25519 voucher and configured relayer | The legacy routes have no SEP-10 guard. Confirmation changes transaction metadata only, and settlement authorization is carried by the signed offline voucher; adding session authentication would break parity without adding transaction authorization |
 | 2026-10-31 | Protect `POST /api/sms/dispatch` with `SMS_DISPATCH_SECRET` in `x-sms-dispatch-secret`; keep it unavailable when the secret is unset | QStash signatures are removed with the queue migration. A dedicated shared secret protects the compatibility endpoint while dispatch is still called over HTTP; BullMQ worker delivery remains the preferred internal path. |
+| 2026-11-06 | Nest global prefix changes from `/api` to `/api/v2` (ground rule 2 no longer applies to the prefix; paths, methods, JSON and status codes after the prefix are unchanged) | Version the new API so it can run beside the legacy `/api` service. Mobile clients must add `/v2` when pointed at Nest |
 
 ## Change log
 

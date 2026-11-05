@@ -7,7 +7,7 @@ import { AccountsService } from '../../src/modules/accounts/accounts.service.js'
 import { AuthController } from '../../src/modules/auth/auth.controller.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 
-describe('/api/auth unsupported methods (e2e)', () => {
+describe('/api/v2/auth unsupported methods (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
@@ -20,7 +20,7 @@ describe('/api/auth unsupported methods (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
@@ -30,13 +30,13 @@ describe('/api/auth unsupported methods (e2e)', () => {
   });
 
   it('returns an empty 405 for PUT', async () => {
-    const response = await request(app.getHttpServer()).put('/api/auth');
+    const response = await request(app.getHttpServer()).put('/api/v2/auth');
     expect(response.status).toBe(405);
     expect(response.text).toBe('');
   });
 
   it('returns an empty 405 for DELETE', async () => {
-    const response = await request(app.getHttpServer()).delete('/api/auth');
+    const response = await request(app.getHttpServer()).delete('/api/v2/auth');
     expect(response.status).toBe(405);
     expect(response.text).toBe('');
   });

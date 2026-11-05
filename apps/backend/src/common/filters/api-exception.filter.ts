@@ -8,14 +8,15 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiResponseException } from '../exceptions/api-response.exception.js';
+import { API_BASE_PATH } from '../api-prefix';
 
 const BAD_JSON_BODIES: Record<string, unknown> = {
-  '/api/auth': {
+  [`${API_BASE_PATH}/auth`]: {
     error: 'Bad Request',
     message: "Request body must contain a valid 'transaction' field.",
   },
-  '/api/auth/pin/verify': { error: 'A valid phone number and PIN are required.' },
-  '/api/register': { error: 'Invalid JSON body' },
+  [`${API_BASE_PATH}/auth/pin/verify`]: { error: 'A valid phone number and PIN are required.' },
+  [`${API_BASE_PATH}/register`]: { error: 'Invalid JSON body' },
 };
 
 @Catch()
@@ -40,7 +41,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     if (
       request.method === 'POST' &&
-      request.path === '/api/register' &&
+      request.path === `${API_BASE_PATH}/register` &&
       exception instanceof HttpException &&
       exception.getStatus() === HttpStatus.BAD_REQUEST &&
       isJsonParserMessage(exception.message)

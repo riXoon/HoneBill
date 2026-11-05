@@ -99,7 +99,7 @@ npm run start:dev --workspace=backend
 In a second terminal or Postman, send **GET** to:
 
 ```text
-http://localhost:3001/api/health
+http://localhost:3001/api/v2/health
 ```
 
 Look for HTTP 200 and healthy database, Redis, and Soroban RPC checks. If health is degraded, check `DATABASE_URL`, `REDIS_URL`, and the Soroban RPC URL before proceeding.
@@ -117,14 +117,14 @@ Recommended first requests:
 
 | Method | URL | Purpose |
 |---|---|---|
-| GET | `http://localhost:3001/api/health` | Verify app and dependencies |
-| POST | `http://localhost:3001/api/engine/deposit` | Prepare a deposit transaction |
-| POST | `http://localhost:3001/api/engine/withdraw` | Prepare a withdrawal transaction |
-| POST | `http://localhost:3001/api/engine/transfer` | Prepare an online transfer |
-| GET | `http://localhost:3001/api/auth?account=<ACCOUNT_G_ADDRESS>` | Start SEP-10 login |
-| POST / PATCH | `http://localhost:3001/api/engine/offline-key` | Enroll and confirm a device key |
-| POST | `http://localhost:3001/api/engine/recipient-registry` | Register receiver short ID on-chain |
-| POST | `http://localhost:3001/api/wallet/transfers/confirm` | Confirm an online transfer |
+| GET | `http://localhost:3001/api/v2/health` | Verify app and dependencies |
+| POST | `http://localhost:3001/api/v2/engine/deposit` | Prepare a deposit transaction |
+| POST | `http://localhost:3001/api/v2/engine/withdraw` | Prepare a withdrawal transaction |
+| POST | `http://localhost:3001/api/v2/engine/transfer` | Prepare an online transfer |
+| GET | `http://localhost:3001/api/v2/auth?account=<ACCOUNT_G_ADDRESS>` | Start SEP-10 login |
+| POST / PATCH | `http://localhost:3001/api/v2/engine/offline-key` | Enroll and confirm a device key |
+| POST | `http://localhost:3001/api/v2/engine/recipient-registry` | Register receiver short ID on-chain |
+| POST | `http://localhost:3001/api/v2/wallet/transfers/confirm` | Confirm an online transfer |
 
 Replace angle-bracket placeholders with your test values; do not include the brackets.
 
@@ -134,7 +134,7 @@ These routes require an `Authorization` header whose value is `Bearer <Base64 si
 
 ### Deposit
 
-Use **POST** `/api/engine/deposit`, then **Body → raw → JSON**:
+Use **POST** `/api/v2/v2/engine/deposit`, then **Body → raw → JSON**:
 
 ```json
 {
@@ -155,7 +155,7 @@ A successful response contains `xdr`. Have the sender wallet sign and submit tha
 
 ### Withdraw
 
-Use **POST** `/api/engine/withdraw` with JSON fields `senderPublicKey`, `tokenAddress`, and `amountStroops`. Sign:
+Use **POST** `/api/v2/v2/engine/withdraw` with JSON fields `senderPublicKey`, `tokenAddress`, and `amountStroops`. Sign:
 
 ```text
 withdraw:<senderPublicKey>:<amountStroops>
@@ -165,7 +165,7 @@ Sign and submit the returned XDR with the sender wallet. Attempting to withdraw 
 
 ### Online transfer
 
-Use **POST** `/api/engine/transfer` with JSON:
+Use **POST** `/api/v2/v2/engine/transfer` with JSON:
 
 ```json
 {
@@ -184,7 +184,7 @@ Sign the exact message:
 transfer:v2:online:<tokenAddress>:<senderPublicKey>:<recipientPublicKey>:<amountStroops>
 ```
 
-The response contains `xdr` and `txHash`. Sign and submit the XDR using the sender wallet, then make **POST** `/api/wallet/transfers/confirm` with:
+The response contains `xdr` and `txHash`. Sign and submit the XDR using the sender wallet, then make **POST** `/api/v2/v2/wallet/transfers/confirm` with:
 
 ```json
 {"txHash":"<txHash from the transfer response>"}
@@ -198,7 +198,7 @@ For failure checks, try omitting the authorization header (401), using an invali
 
 ### Get a JWT
 
-Send **GET** `/api/auth?account=<account G-address>`. The response contains a challenge transaction. Sign that challenge with the matching account wallet. Then send **POST** `/api/auth` with **Body → raw → JSON**:
+Send **GET** `/api/v2/v2/auth?account=<account G-address>`. The response contains a challenge transaction. Sign that challenge with the matching account wallet. Then send **POST** `/api/v2/v2/auth` with **Body → raw → JSON**:
 
 ```json
 {"transaction":"<signed challenge XDR>"}
@@ -212,7 +212,7 @@ Authorization: Bearer <JWT>
 
 ### Enroll the offline device key
 
-Send **POST** `/api/engine/offline-key` with:
+Send **POST** `/api/v2/v2/engine/offline-key` with:
 
 ```json
 {"offlineDeviceKey":"<device G-address>"}
@@ -222,7 +222,7 @@ The first call should return `rotation_required` and an `xdr`. Sign and submit t
 
 ### Register the receiver
 
-Authenticate as the receiver and send **POST** `/api/engine/recipient-registry` with the JWT header and no body. The first call should return `registered`; another call should return `already_registered`. Verify the mapping using the contract's `get_recipient` read method.
+Authenticate as the receiver and send **POST** `/api/v2/v2/engine/recipient-registry` with the JWT header and no body. The first call should return `registered`; another call should return `already_registered`. Verify the mapping using the contract's `get_recipient` read method.
 
 ## 8. Verify contract state
 
@@ -239,8 +239,8 @@ The current mobile app is frontend-only and does not create offline vouchers. A 
 
 There is an important route distinction in the current backend:
 
-- `POST /api/sms/dispatch` sends an **outbound** SMS through TextBee. It does not enqueue a settlement.
-- An incoming TextBee message reaches `POST /api/sms/webhook`; that route validates the signed webhook and voucher, then enqueues the settlement.
+- `POST /api/v2/sms/dispatch` sends an **outbound** SMS through TextBee. It does not enqueue a settlement.
+- An incoming TextBee message reaches `POST /api/v2/sms/webhook`; that route validates the signed webhook and voucher, then enqueues the settlement.
 
 For the live settlement run, first make sure the sender deposited PHPC and enrolled the device key, the receiver is registered on-chain, the relayer is funded and whitelisted, and `QUEUE_ENABLED=true` with working `REDIS_URL`. Then send a valid signed voucher through the configured TextBee inbound webhook flow. Check the `engine-settlement` queue and Neon `Settlement` row: it should be saved as `PENDING` with transaction hash and signed XDR before broadcast, then become `SETTLED`. Confirm the sender vault falls by amount plus toll and receiver token balance rises.
 
@@ -248,6 +248,6 @@ Idempotency, expired-voucher, replay, transient-retry, and crash-recovery checks
 
 ## 10. Compare legacy and Nest responses
 
-For each route required by the Phase 4 plan, send the same safe request to the legacy service (`https://pijin-api.vercel.app`) and the local Nest service (`http://localhost:3001`). Compare HTTP status and JSON fields. Do not repeat mutating requests against legacy production with real accounts or secrets; use only safe validation/auth checks unless a disposable legacy test environment and explicit test accounts are available.
+Note: the legacy service serves routes under `/api/...`, while the Nest backend now serves them under `/api/v2/...`. For each route required by the Phase 4 plan, send the same safe request to the legacy service (`https://pijin-api.vercel.app`) and the local Nest service (`http://localhost:3001`). Compare HTTP status and JSON fields. Do not repeat mutating requests against legacy production with real accounts or secrets; use only safe validation/auth checks unless a disposable legacy test environment and explicit test accounts are available.
 
 Record completed live checks in the Phase 4 row of `docs/backend-rebuild/01-nestjs-migration-plan.md` only after the checks actually pass.
