@@ -3,7 +3,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { TransferForm } from '../components/send/TransferForm';
 import { CardTitleIcon } from '../components/ui/smallIcons';
-import { formatPeso } from '../mocks/send';
 import type { RootStackParamList } from '../navigation/types';
 
 // Figma: Transfer to Online (870:3328), 402x874.
@@ -15,11 +14,10 @@ export function TransferToOnlineScreen({ navigation }: NativeStackScreenProps<Ro
       icon={<CardTitleIcon />}
       mood="phone"
       onBack={navigation.goBack}
-      // Mock: there is no confirmation frame or ledger yet, so say what would happen and go home.
-      onConfirm={(amount) =>
-        Alert.alert('Transfer queued (mock)', `${formatPeso(amount)} would move from your offline wallet to your online wallet.`, [
-          { text: 'OK', onPress: navigation.goBack },
-        ])
+      // Withdrawing from the vault is `/engine/withdraw` (prepare, sign with the wallet key, submit), which is not
+      // wired. Say so rather than showing a confirmation for money that never moved.
+      onConfirm={() =>
+        Alert.alert('Not available yet', 'Moving funds to your online wallet is not available yet. No money has been moved.')
       }
     />
   );

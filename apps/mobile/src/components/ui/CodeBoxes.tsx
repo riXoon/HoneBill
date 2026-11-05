@@ -19,12 +19,14 @@ type CodeBoxesProps = {
  */
 export function CodeBoxes({ length, value, onChange, secure, autoFocus, accessibilityLabel }: CodeBoxesProps) {
   const inputRef = useRef<TextInput>(null);
+  // Six 48 dp boxes would overflow the 322 dp content column, so longer codes use slimmer boxes.
+  const compact = length > 4;
 
   return (
     <Pressable onPress={() => inputRef.current?.focus()} accessible={false} style={styles.wrap}>
-      <View style={styles.row} pointerEvents="none">
+      <View style={[styles.row, compact && styles.rowCompact]} pointerEvents="none">
         {Array.from({ length }, (_, i) => (
-          <View key={i} style={styles.box}>
+          <View key={i} style={[styles.box, compact && styles.boxCompact]}>
             <Text style={styles.digit}>{value[i] ? (secure ? '•' : value[i]) : ''}</Text>
           </View>
         ))}
@@ -59,6 +61,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rowCompact: { gap: 8 },
+  boxCompact: { width: 42 },
   digit: { fontFamily: fonts.regular, fontSize: 20, color: colors.primary },
   hiddenInput: { position: 'absolute', width: '100%', height: '100%', opacity: 0.01 },
 });

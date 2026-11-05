@@ -11,21 +11,26 @@ type ButtonProps = {
   size?: 'default' | 'large';
   /** Optional icon shown after the label. */
   icon?: ReactNode;
+  /** Ignores presses and dims the button, e.g. while a request is in flight. */
+  disabled?: boolean;
 };
 
-export function Button({ label, onPress, variant = 'primary', size = 'default', icon }: ButtonProps) {
+export function Button({ label, onPress, variant = 'primary', size = 'default', icon, disabled }: ButtonProps) {
   const isPrimary = variant === 'primary';
   const large = size === 'large';
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
         { paddingVertical: large ? 16 : 14 },
         isPrimary ? styles.primary : styles.outline,
         pressed && styles.pressed,
+        disabled && styles.disabled,
       ]}
     >
       <Text
@@ -65,5 +70,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   pressed: { opacity: 0.85 },
+  disabled: { opacity: 0.5 },
   label: { fontSize: 15, textAlign: 'center' },
 });

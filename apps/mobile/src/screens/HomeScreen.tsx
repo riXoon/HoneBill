@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,9 +13,15 @@ import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
-import { mockHome } from '../mocks/home';
+import { fullName, greetingName, useAuth } from '../context/AuthContext';
+import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
+import { SOURCE_LABEL } from '../types/transaction';
+import { formatAmount, formatRelative } from '../utils/format';
+
+/** How many entries "Recent Activity" shows; the full list is on the History tab. */
+const RECENT_COUNT = 3;
 
 // Figma: Home Page - Online (870:3102) and Home Page - Offline (870:3140), 402x874.
 const FADE_MS = 250;
@@ -29,10 +35,21 @@ const QUICK_ACTION_ROUTE = {
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  // Mock-only: the real mode will come from connectivity. For now tapping the cards switches it.
+  const { activeAccount } = useAuth();
+  const { balances, transactions, status, error, refresh } = useWalletData();
+  // Tapping the cards switches the view. It is not tied to connectivity yet (that needs a NetInfo hookup).
   const [mode, setMode] = useState<BalanceMode>('online');
   const online = mode === 'online';
   const toggle = () => setMode((m) => (m === 'online' ? 'offline' : 'online'));
+
+  // Pick up changes made since the last visit (a settled transfer, a top-up); skipped while the data is fresh.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  const recent = transactions.slice(0, RECENT_COUNT);
 
   return (
     <View style={styles.root}>
@@ -44,6 +61,14 @@ export function HomeScreen() {
           { paddingTop: Math.max(70, insets.top + 24), paddingBottom: NAV_BAR_HEIGHT + Math.max(24, insets.bottom) + 20 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={status === 'loading'}
+            onRefresh={() => void refresh({ force: true })}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         {/* Online: Honi peeks in from the top right, tilted -20.87 degrees, behind the cards. */}
         {online ? (
@@ -60,7 +85,7 @@ export function HomeScreen() {
         <View style={styles.topBar}>
           <ProfileIcon color={colors.coral} size={48} />
           <View style={styles.topText}>
-            <Text style={styles.hello}>Hello, {mockHome.name}</Text>
+            <Text style={styles.hello}>Hello, {fullName(activeAccount) || greetingName(activeAccount)}</Text>
             <View style={styles.statusRow}>
               <View style={[styles.dot, { backgroundColor: online ? colors.statusOnline : colors.statusOffline }]} />
               <Text style={styles.status}>{online ? 'You are online' : 'You are offline'}</Text>
@@ -70,10 +95,16 @@ export function HomeScreen() {
 
         <BalanceCards
           mode={mode}
-          onlineBalance={mockHome.onlineBalance}
-          offlineBalance={mockHome.offlineBalance}
+          onlineBalance={balances?.online ?? null}
+          offlineBalance={balances?.offline ?? null}
+          status={status}
           onToggle={toggle}
         />
+        {error ? (
+          <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
+            {balances ? 'Could not refresh. Pull down to try again.' : error}
+          </Text>
+        ) : null}
 
         <QuickActions online={online} onPress={(key) => {
             // Top-up has no screen yet.
@@ -90,11 +121,21 @@ export function HomeScreen() {
                   See All
                 </Text>
               </View>
-              <View style={styles.activityList}>
-                {mockHome.activity.map(({ id, ...item }) => (
-                  <ActivityRow key={id} {...item} />
-                ))}
-              </View>
+              {recent.length === 0 ? (
+                <Text style={styles.empty}>{status === 'loading' ? 'Loading…' : 'Nothing to see here!'}</Text>
+              ) : (
+                <View style={styles.activityList}>
+                  {recent.map((tx) => (
+                    <ActivityRow
+                      key={tx.id}
+                      kind={tx.direction === 'in' ? 'received' : 'sent'}
+                      title={tx.description}
+                      body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}`}
+                      time={formatRelative(new Date(tx.timestamp))}
+                    />
+                  ))}
+                </View>
+              )}
             </Animated.View>
           ) : (
             <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
@@ -139,4 +180,5 @@ const styles = StyleSheet.create({
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
   empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
+  error: { width: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
 });

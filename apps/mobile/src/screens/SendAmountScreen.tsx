@@ -9,18 +9,13 @@ import { BalanceBar } from '../components/send/BalanceBar';
 import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { SendLayout } from '../components/send/SendLayout';
-import { InfoIcon, MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
+import { MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
-import {
-  AVAILABLE_BALANCE,
-  NOTE_MAX,
-  SERVICE_FEE,
-  TRANSFER_LIMIT,
-  findRecipientById,
-  formatPeso,
-  formatWhole,
-} from '../mocks/send';
+import { NOTE_MAX } from '../config/limits';
+import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
+import { formatPeso, formatWhole } from '../utils/format';
+import { findRecipientById } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 2 - Amount (870:3271), 402x874.
@@ -28,6 +23,7 @@ const FADE_MS = 250;
 
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
+  const { balances } = useWalletData();
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
   const [favorite, setFavorite] = useState(recipient?.favorite ?? false);
@@ -38,9 +34,12 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   if (!recipient) return null;
 
   const amount = Number(amountText) || 0;
-  const balanceAfter = AVAILABLE_BALANCE - (amount > 0 ? amount + SERVICE_FEE : 0);
+  // This flow sends offline funds (the vault), so the vault balance is what can be spent.
+  const available = balances?.offline ?? null;
+  const balanceAfter = available === null ? null : available - (amount > 0 ? amount : 0);
 
-  const problem = amountProblem(amount, AVAILABLE_BALANCE - SERVICE_FEE);
+  // Without a balance read from the server there is nothing to check an amount against.
+  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
   const valid = problem === null;
 
   return (
@@ -104,13 +103,15 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           ) : null}
         </View>
 
-        <BalanceBar caption={`Balance after: ₱${formatWhole(Math.max(0, balanceAfter))}`} ratio={balanceAfter / AVAILABLE_BALANCE} />
+        <BalanceBar
+          caption={`Balance after: ${balanceAfter === null ? '--' : `₱${formatWhole(Math.max(0, balanceAfter))}`}`}
+          ratio={available && balanceAfter !== null ? balanceAfter / available : 0}
+        />
 
         <AmountField value={amountText} onChangeText={setAmountText} />
 
         <View>
-          <Text style={styles.hint}>Available Balance: PHP {formatWhole(AVAILABLE_BALANCE)}</Text>
-          <Text style={styles.hint}>Transfer Limit: PHP {formatWhole(TRANSFER_LIMIT)}</Text>
+          <Text style={styles.hint}>Available Balance: PHP {available === null ? '--' : formatWhole(available)}</Text>
         </View>
       </GlassCard>
 
@@ -131,11 +132,6 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           />
         </OutlinedField>
       </GlassCard>
-
-      <View style={styles.feeRow}>
-        <InfoIcon color={colors.textMuted} />
-        <Text style={styles.feeText}>Please note that a ₱{SERVICE_FEE.toFixed(2)} service fee will be deducted.</Text>
-      </View>
     </SendLayout>
   );
 }
@@ -160,6 +156,4 @@ const styles = StyleSheet.create({
   noteHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   noteLabel: { fontFamily: fonts.regular, fontSize: 7, color: colors.textMuted },
   noteInput: { flex: 1, padding: 0, fontFamily: fonts.regular, fontSize: 12, color: colors.text },
-  feeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10 },
-  feeText: { flex: 1, fontFamily: fonts.medium, fontSize: 10, color: colors.textMuted },
 });

@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { OFFLINE_WALLET_BALANCE, ONLINE_WALLET_BALANCE, type WalletKind } from '../../mocks/wallet';
-import { TRANSFER_LIMIT, formatPeso, formatWhole } from '../../mocks/send';
+import { useWalletData } from '../../context/WalletDataContext';
 import { colors, fonts } from '../../theme';
+import { formatPeso, formatWhole } from '../../utils/format';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
 import { InfoIcon } from '../ui/smallIcons';
 import { SwipeToEnter } from '../ui/SwipeToEnter';
@@ -14,7 +14,7 @@ import { GlassCard } from './GlassCard';
 import { SendLayout } from './SendLayout';
 
 const FADE_MS = 250;
-const BALANCES: Record<WalletKind, number> = { online: ONLINE_WALLET_BALANCE, offline: OFFLINE_WALLET_BALANCE };
+export type WalletKind = 'online' | 'offline';
 const NAMES: Record<WalletKind, string> = { online: 'Online', offline: 'Offline' };
 
 type TransferFormProps = {
@@ -36,13 +36,16 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm }: Trans
   const from: WalletKind = to === 'online' ? 'offline' : 'online';
   const [amountText, setAmountText] = useState('');
 
+  const { balances } = useWalletData();
+
   const amount = Number(amountText) || 0;
-  const available = BALANCES[from];
-  const problem = amountProblem(amount, available);
+  const available = balances ? balances[from] : null;
+  // Without balances read from the server there is nothing to check an amount against.
+  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
   const valid = problem === null;
   // The bar shows how much of the user's combined funds sit in the receiving wallet afterwards.
-  const destinationAfter = BALANCES[to] + (valid ? amount : 0);
-  const total = BALANCES.online + BALANCES.offline;
+  const destinationAfter = balances ? balances[to] + (valid ? amount : 0) : null;
+  const total = balances ? balances.online + balances.offline : 0;
 
   return (
     <SendLayout
@@ -71,15 +74,17 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm }: Trans
           ) : null}
         </View>
 
-        <BalanceBar caption={`${NAMES[to]} Balance after: ₱${formatWhole(destinationAfter)}`} ratio={destinationAfter / total} />
+        <BalanceBar
+          caption={`${NAMES[to]} Balance after: ${destinationAfter === null ? '--' : `₱${formatWhole(destinationAfter)}`}`}
+          ratio={destinationAfter !== null && total > 0 ? destinationAfter / total : 0}
+        />
 
         <AmountField value={amountText} onChangeText={setAmountText} />
 
         <View>
           <Text style={styles.hint}>
-            Available Balance {NAMES[from]}: PHP {formatWhole(available)}
+            Available Balance {NAMES[from]}: PHP {available === null ? '--' : formatWhole(available)}
           </Text>
-          <Text style={styles.hint}>Transfer Limit: PHP {formatWhole(TRANSFER_LIMIT)}</Text>
         </View>
       </GlassCard>
 

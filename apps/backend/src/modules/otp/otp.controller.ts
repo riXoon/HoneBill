@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@n
 import type { Request } from 'express';
 import { OtpService } from './otp.service.js';
 import { PinVerifyRateLimitGuard } from '../../common/guards/pin-verify-rate-limit.guard.js';
+import { SendOtpDto } from './dto/otp.dto.js';
 
 @Controller('otp')
 export class OtpController {

@@ -15,6 +15,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AuthProvider } from './src/context/AuthContext';
+import { WalletDataProvider } from './src/context/WalletDataContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
@@ -24,6 +25,8 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { MpinCreationScreen } from './src/screens/MpinCreationScreen';
 import { OtpScreen } from './src/screens/OtpScreen';
 import { QrScanScreen } from './src/screens/QrScanScreen';
+import { RecoveryPhraseScreen } from './src/screens/RecoveryPhraseScreen';
+import { RecoveryQuizScreen } from './src/screens/RecoveryQuizScreen';
 import { ReceiveQrScreen } from './src/screens/ReceiveQrScreen';
 import { ReceiveScreen } from './src/screens/ReceiveScreen';
 import { TransactionDetailScreen } from './src/screens/TransactionDetailScreen';
@@ -42,7 +45,7 @@ import { fonts } from './src/theme';
 installGlobalErrorHandler();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// Frontend-only for now: no database, sync, API or Stellar code runs at startup.
+// No database, sync or Stellar code runs at startup; data is fetched per account after sign-in.
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function RootNavigator() {
@@ -55,8 +58,11 @@ function RootNavigator() {
         <Stack.Screen name="Otp" component={OtpScreen} />
         <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
         <Stack.Screen name="MpinCreation" component={MpinCreationScreen} />
+        <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} options={{ gestureEnabled: false }} />
+        <Stack.Screen name="RecoveryQuiz" component={RecoveryQuizScreen} />
         <Stack.Screen name="AccountConfirmation" component={AccountConfirmationScreen} />
-        <Stack.Screen name="Tabs" component={MainTabs} />
+        {/* Fades in (instead of the default slide) so entering the app continues the "Enter HoneBill" light. */}
+        <Stack.Screen name="Tabs" component={MainTabs} options={{ animation: 'fade' }} />
         <Stack.Screen name="QrScan" component={QrScanScreen} />
         <Stack.Screen name="SendTo" component={SendToScreen} />
         <Stack.Screen name="SendAmount" component={SendAmountScreen} />
@@ -96,7 +102,9 @@ export default function App() {
       <SafeAreaProvider>
         <ErrorBoundary>
           <AuthProvider>
-            <RootNavigator />
+            <WalletDataProvider>
+              <RootNavigator />
+            </WalletDataProvider>
             <StatusBar style="dark" />
           </AuthProvider>
         </ErrorBoundary>

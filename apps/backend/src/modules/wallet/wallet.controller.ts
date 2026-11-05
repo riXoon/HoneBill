@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { WalletService } from './wallet.util.js';
 import { ApiThrottlerGuard } from '../../common/guards/api-throttler.guard.js';
+import { ConfirmTransferDto } from './dto/confirm-transfer.dto.js';
 
 @Controller()
 export class WalletController {

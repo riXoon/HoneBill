@@ -2,17 +2,24 @@ import { Alert, Share, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GlassCard } from '../components/send/GlassCard';
-import { Avatar } from '../components/send/Avatar';
 import { ReceiptBarcode, VoucherEdge } from '../components/send/ReceiptBarcode';
 import { SendLayout } from '../components/send/SendLayout';
 import { Button } from '../components/ui/Button';
 import { DownloadIcon, OfflineFundsBadge, ReceiptIcon } from '../components/ui/smallIcons';
-import { findRecipientById, formatPeso } from '../mocks/send';
-import { SOURCE_LABEL, findTransactionById } from '../mocks/transactions';
+import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
+import { SOURCE_LABEL, type TransactionStatus } from '../types/transaction';
+import { formatAmount, formatReceiptDate, shortRef } from '../utils/format';
 
 // Detail page for one Transactions row. Built from the Receipt voucher (870:2835) so it shares the brand look.
+const STATUS_LABEL: Record<TransactionStatus, string> = { completed: 'Completed', pending: 'Pending', failed: 'Failed' };
+const STATUS_COLOR: Record<TransactionStatus, string> = {
+  completed: colors.success,
+  pending: colors.primary,
+  failed: colors.coral,
+};
+
 function DetailRow({ label, value, strong = true }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.row}>
@@ -23,24 +30,32 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 }
 
 export function TransactionDetailScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'TransactionDetail'>) {
-  const tx = findTransactionById(route.params.id);
+  const { transactions } = useWalletData();
+  const tx = transactions.find((t) => t.id === route.params.id);
   if (!tx) return null;
 
-  const counterparty = findRecipientById(tx.counterpartyId);
   const incoming = tx.direction === 'in';
   const offline = tx.source === 'offline';
-  const pending = tx.status === 'pending';
-  const total = incoming ? tx.amount : tx.amount + tx.fee;
-  const signed = `${incoming ? '+' : '-'} ${formatPeso(tx.amount)}`;
-  const when = `${tx.date} at ${tx.time}`;
-  const ledger = pending ? 'Pending sync' : offline ? 'Synced' : 'Confirmed';
+  const amount = formatAmount(tx.amount, tx.assetCode);
+  const signed = `${incoming ? '+' : '-'} ${amount}`;
+  const when = formatReceiptDate(new Date(tx.timestamp));
+  const ledger =
+    tx.status === 'failed'
+      ? 'Failed'
+      : tx.status === 'pending'
+        ? offline
+          ? 'Pending sync'
+          : 'Pending'
+        : offline
+          ? 'Synced'
+          : 'Confirmed';
 
   const share = () =>
     void Share.share({
-      message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${formatPeso(tx.amount)}\n${counterparty?.name ?? ''}\nRef No. ${tx.ref}\n${when}`,
+      message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${amount}\n${tx.description}\nRef No. ${tx.ref}\n${when}`,
     });
-  // Mock: there is no support flow yet.
-  const report = () => Alert.alert('Report a problem', `Support for Ref No. ${tx.ref} is not available yet.`);
+  // There is no support flow in the app or backend yet, so say so instead of pretending to file a report.
+  const report = () => Alert.alert('Report a problem', `Support for Ref No. ${shortRef(tx.ref)} is not available yet.`);
 
   return (
     <SendLayout
@@ -50,13 +65,6 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
       gap={12}
       footer={
         <View style={styles.actions}>
-          {counterparty ? (
-            <Button
-              label="Send again"
-              size="large"
-              onPress={() => navigation.navigate('SendAmount', { recipientId: counterparty.id })}
-            />
-          ) : null}
           <Button label="Share receipt" size="large" variant="outline" icon={<DownloadIcon color={colors.primary} />} onPress={share} />
           <Text style={styles.report} accessibilityRole="button" onPress={report}>
             Report a problem
@@ -66,47 +74,32 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
     >
       <GlassCard style={styles.card}>
         <View style={styles.badges}>
-          <View style={[styles.status, { backgroundColor: pending ? colors.primary : colors.success }]}>
-            <Text style={styles.statusText}>{pending ? 'Pending' : 'Completed'}</Text>
+          <View style={[styles.status, { backgroundColor: STATUS_COLOR[tx.status] }]}>
+            <Text style={styles.statusText}>{STATUS_LABEL[tx.status]}</Text>
           </View>
           {offline ? <OfflineFundsBadge /> : null}
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.amount} accessibilityLabel={`${incoming ? 'Received' : 'Sent'} ${formatPeso(tx.amount)}`}>
+          <Text style={styles.amount} accessibilityLabel={`${incoming ? 'Received' : 'Sent'} ${amount}`}>
             {signed}
           </Text>
           <Text style={styles.when}>{when}</Text>
         </View>
 
-        {counterparty ? (
-          <View style={styles.counterparty}>
-            <Avatar initials={counterparty.initials} color={counterparty.color} />
-            <View style={styles.counterpartyText}>
-              <Text style={styles.counterpartyLabel}>{incoming ? 'From' : 'To'}</Text>
-              <Text style={styles.counterpartyName}>{counterparty.name}</Text>
-              <Text style={styles.counterpartyMeta}>
-                {counterparty.provider} · {counterparty.account}
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
         <View style={styles.voucher}>
           <View style={styles.details}>
             <DetailRow label="Type" value={incoming ? 'Received' : 'Sent'} />
             <DetailRow label="Source" value={SOURCE_LABEL[tx.source]} />
-            <DetailRow label="Note" value={tx.description} strong={false} />
-            <DetailRow label="Amount" value={formatPeso(tx.amount)} />
-            <DetailRow label="Service Fee" value={formatPeso(tx.fee)} />
-            <DetailRow label="Total" value={formatPeso(total)} />
+            <DetailRow label="Description" value={tx.description} strong={false} />
+            <DetailRow label="Amount" value={amount} />
             <DetailRow label={offline ? 'Sync Status' : 'Stellar Ledger'} value={ledger} />
           </View>
           <View style={styles.divider} />
           <View style={styles.identifier}>
             <ReceiptBarcode />
             <View style={styles.identifierText}>
-              <Text style={styles.identifierLine}>Ref No. {tx.ref}</Text>
+              <Text style={styles.identifierLine}>Ref No. {shortRef(tx.ref)}</Text>
               <Text style={styles.identifierLine}>{when}</Text>
             </View>
           </View>
@@ -127,11 +120,6 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 4 },
   amount: { fontFamily: fonts.semibold, fontSize: 28, color: colors.text },
   when: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  counterparty: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 },
-  counterpartyText: { flex: 1, gap: 2 },
-  counterpartyLabel: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase' },
-  counterpartyName: { fontFamily: fonts.medium, fontSize: 12, color: colors.text },
-  counterpartyMeta: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
 
   voucher: {
     width: '100%',

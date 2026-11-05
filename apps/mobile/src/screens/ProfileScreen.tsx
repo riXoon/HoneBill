@@ -13,9 +13,9 @@ import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, WalletIcon } from '../components/ui/smallIcons';
-import { useAuth } from '../context/AuthContext';
-import { mockProfile } from '../mocks/profile';
+import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
+import { formatPhoneDisplay } from '../services/accountPhone';
 import { colors, fonts } from '../theme';
 
 // Figma: Profile (942:5362), 402x874. Positions below are read off the frame, relative to the
@@ -69,7 +69,10 @@ function MenuRow({ icon, label, trailing, onPress, tinted, accessibilityLabel }:
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { logout } = useAuth();
+  const { activeAccount, logout } = useAuth();
+  const address = activeAccount?.stellarPublicKey ?? '';
+  // Shortened the way the design prints it: start, ellipsis, end.
+  const addressShort = address ? `${address.slice(0, 12)}...${address.slice(-10)}` : '';
 
   const signOut = async () => {
     await logout();
@@ -80,7 +83,8 @@ export function ProfileScreen() {
   };
 
   const copyAddress = async () => {
-    await Clipboard.setStringAsync(mockProfile.vaultAddress);
+    if (!address) return;
+    await Clipboard.setStringAsync(address);
     AccessibilityInfo.announceForAccessibility('Vault address copied');
   };
 
@@ -131,11 +135,11 @@ export function ProfileScreen() {
               </View>
             </View>
             <View style={styles.details}>
-              <Text style={styles.name}>{mockProfile.name}</Text>
-              <Text style={styles.phone}>{mockProfile.phone}</Text>
+              <Text style={styles.name}>{fullName(activeAccount)}</Text>
+              <Text style={styles.phone}>{activeAccount?.phone ? formatPhoneDisplay(activeAccount.phone) : ''}</Text>
               <View style={styles.walletIdBox}>
                 <Text style={styles.walletId}>
-                  <Text style={styles.walletIdLabel}>Wallet ID</Text>: {mockProfile.walletId}
+                  <Text style={styles.walletIdLabel}>Wallet ID</Text>: {activeAccount?.shortId ?? ''}
                 </Text>
               </View>
             </View>
@@ -152,7 +156,7 @@ export function ProfileScreen() {
             <MenuRow
               tinted
               icon={<View style={styles.glyph}><LockIcon /></View>}
-              label={mockProfile.vaultAddressShort}
+              label={addressShort}
               accessibilityLabel="Copy vault address"
               onPress={copyAddress}
               trailing={<CopyIcon />}
