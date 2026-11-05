@@ -7,6 +7,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { AppBackground } from '../components/ui/AppBackground';
 import { Keypad } from '../components/ui/Keypad';
+import { HiveEntrance } from '../components/transition/HiveEntrance';
+import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { PinDots } from '../components/ui/PinDots';
 import { Mascot } from '../components/mascot/Mascot';
 import { MPIN_LENGTH } from '../config/limits';
@@ -22,6 +24,8 @@ import { authenticateWithBiometrics, isBiometricAvailable } from '../services/bi
 import { colors, fonts, radius } from '../theme';
 
 // Figma: Login Page (870:3055), 402x874.
+/** Sign-in is something people do often, so its hive entrance runs a little shorter than the one after sign-up. */
+const SIGN_IN_HIVE_MS = 900;
 const logoHorizontal = require('../../assets/brand/logo-horizontal.png');
 
 /** Swap arrows from the Figma icon sprite (870:3065), cropped to the visible glyph. */
@@ -88,7 +92,10 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
 
   const changeNumber = useCallback(() => navigation.navigate('InputNumber', { mode: 'signin' }), [navigation]);
 
-  const signIn = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
+  const goHome = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
+  // Success (MPIN or fingerprint) plays the honeycomb entrance, then goes to Home. Home's data has been loading since
+  // the account was set, so it is usually ready by the time the animation ends.
+  const { entering, progress, start: enterHive } = useHiveEntrance(goHome, SIGN_IN_HIVE_MS);
 
   const submitPin = useCallback(
     async (value: string) => {
@@ -109,7 +116,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
           lastName: account.lastName,
           phone,
         });
-        signIn();
+        void enterHive();
       } catch (e) {
         if (isAborted(e)) return;
         setPin('');
@@ -118,7 +125,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
         setBusy(false);
       }
     },
-    [login, phone, signIn],
+    [login, phone, enterHive],
   );
 
   useEffect(() => {
@@ -136,12 +143,12 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
   const unlockable = biometricSupported && stored !== null && phone != null && stored.phone === phone;
 
   const signInWithBiometrics = useCallback(async () => {
-    if (!stored) return;
+    if (!stored || entering) return;
     if (await authenticateWithBiometrics()) {
       await login(stored);
-      signIn();
+      void enterHive();
     }
-  }, [stored, login, signIn]);
+  }, [stored, login, enterHive, entering]);
 
   // Prompt once on arrival. Cancelling falls back to the MPIN.
   useEffect(() => {
@@ -153,17 +160,17 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
 
   const onDigit = useCallback(
     (digit: string) => {
-      if (busy || !phone) return;
+      if (busy || entering || !phone) return;
       const next = pin.length < MPIN_LENGTH ? pin + digit : pin;
       setPin(next);
       setError(null);
       if (next.length === MPIN_LENGTH) void submitPin(next);
     },
-    [busy, phone, pin, submitPin],
+    [busy, entering, phone, pin, submitPin],
   );
   const onDelete = useCallback(() => {
-    if (!busy) setPin((p) => p.slice(0, -1));
-  }, [busy]);
+    if (!busy && !entering) setPin((p) => p.slice(0, -1));
+  }, [busy, entering]);
 
   return (
     <View style={styles.root}>
@@ -174,7 +181,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
 
         {/* The mascot image is larger than its 260x200 slot (soft glow bleed); it overflows evenly. */}
         <View style={styles.mascotArea}>
-          <Mascot mood="idle" style={styles.mascot} />
+          <Mascot mood="idle" animated={!entering} style={styles.mascot} />
         </View>
 
         <View style={styles.inputSection}>
@@ -182,7 +189,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
             accessibilityRole="button"
             accessibilityLabel={phone ? `Signing in as ${formatPhoneDisplay(phone)}. Use another number` : 'Enter your phone number'}
             onPress={changeNumber}
-            disabled={busy}
+            disabled={busy || entering}
             style={styles.phonePill}
           >
             <Text style={styles.phone}>{phone ? formatPhoneDisplay(phone) : phone === null ? 'Enter your number' : ' '}</Text>
@@ -195,15 +202,18 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
               {error}
             </Text>
           ) : (
-            <Text style={styles.prompt}>{busy ? 'Signing in…' : 'Enter your MPIN'}</Text>
+            <Text style={styles.prompt}>{busy || entering ? 'Signing in…' : 'Enter your MPIN'}</Text>
           )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
         </View>
       </View>
 
       <View style={[styles.keypad, { paddingBottom: Math.max(24, insets.bottom) }]}>
-        <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={unlockable ? signInWithBiometrics : undefined} />
+        <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={unlockable && !entering ? signInWithBiometrics : undefined} />
       </View>
+
+      {/* Created only on success, so signing in carries none of its cost until then. */}
+      {entering ? <HiveEntrance progress={progress} /> : null}
     </View>
   );
 }
