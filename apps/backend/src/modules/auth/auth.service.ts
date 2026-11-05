@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Keypair, StrKey, WebAuth } from '@stellar/stellar-sdk';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { parseTtl } from './auth-jwt.config.js';
 
 @Injectable()
@@ -42,13 +42,13 @@ export class AuthService {
 
 getChallenge(account: string | undefined) {
       if (!account) {
-  throw new LegacyBodyException(400, {
+  throw new ApiResponseException(400, {
     error: 'Bad Request',
     message: "Missing required query parameter: 'account'",
   });
   }
   if (!StrKey.isValidEd25519PublicKey(account)) {
-    throw new LegacyBodyException(400, {
+    throw new ApiResponseException(400, {
       error: 'Bad Request',
       message: `Invalid Stellar account address: ${account}`,
     });
@@ -73,7 +73,7 @@ getChallenge(account: string | undefined) {
 
   async issueToken(transaction: unknown) {
     if (!transaction) {
-      throw new LegacyBodyException(400, {
+      throw new ApiResponseException(400, {
         error: 'Bad Request',
         message: "Missing required field in body: 'transaction'",
       });
@@ -95,7 +95,7 @@ getChallenge(account: string | undefined) {
       record = await this.stellar.horizonServer.loadAccount(clientAccountID);
     } catch (err) {
       this.logger.debug(`Could not load account from Horizon: ${clientAccountID} - ${(err as Error).message}`);
-      throw new LegacyBodyException(401, {
+      throw new ApiResponseException(401, {
         error: 'Unauthorized',
         message:
           'Could not load account from the Stellar network. Ensure the account is funded and exists on-chain.',
@@ -108,9 +108,9 @@ getChallenge(account: string | undefined) {
       tx, server, this.networkPassphrase, totalWeight, signers, homeDomains, primaryDomain,
     );
   } catch (err) {
-    if (err instanceof LegacyBodyException) throw err;
+    if (err instanceof ApiResponseException) throw err;
     this.logger.debug(`SEP-10 verification failed: ${(err as Error).message}`);
-    throw new LegacyBodyException(401, {
+    throw new ApiResponseException(401, {
       error: 'Unauthorized',
       message:
         'SEP-10 challenge verification failed. Ensure the challenge is signed correctly and has not expired.',

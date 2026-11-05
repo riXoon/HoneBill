@@ -15,7 +15,10 @@ import type { Request, Response } from 'express';
 import { AccountsService } from './accounts.service.js';
 import { Throttle } from '@nestjs/throttler';
 import { queryString } from '../../common/utils/query-string.js';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception.js';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { RegisterAccountDto } from './dto/register-account.dto.js';
+
+type QueryStringValue = string | string[] | Record<string, string>;
 
 @Controller()
 export class AccountsController {
@@ -23,7 +26,7 @@ export class AccountsController {
 
   @Post('register')
   @Throttle({ default: { limit: 30, ttl: 600_000 } })
-  register(@Body() body: unknown, @Req() request: RawBodyRequest<Request>) {
+  register(@Body() body: RegisterAccountDto, @Req() request: RawBodyRequest<Request>) {
     const hasNoBody =
       request.rawBody?.length === 0 ||
       (request.headers['content-length'] === '0' ||
@@ -33,27 +36,37 @@ export class AccountsController {
           typeof body === 'object' &&
           Object.keys(body).length === 0));
     if (hasNoBody) {
-      throw new LegacyBodyException(400, { error: 'Invalid JSON body' });
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
-    if (body === null || typeof body !== 'object') {
-      throw new LegacyBodyException(400, { error: 'Invalid JSON body' });
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
-    return this.accountsService.register(body as Record<string, unknown>);
+    return this.accountsService.register(body);
+  }
+
+  @All('register')
+  unsupportedRegisterMethod(@Res() response: Response): void {
+    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
   }
 
   @Get('users/check')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  checkUser(@Query('phone') phone?: unknown) {
+  checkUser(@Query('phone') phone?: QueryStringValue) {
     return this.accountsService.checkUser(queryString(phone) ?? '');
   }
 
   @Get('users/lookup')
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
-  lookupUser(@Query('shortId') shortId?: unknown, @Query('phone') phone?: unknown) {
+  lookupUser(@Query('shortId') shortId?: QueryStringValue, @Query('phone') phone?: QueryStringValue) {
     return this.accountsService.lookupUser(
       queryString(shortId)?.trim(),
       queryString(phone)?.trim(),
     );
+  }
+
+  @All('users/lookup')
+  unsupportedLookupMethod(@Res() response: Response): void {
+    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
   }
 
   @All('users/check')

@@ -54,8 +54,8 @@ export class OtpService {
 
     const testCode = getTestOtpCode(formattedPhone, this.getOtpEnvironment());
     const code = testCode ?? generateOtp();
-    const otpKey = `pijin:otp:${formattedPhone}`;
-    const attemptsKey = `pijin:otp:attempts:${formattedPhone}`;
+    const otpKey = `honebill:otp:${formattedPhone}`;
+    const attemptsKey = `honebill:otp:attempts:${formattedPhone}`;
     const redis = this.redisService.getClient();
     try {
       await redis.set(otpKey, code, 'EX', OTP_TTL_SECONDS);
@@ -66,7 +66,7 @@ export class OtpService {
 
     if (!testCode) {
       try {
-        const message = `Pijin: Your verification code is ${code}. Valid for 5 minutes. Do not share this with anyone.`;
+        const message = `HoneBill: Your verification code is ${code}. Valid for 5 minutes. Do not share this with anyone.`;
         await this.textbee.send(formattedPhone, message, {
           retries: 1,
           timeoutMs: 4000,
@@ -98,8 +98,8 @@ export class OtpService {
     }
 
     const formattedPhone = normalizePhoneNumber(phoneNumber);
-    const otpKey = `pijin:otp:${formattedPhone}`;
-    const attemptsKey = `pijin:otp:attempts:${formattedPhone}`;
+    const otpKey = `honebill:otp:${formattedPhone}`;
+    const attemptsKey = `honebill:otp:attempts:${formattedPhone}`;
     const redis = this.redisService.getClient();
     let storedCode: string | null;
     try {
