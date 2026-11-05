@@ -23,7 +23,7 @@ export class AccountsController {
 
   @Post('register')
   @Throttle({ default: { limit: 30, ttl: 600_000 } })
-  register(@Body() body: unknown, @Req() request: RawBodyRequest<Request>) {
+  register(@Body() body: RegisterAccountDto, @Req() request: RawBodyRequest<Request>) {
     const hasNoBody =
       request.rawBody?.length === 0 ||
       (request.headers['content-length'] === '0' ||
@@ -38,7 +38,12 @@ export class AccountsController {
     if (body === null || typeof body !== 'object') {
       throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
-    return this.accountsService.register(body as Record<string, unknown>);
+    return this.accountsService.register(body);
+  }
+
+  @All('register')
+  unsupportedRegisterMethod(@Res() response: Response): void {
+    response.status(HttpStatus.METHOD_NOT_ALLOWED).end();
   }
 
   @All('register')
@@ -48,13 +53,13 @@ export class AccountsController {
 
   @Get('users/check')
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  checkUser(@Query('phone') phone?: unknown) {
+  checkUser(@Query('phone') phone?: QueryStringValue) {
     return this.accountsService.checkUser(queryString(phone) ?? '');
   }
 
   @Get('users/lookup')
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
-  lookupUser(@Query('shortId') shortId?: unknown, @Query('phone') phone?: unknown) {
+  lookupUser(@Query('shortId') shortId?: QueryStringValue, @Query('phone') phone?: QueryStringValue) {
     return this.accountsService.lookupUser(
       queryString(shortId)?.trim(),
       queryString(phone)?.trim(),

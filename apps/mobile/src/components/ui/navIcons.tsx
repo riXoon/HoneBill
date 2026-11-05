@@ -1,6 +1,10 @@
 import Svg, { Path } from 'react-native-svg';
 
-/** Tab icons from Figma (Nav icons, 32x32). `color` replaces the design's #222021 fill. */
+/**
+ * Tab icons from Figma (Nav icons, 32x32). `color` replaces the design's #222021 fill. Source SVGs
+ * (same glyphs on a 58x58 box) live in `assets/icons/nav-*.svg`; they're inlined here so they can be
+ * tinted without adding an SVG transformer to Metro.
+ */
 export type NavIconProps = { color: string; size?: number };
 
 export function HomeIcon({ color, size = 32 }: NavIconProps) {

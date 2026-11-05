@@ -9,8 +9,8 @@ export class OtpController {
 
   @Post('send')
   @HttpCode(HttpStatus.OK)
-  send(@Body() body: Record<string, unknown> | undefined, @Req() req: Request) {
-    const phone = typeof body?.phoneNumber === 'string' ? body.phoneNumber : '';
+  send(@Body() body: SendOtpDto, @Req() req: Request) {
+    const phone = body.phoneNumber;
     const forwardedFor = req.headers['x-forwarded-for'];
     const firstForwardedIp = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)
       ?.split(',')[0]

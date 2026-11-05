@@ -44,7 +44,7 @@ export class WalletController {
   }
 
   @Post('wallet/transfers/confirm')
-  confirmTransfer(@Body() body: { txHash?: string }) {
-    return this.walletService.confirmTransfer(body?.txHash ?? '');
+  confirmTransfer(@Body() body: ConfirmTransferDto) {
+    return this.walletService.confirmTransfer(body.txHash);
   }
 }

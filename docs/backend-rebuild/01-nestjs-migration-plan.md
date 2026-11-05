@@ -233,6 +233,33 @@ Phase 5 remains in progress. The remaining legacy cases and safe SMS route parit
 - [x] Port `ramp-security.test.ts` scenarios as Nest route E2E coverage (kill switches, interactive JWT claims/signature/expiry, caps, and one-time claim/replay)
 - [ ] Blocked on the deferred web pages for the interactive flow
 
+#### Phase 6 components: what they do and how they work
+
+Phase 6 moves the anchor's SEP-1 discovery document and SEP-24 transaction API into
+`AnchorModule`. `AnchorController` maps HTTP paths and headers to `AnchorService`,
+which applies the legacy validation and business rules and uses Prisma, Redis, JWT,
+and Stellar Horizon where the route requires them. The legacy implementation under
+`apps/_legacy/backend` remains the behavior reference.
+
+| Component | What was added | How it works |
+|---|---|---|
+| `AnchorModule` and controller | Nest module registration and route handlers for SEP-1/SEP-24 | The controller receives HTTP input and delegates to `AnchorService`; the module supplies configuration, JWT, Prisma, and Redis dependencies. The global `/api` prefix applies to API routes, while the SEP-1 well-known path stays at the domain root. |
+| SEP-1 `stellar.toml` | Dynamic `GET /.well-known/stellar.toml` plus matching `OPTIONS` preflight behavior | The service reads the configured signing key and public app URL to construct the anchor's SEP-1 metadata, including its SEP-24 transfer server and Horizon URL. The controller returns plain text with the legacy content type, cache, and CORS headers; preflight returns 204 with the expected CORS headers. |
+| SEP-24 info | Public `GET /api/sep24/info` discovery response | Wallets query this route to learn supported deposit/withdraw assets and limits. The response reflects the ramp and per-direction enable switches, and includes the legacy CORS and cache headers. |
+| SEP-24 transaction lookup | Authenticated `GET /api/sep24/transaction?id=...` | A SEP-10 bearer JWT identifies the Stellar account. The service loads the requested transaction and returns SEP-24 fields only when that transaction belongs to the authenticated account; missing or foreign transactions follow the legacy error behavior. |
+| Interactive deposit/withdraw initiation | Authenticated `POST /api/sep24/transactions/{deposit,withdraw}/interactive` | The SEP-10 JWT identifies the account; the service validates the request and asset, creates an `incomplete` anchor transaction, then signs a separate 15-minute HS256 interactive-URL JWT bound to the account and transaction. The response gives the wallet the interactive URL and transaction ID. The browser pages that URL is meant to open are still deferred. |
+| Submit withdrawal | `POST /api/anchor/submit-withdraw` | The interactive-URL JWT authorizes the webview session. The service validates the transaction, amount, and GCash details, checks account ownership and ramp limits, then conditionally changes the matching `incomplete` withdrawal to `pending_user_transfer_start` and stores the submitted details. Conditional persistence prevents a second submission from silently overwriting a changed state. |
+| Confirm withdrawal | `POST /api/anchor/confirm-withdraw` | A SEP-10 JWT identifies the withdrawal owner. The service looks up the transaction, fetches the supplied transaction and operations from Testnet Horizon, and checks successful status, source account, memo, and expected payment details before advancing the withdrawal state. Invalid or mismatched chain data does not confirm the withdrawal. |
+| Simulate payment | Testnet-only `POST /api/anchor/simulate-payment` | The interactive-URL JWT authorizes the transaction session. The service checks the configured Stellar network is Testnet, validates the transaction and amount against ramp limits, and claims a one-time Redis key to block replay. It then submits the test payment through Horizon and records the resulting transaction hash/status. E2E tests mock Horizon; no live payment was sent. |
+| Ramp controls and security | Enable switches, per-transaction and daily caps, audit events, and replay protection | The service checks global and asset-specific switches and configured limits before accepting ramp actions. Rejected/accepted actions are audited. Redis's atomic `SET ... NX` claim ensures a session/payment token can only be consumed once where required. |
+| Request parsing | Route-specific malformed-JSON handling for interactive and anchor POST routes | Middleware parses route bodies before the controller. Invalid JSON is normalized to the legacy route's expected validation response instead of Express's generic parser error; interactive routes continue to accept their supported form/multipart formats. |
+| Tests and parity tooling | Anchor service tests, HTTP E2E tests, and `phase6-anchor-parity.mjs` | Unit tests cover service rules; E2E tests exercise real Nest routing, status, headers, auth, persistence calls, replay, and mocked Horizon outcomes. The parity script sends safe non-mutating requests to legacy and Nest and compares responses. Current safe comparison was 11 matches; valid database-backed owner lookups and real chain activity remain unverified. |
+
+The current automated checks cover the implemented API behavior, including the
+`ramp-security.test.ts` scenarios. Phase 6 is not ready to ship until the deferred
+deposit/withdraw web pages are available and the remaining live/database-backed
+parity checks are completed; see the route table above for per-route status.
+
 ### Phase 7: Demo, friendbot, scripts
 - [ ] `DemoModule` behind `DEMO_ENABLED`; port `lib/demo/*.test.ts` (9 files)
 - [ ] Friendbot (testnet only)

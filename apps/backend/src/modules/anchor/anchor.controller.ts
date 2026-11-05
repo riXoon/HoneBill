@@ -13,6 +13,12 @@ import {
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AnchorService } from './anchor.service.js';
+import {
+  ConfirmWithdrawalRequestDto,
+  InteractiveRampRequestDto,
+  SimulatePaymentRequestDto,
+  SubmitWithdrawalRequestDto,
+} from './dto/anchor-requests.dto.js';
 
 @Controller()
 /** Maps the standard Stellar well-known path and the anchor's SEP-24 API paths to the service. */
