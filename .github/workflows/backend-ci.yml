@@ -51,7 +51,7 @@ jobs:
         working-directory: .
         run: npm ci --ignore-scripts
 
-      - name: Build Pijin SDK
+      - name: Build HoneBill SDK
         if: hashFiles('apps/backend/package.json') != ''
         working-directory: ./packages/pijin_core
         run: npx tsc
