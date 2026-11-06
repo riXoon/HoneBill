@@ -11,7 +11,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
 
-import { splitPesos } from '../../mocks/home';
+import type { LoadStatus } from '../../context/WalletDataContext';
+import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 
 // Figma: Cards (483:637). Two 342 dp cards sit one behind the other. Switching shuffles them: the
@@ -110,12 +111,21 @@ function OfflineBadge() {
   );
 }
 
-type BalanceCardProps = { mode: BalanceMode; amount: number };
+/** What the status chip says about the figure on the card. */
+const CHIP_LABEL: Record<LoadStatus, string> = {
+  idle: 'Loading',
+  loading: 'Updating',
+  ready: 'Synced',
+  error: 'Not updated',
+};
+
+/** `amount` is `null` until the first balance has been read; the card then shows dashes, never a made-up figure. */
+type BalanceCardProps = { mode: BalanceMode; amount: number | null; status: LoadStatus };
 
 /** One card face: fill image, header (icon, label, status chip) and amount row. */
-function BalanceCard({ mode, amount }: BalanceCardProps) {
+function BalanceCard({ mode, amount, status }: BalanceCardProps) {
   const online = mode === 'online';
-  const { whole, cents } = splitPesos(amount);
+  const { whole, cents } = amount === null ? { whole: '--', cents: '--' } : splitPesos(amount);
   const amountText = `₱${whole}.`;
   return (
     <View style={styles.card}>
@@ -127,7 +137,7 @@ function BalanceCard({ mode, amount }: BalanceCardProps) {
           <Text style={styles.labelText}>{online ? 'Online Balance' : 'Offline Balance'}</Text>
         </View>
         <View style={styles.chip}>
-          <Text style={styles.chipText}>{online ? 'Synced' : 'Syncing'}</Text>
+          <Text style={styles.chipText}>{CHIP_LABEL[status]}</Text>
         </View>
       </View>
 
@@ -152,14 +162,15 @@ function BalanceCard({ mode, amount }: BalanceCardProps) {
 
 type BalanceCardsProps = {
   mode: BalanceMode;
-  onlineBalance: number;
-  offlineBalance: number;
+  onlineBalance: number | null;
+  offlineBalance: number | null;
+  status: LoadStatus;
   /** Tapping the stack asks the screen to switch modes. */
   onToggle: () => void;
 };
 
 /** Stacked online/offline cards. Only transform is animated; z-order swaps while the leaving card is at its peak. */
-export function BalanceCards({ mode, onlineBalance, offlineBalance, onToggle }: BalanceCardsProps) {
+export function BalanceCards({ mode, onlineBalance, offlineBalance, status, onToggle }: BalanceCardsProps) {
   // t runs 0 -> 1 on every switch. frontIsOnline says which card is arriving at the front.
   const t = useSharedValue(1);
   const frontIsOnline = useSharedValue(mode === 'online' ? 1 : 0);
@@ -207,10 +218,10 @@ export function BalanceCards({ mode, onlineBalance, offlineBalance, onToggle }: 
       style={styles.stack}
     >
       <Animated.View style={[styles.face, onlineStyle]}>
-        <BalanceCard mode="online" amount={onlineBalance} />
+        <BalanceCard mode="online" amount={onlineBalance} status={status} />
       </Animated.View>
       <Animated.View style={[styles.face, offlineStyle]}>
-        <BalanceCard mode="offline" amount={offlineBalance} />
+        <BalanceCard mode="offline" amount={offlineBalance} status={status} />
       </Animated.View>
     </Pressable>
   );

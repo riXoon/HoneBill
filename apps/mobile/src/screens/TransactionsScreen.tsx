@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,10 +13,11 @@ import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/
 import { HistoryIcon } from '../components/ui/navIcons';
 import { BANNER_HONI, PromoBanner } from '../components/ui/PromoBanner';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { TRANSACTION_FILTERS, buildHistoryRows, mockTransactions } from '../mocks/transactions';
-import type { HistoryRow, TransactionFilter } from '../mocks/transactions';
+import { greetingName, useAuth } from '../context/AuthContext';
+import { useWalletData } from '../context/WalletDataContext';
+import { TRANSACTION_FILTERS, buildHistoryRows } from '../types/transaction';
+import type { HistoryRow, TransactionFilter } from '../types/transaction';
 import type { RootStackParamList } from '../navigation/types';
-import { mockProfile } from '../mocks/profile';
 import { colors, fonts } from '../theme';
 
 // Figma: Transactions (870:3169), 402x874. Reached from the "History" tab.
@@ -35,13 +36,21 @@ export function TransactionsScreen() {
   );
   const [filter, setFilter] = useState<TransactionFilter>('All');
   const slide = useFilterSlide(TRANSACTION_FILTERS.indexOf(filter));
-  const rows = useMemo(() => buildHistoryRows(mockTransactions, filter), [filter]);
+  const { activeAccount } = useAuth();
+  const { transactions, status, error, refresh } = useWalletData();
+  const rows = useMemo(() => buildHistoryRows(transactions, filter), [transactions, filter]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   const header = (
     <View style={styles.header}>
       <ScreenHeader icon={<HistoryIcon color={colors.coral} size={40} />} title="Transactions" />
       <PromoBanner
-        title={`Hello, ${mockProfile.greetingName}!`}
+        title={`Hello, ${greetingName(activeAccount)}!`}
         subtitle={'Check your transaction\nhistory here'}
         honi={BANNER_HONI.transactions}
       />
@@ -61,8 +70,18 @@ export function TransactionsScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <SlideRow>
-            <Text style={styles.empty}>Nothing to see here!</Text>
+            <Text style={error ? styles.error : styles.empty} accessibilityRole={error ? 'alert' : undefined}>
+              {status === 'loading' || status === 'idle' ? 'Loading…' : error ?? 'Nothing to see here!'}
+            </Text>
           </SlideRow>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={status === 'loading'}
+            onRefresh={() => void refresh({ force: true })}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
         }
         contentContainerStyle={[
           styles.content,
@@ -81,4 +100,5 @@ const styles = StyleSheet.create({
   header: { gap: 20, marginBottom: 20 },
   separator: { height: 10 },
   empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
+  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
 });

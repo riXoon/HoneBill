@@ -1,11 +1,15 @@
+import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 
 import { Mascot } from '../components/mascot/Mascot';
+import { HiveEntrance } from '../components/transition/HiveEntrance';
+import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { AppBackground } from '../components/ui/AppBackground';
+import { Button } from '../components/ui/Button';
 import { GradientTitle } from '../components/ui/GradientTitle';
-import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
@@ -16,30 +20,44 @@ const wordmarkImage = require('../../assets/brand/logo-wordmark.png');
 export function AccountConfirmationScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'AccountConfirmation'>) {
-  const enter = () => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+  const goHome = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
+  // "Enter HoneBill" plays the hive entrance (the same one sign-in uses), then Home fades in.
+  const { entering, progress, start } = useHiveEntrance(goHome);
+
+  // The heading and button get out of the way first; the scene is covered by the honeycomb, then fades out beneath it.
+  const edgeStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.15], [1, 0], Extrapolation.CLAMP),
+  }));
+  const sceneStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0.05, 0.22], [1, 0], Extrapolation.CLAMP),
+  }));
 
   return (
     <View style={styles.root}>
       <AppBackground />
 
       <View style={styles.content}>
-        <View style={styles.titleBlock}>
+        <Animated.View style={[styles.titleBlock, edgeStyle]}>
           <GradientTitle size={32}>Vault Secured</GradientTitle>
           <Text style={styles.subtitle}>Your device is now primed for offline zero data transactions.</Text>
-        </View>
+        </Animated.View>
 
         {/* "mascot w bg": honeycomb, Honi, a faded mirrored copy and the wordmark, 400 dp tall. */}
-        <View style={styles.mascotArea} pointerEvents="none">
+        <Animated.View style={[styles.mascotArea, sceneStyle]} pointerEvents="none">
           <Image source={combImage} style={styles.comb} contentFit="contain" />
-          <Mascot mood="idlePlain" style={styles.honi} />
+          {/* Honi's looping vector animation stops once the transition starts, so it does not compete with it. */}
+          <Mascot mood="idlePlain" animated={!entering} style={styles.honi} />
           <Mascot mood="idlePlain" animated={false} style={styles.reflection} />
           <Image source={wordmarkImage} style={styles.wordmark} contentFit="contain" accessibilityLabel="HoneBill" />
-        </View>
+        </Animated.View>
 
-        <View style={styles.swipe}>
-          <SwipeToEnter onComplete={enter} />
-        </View>
+        <Animated.View style={[styles.action, edgeStyle]}>
+          <Button label="Enter HoneBill" size="large" onPress={() => void start()} disabled={entering} />
+        </Animated.View>
       </View>
+
+      {/* Created only on tap, so this screen carries none of its cost until then. */}
+      {entering ? <HiveEntrance progress={progress} /> : null}
     </View>
   );
 }
@@ -54,5 +72,5 @@ const styles = StyleSheet.create({
   honi: { position: 'absolute', top: 87 },
   reflection: { position: 'absolute', top: 324, opacity: 0.5, transform: [{ scaleY: -1 }] },
   wordmark: { position: 'absolute', top: 322, width: 172, height: 56 },
-  swipe: { alignItems: 'center', marginTop: 54 },
+  action: { width: '100%', marginTop: 54 },
 });

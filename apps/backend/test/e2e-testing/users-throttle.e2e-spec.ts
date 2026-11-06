@@ -29,7 +29,7 @@ describe('users route throttles (e2e)', () => {
       ],
     }).compile();
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
@@ -37,16 +37,16 @@ describe('users route throttles (e2e)', () => {
 
   it('check: allows 60 per minute and rejects the 61st with 429', async () => {
     for (let i = 0; i < 60; i++) {
-      await request(app.getHttpServer()).get('/api/users/check?phone=0917').expect(200);
+      await request(app.getHttpServer()).get('/api/v2/users/check?phone=0917').expect(200);
     }
-    const res = await request(app.getHttpServer()).get('/api/users/check?phone=0917').expect(429);
+    const res = await request(app.getHttpServer()).get('/api/v2/users/check?phone=0917').expect(429);
     expect(res.headers['retry-after']).toBeDefined();
   });
 
   it('lookup: allows 300 per minute and rejects the 301st with 429', async () => {
     for (let i = 0; i < 300; i++) {
-      await request(app.getHttpServer()).get('/api/users/lookup?shortId=a').expect(404);
+      await request(app.getHttpServer()).get('/api/v2/users/lookup?shortId=a').expect(404);
     }
-    await request(app.getHttpServer()).get('/api/users/lookup?shortId=a').expect(429);
+    await request(app.getHttpServer()).get('/api/v2/users/lookup?shortId=a').expect(429);
   });
 });

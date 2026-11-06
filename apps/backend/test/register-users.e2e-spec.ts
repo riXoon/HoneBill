@@ -40,7 +40,7 @@ describe('Register and users with real Postgres (e2e)', () => {
     return prisma;
   };
   const register = (body: Record<string, unknown>) => {
-    return request(getApp().getHttpServer()).post('/api/register').send(body);
+    return request(getApp().getHttpServer()).post('/api/v2/register').send(body);
   };
 
   async function registered() {
@@ -104,7 +104,7 @@ describe('Register and users with real Postgres (e2e)', () => {
     }).compile();
     const application = moduleRef.createNestApplication();
     app = application;
-    application.setGlobalPrefix('api');
+    application.setGlobalPrefix('api/v2');
     application.useGlobalFilters(new ApiExceptionFilter());
     await application.init();
     prisma = moduleRef.get(PrismaService);
@@ -124,10 +124,10 @@ describe('Register and users with real Postgres (e2e)', () => {
     await app?.close();
   });
 
-  describe('POST /api/register', () => {
+  describe('POST /api/v2/register', () => {
     it('returns the legacy invalid-body response for an empty request body', async () => {
       await request(getApp().getHttpServer())
-        .post('/api/register')
+        .post('/api/v2/register')
         .set('Content-Type', 'application/json')
         .expect(400, { error: 'Invalid JSON body' });
     });
@@ -138,7 +138,7 @@ describe('Register and users with real Postgres (e2e)', () => {
       ['[]', 'Missing required field: stellarPublicKey'],
     ])('matches legacy handling for JSON body %s', async (body, message) => {
       const response = await request(getApp().getHttpServer())
-        .post('/api/register')
+        .post('/api/v2/register')
         .set('Content-Type', 'application/json')
         .send(body)
         .expect(400);
@@ -148,7 +148,7 @@ describe('Register and users with real Postgres (e2e)', () => {
 
     it('returns the legacy error for malformed JSON', async () => {
       await request(getApp().getHttpServer())
-        .post('/api/register')
+        .post('/api/v2/register')
         .set('Content-Type', 'application/json')
         .send('{')
         .expect(400, { error: 'Invalid JSON body' });
@@ -276,14 +276,14 @@ describe('Register and users with real Postgres (e2e)', () => {
     });
   });
 
-  describe('GET /api/users/check', () => {
+  describe('GET /api/v2/users/check', () => {
     it('400 without a phone', async () => {
-      await request(getApp().getHttpServer()).get('/api/users/check').expect(400);
+      await request(getApp().getHttpServer()).get('/api/v2/users/check').expect(400);
     });
 
     it('{ exists: false } for an unknown phone', async () => {
       const res = await request(getApp().getHttpServer())
-        .get('/api/users/check')
+        .get('/api/v2/users/check')
         .query({ phone: newPhone() })
         .expect(200);
       expect(res.body).toEqual({ exists: false });
@@ -294,7 +294,7 @@ describe('Register and users with real Postgres (e2e)', () => {
       const db = toDbPhone(phone);
       for (const variant of [phone, `+${db}`, db]) {
         const res = await request(getApp().getHttpServer())
-          .get('/api/users/check')
+          .get('/api/v2/users/check')
           .query({ phone: variant })
           .expect(200);
         expect({ variant, exists: res.body.exists }).toEqual({ variant, exists: true });
@@ -303,14 +303,14 @@ describe('Register and users with real Postgres (e2e)', () => {
     });
   });
 
-  describe('GET /api/users/lookup', () => {
+  describe('GET /api/v2/users/lookup', () => {
     it('400 without shortId or phone', async () => {
-      await request(getApp().getHttpServer()).get('/api/users/lookup').expect(400);
+      await request(getApp().getHttpServer()).get('/api/v2/users/lookup').expect(400);
     });
 
     it('404 { found: false } for an unknown short ID', async () => {
       await request(getApp().getHttpServer())
-        .get('/api/users/lookup')
+        .get('/api/v2/users/lookup')
         .query({ shortId: 'zzNoSuchId' })
         .expect(404, { found: false });
     });
@@ -318,7 +318,7 @@ describe('Register and users with real Postgres (e2e)', () => {
     it('finds by short ID with a display name', async () => {
       const { key, data } = await registered();
       const res = await request(getApp().getHttpServer())
-        .get('/api/users/lookup')
+        .get('/api/v2/users/lookup')
         .query({ shortId: data.shortId })
         .expect(200);
       expect(res.body).toMatchObject({
@@ -337,7 +337,7 @@ describe('Register and users with real Postgres (e2e)', () => {
       const db = toDbPhone(phone);
       for (const variant of [phone, `+${db}`, db]) {
         const res = await request(getApp().getHttpServer())
-          .get('/api/users/lookup')
+          .get('/api/v2/users/lookup')
           .query({ phone: variant });
         expect({ variant, status: res.status }).toEqual({ variant, status: 200 });
         expect(res.body.stellarPublicKey).toBe(key);
@@ -346,7 +346,7 @@ describe('Register and users with real Postgres (e2e)', () => {
 
     it('uses the first value of a repeated shortId query parameter', async () => {
       await request(getApp().getHttpServer())
-        .get('/api/users/lookup?shortId=a&shortId=b')
+        .get('/api/v2/users/lookup?shortId=a&shortId=b')
         .expect(404, { found: false });
     });
   });

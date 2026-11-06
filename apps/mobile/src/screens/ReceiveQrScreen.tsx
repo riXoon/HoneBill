@@ -10,8 +10,8 @@ import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { Button } from '../components/ui/Button';
 import { DownloadIcon, QrTitleIcon } from '../components/ui/smallIcons';
-import { formatPeso } from '../mocks/send';
-import { mockReceiver } from '../mocks/wallet';
+import { useAuth } from '../context/AuthContext';
+import { formatPeso } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
@@ -21,11 +21,14 @@ const QR_SIZE = 174;
 
 export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'ReceiveQr'>) {
   const { amount } = route.params;
+  const { activeAccount } = useAuth();
+  const shortId = activeAccount?.shortId ?? '';
   const qrBox = useRef<View>(null);
   const [saving, setSaving] = useState(false);
 
-  // Mock payload: the real voucher will be a signed, sync-able record from the ledger service.
-  const payload = `honebill://relay-voucher?id=${mockReceiver.shortId}&amount=${amount.toFixed(2)}`;
+  // A payment request for the user's own short ID and amount, which the Send screen's scanner reads.
+  // It carries no signature: a signed, sync-able voucher is a separate, later step.
+  const payload = `honebill://relay-voucher?id=${shortId}&amount=${amount.toFixed(2)}`;
 
   const save = async () => {
     if (saving) return;
@@ -77,7 +80,7 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
         <View style={styles.transfer}>
           <Text style={styles.transferLabel}>TRANSFER AMOUNT</Text>
           <Text style={styles.transferAmount}>{formatPeso(amount)}</Text>
-          <Text style={styles.transferId}>ID: {mockReceiver.shortId}</Text>
+          <Text style={styles.transferId}>ID: {shortId}</Text>
         </View>
 
         {/* Captured as the saved image: the outlined quiet zone and the code. */}
@@ -85,7 +88,13 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
           <QRCode value={payload} size={QR_SIZE} color={colors.text} backgroundColor={colors.surface} quietZone={0} ecl="M" />
         </View>
 
-        <Button label="Save QR Code" size="large" onPress={() => void save()} icon={<DownloadIcon color={colors.surface} />} />
+        <Button
+          label={saving ? 'Saving…' : 'Save QR Code'}
+          size="large"
+          onPress={() => void save()}
+          disabled={saving}
+          icon={saving ? undefined : <DownloadIcon color={colors.surface} />}
+        />
       </GlassCard>
 
       <Text style={styles.caption}>Show this QR code to a helper to relay your transfer when they’re online.</Text>

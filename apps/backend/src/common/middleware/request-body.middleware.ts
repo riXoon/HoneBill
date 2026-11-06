@@ -1,4 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { API_BASE_PATH } from '../api-prefix';
 import express, { type NextFunction, type Request, type Response } from 'express';
 
 // PIN/OTP routes preserve legacy behavior: malformed JSON becomes an empty input
@@ -28,18 +29,18 @@ const captureRawBody = (req: Request, _res: Response, buffer: Buffer) => {
  * Call configureSmsWebhookMiddleware first to give TextBee its bounded raw parser.
  */
 export function configureRequestBodyParsing(app: NestExpressApplication): void {
-  // Keep the exact POST /api/auth body as text for AuthService's legacy parsing.
+  // Keep the exact POST auth body as text for AuthService's legacy parsing.
   // Form submissions are left for their respective parsers below.
   app.use(
-    '/api/auth',
+    `${API_BASE_PATH}/auth`,
     express.text({
       type: (incoming) => {
         const req = incoming as Request;
         if (req.method !== 'POST') return false;
-        // app.use matches subpaths too. Limit this parser to /api/auth itself;
+        // app.use matches subpaths too. Limit this parser to the auth route itself;
         // remove query parameters and trailing slashes when checking the URL.
         const path = String(req.originalUrl ?? '').split('?')[0].replace(/\/+$/, '');
-        if (path !== '/api/auth') return false;
+        if (path !== `${API_BASE_PATH}/auth`) return false;
         const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
         return !/(urlencoded|multipart\/form-data)/.test(contentType);
       },
@@ -48,8 +49,8 @@ export function configureRequestBodyParsing(app: NestExpressApplication): void {
 
   // Accept text for every Content-Type, then parse it ourselves so invalid JSON
   // uses the endpoint's validation response rather than Express's syntax error.
-  app.use('/api/auth/pin/verify', express.text({ type: () => true }), parseJsonOrNull);
-  app.use('/api/otp', express.text({ type: () => true }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/auth/pin/verify`, express.text({ type: () => true }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/otp`, express.text({ type: () => true }), parseJsonOrNull);
   // These routes parse JSON in their legacy handlers and return route-specific
   // 400 bodies for malformed input. Normalize syntax errors before Express's
   // general JSON parser can emit its framework-specific response.
@@ -57,17 +58,17 @@ export function configureRequestBodyParsing(app: NestExpressApplication): void {
     const contentType = String(incoming.headers['content-type'] ?? '').toLowerCase();
     return !contentType.includes('multipart/form-data') && !contentType.includes('application/x-www-form-urlencoded');
   };
-  app.use('/api/sep24/transactions/deposit/interactive', express.text({ type: jsonOnly }), parseJsonOrNull);
-  app.use('/api/sep24/transactions/withdraw/interactive', express.text({ type: jsonOnly }), parseJsonOrNull);
-  app.use('/api/anchor/submit-withdraw', express.text({ type: () => true }), parseJsonOrNull);
-  app.use('/api/anchor/confirm-withdraw', express.text({ type: () => true }), parseJsonOrNull);
-  app.use('/api/anchor/simulate-payment', express.text({ type: () => true }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/sep24/transactions/deposit/interactive`, express.text({ type: jsonOnly }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/sep24/transactions/withdraw/interactive`, express.text({ type: jsonOnly }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/anchor/submit-withdraw`, express.text({ type: () => true }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/anchor/confirm-withdraw`, express.text({ type: () => true }), parseJsonOrNull);
+  app.use(`${API_BASE_PATH}/anchor/simulate-payment`, express.text({ type: () => true }), parseJsonOrNull);
   // Match the legacy empty 405 response for unsupported OTP methods. OPTIONS
   // continues so CORS preflight handling can respond; no Allow header is added.
-  app.use('/api/otp', (req: Request, res: Response, next: NextFunction) => {
+  app.use(`${API_BASE_PATH}/otp`, (req: Request, res: Response, next: NextFunction) => {
     const path = String(req.originalUrl ?? '').split('?')[0].replace(/\/+$/, '');
     if (
-      ['/api/otp/send', '/api/otp/verify'].includes(path) &&
+      [`${API_BASE_PATH}/otp/send`, `${API_BASE_PATH}/otp/verify`].includes(path) &&
       !['POST', 'OPTIONS'].includes(req.method)
     ) {
       res.status(405).end();
@@ -78,7 +79,7 @@ export function configureRequestBodyParsing(app: NestExpressApplication): void {
 
   // Dispatch authenticates before parsing JSON, as the legacy QStash endpoint did.
   // Keep malformed JSON as text until its guard has checked the dispatch secret.
-  app.use('/api/sms/dispatch', express.text({ type: () => true, verify: captureRawBody }));
+  app.use(`${API_BASE_PATH}/sms/dispatch`, express.text({ type: () => true, verify: captureRawBody }));
 
   // Parse remaining JSON requests. strict:false permits JSON primitives/null so
   // endpoint validation decides which values are acceptable. Already-consumed

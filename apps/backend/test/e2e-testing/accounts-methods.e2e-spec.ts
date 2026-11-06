@@ -21,7 +21,7 @@ describe('accounts unsupported methods (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
@@ -31,9 +31,9 @@ describe('accounts unsupported methods (e2e)', () => {
   });
 
   const unsupported: Array<[string, Array<'get' | 'post' | 'put' | 'patch' | 'delete'>]> = [
-    ['/api/register', ['get', 'put', 'patch', 'delete']],
-    ['/api/users/check', ['post', 'put', 'patch', 'delete']],
-    ['/api/users/lookup', ['post', 'put', 'patch', 'delete']],
+    ['/api/v2/register', ['get', 'put', 'patch', 'delete']],
+    ['/api/v2/users/check', ['post', 'put', 'patch', 'delete']],
+    ['/api/v2/users/lookup', ['post', 'put', 'patch', 'delete']],
   ];
 
   it.each(unsupported)('%s returns an empty 405 for every unsupported method', async (path, methods) => {

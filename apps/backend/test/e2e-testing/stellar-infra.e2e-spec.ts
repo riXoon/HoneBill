@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import request from 'supertest';
 import { LockService } from '../../src/infra/lock/lock.service.js';
 import { RedisService } from '../../src/infra/redis/redis.service.js';
-import { isRetryableSettlementError } from '../../src/infra/stellar/settlement-retry.util.js';
+import { isRetryableSettlementError } from '../../src/modules/engine/engine-retry.util.js';
 
 @Controller('test/stellar-infra')
 class StellarInfraHarnessController {
@@ -59,14 +59,14 @@ describe('Stellar infrastructure request flow (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     await app.init();
   });
 
   afterAll(async () => app.close());
 
   it('enforces lock ownership across HTTP requests', async () => {
-    const url = '/api/test/stellar-infra/lock';
+    const url = '/api/v2/test/stellar-infra/lock';
     await request(app.getHttpServer())
       .get(`${url}/acquire`).query({ key: 'relayer', owner: 'worker-a' })
       .expect(200, { acquired: true });
@@ -83,11 +83,11 @@ describe('Stellar infrastructure request flow (e2e)', () => {
 
   it('returns retry decisions through the Nest HTTP request path', async () => {
     await request(app.getHttpServer())
-      .get('/api/test/stellar-infra/retry')
+      .get('/api/v2/test/stellar-infra/retry')
       .query({ message: 'RPC request failed with status: 503' })
       .expect(200, { retryable: true });
     await request(app.getHttpServer())
-      .get('/api/test/stellar-infra/retry')
+      .get('/api/v2/test/stellar-infra/retry')
       .query({ message: 'HostError: Error(Contract, 6)' })
       .expect(200, { retryable: false });
   });

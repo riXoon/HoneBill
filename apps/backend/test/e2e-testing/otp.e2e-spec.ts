@@ -55,7 +55,7 @@ describe('OTP with real Redis (e2e)', () => {
       ],
     }).compile();
     const instance = moduleRef.createNestApplication({ bodyParser: false });
-    instance.setGlobalPrefix('api');
+    instance.setGlobalPrefix('api/v2');
     configureRequestBodyParsing(instance);
     instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
@@ -64,13 +64,13 @@ describe('OTP with real Redis (e2e)', () => {
 
   const send = (id: Identity, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/send')
+      .post('/api/v2/otp/send')
       .set('X-Forwarded-For', id.ip)
       .send({ phoneNumber: id.phone });
 
   const verify = (id: Identity, code: string, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/verify')
+      .post('/api/v2/otp/verify')
       .send({ phoneNumber: id.phone, code });
 
   beforeAll(async () => {
@@ -178,8 +178,8 @@ describe('OTP with real Redis (e2e)', () => {
   });
 
   it.each([
-    ['/api/otp/send', { error: 'Phone number is required.' }],
-    ['/api/otp/verify', { error: 'Phone number and code are required.' }],
+    ['/api/v2/otp/send', { error: 'Phone number is required.' }],
+    ['/api/v2/otp/verify', { error: 'Phone number and code are required.' }],
   ])('treats malformed JSON on %s as an empty request body', async (path, body) => {
     await request(app.getHttpServer())
       .post(path as string)
@@ -188,7 +188,7 @@ describe('OTP with real Redis (e2e)', () => {
       .expect(400, body);
   });
 
-  it.each(['/api/otp/send', '/api/otp/verify'])(
+  it.each(['/api/v2/otp/send', '/api/v2/otp/verify'])(
     'returns the legacy 405 response for unsupported methods on %s',
     async (path) => {
       for (const method of ['get', 'put', 'patch', 'delete'] as const) {

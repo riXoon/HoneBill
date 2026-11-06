@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { randomUUID } from 'node:crypto';
+import { API_BASE_PATH } from '../api-prefix';
 import express, { type NextFunction, type Request, type Response } from 'express';
 
 interface SmsWebhookRequest extends Request {
@@ -10,7 +11,7 @@ interface SmsWebhookRequest extends Request {
 }
 
 /**
- * Installs Express middleware on the Nest app for /api/sms/webhook.
+ * Installs Express middleware on the Nest app for the SMS webhook route.
  * Run this before configureRequestBodyParsing: parsing and re-serializing JSON
  * can change whitespace/encoding and invalidate TextBee's signature.
  * Middleware runs before Nest guards and controllers; it does not authenticate
@@ -18,7 +19,7 @@ interface SmsWebhookRequest extends Request {
  */
 export function configureSmsWebhookMiddleware(app: NestExpressApplication): void {
   app.use(
-    '/api/sms/webhook',
+    `${API_BASE_PATH}/sms/webhook`,
     // Create the trace ID before parsing, so even a rejected oversized POST has one.
     (req: SmsWebhookRequest, _res: Response, next: NextFunction) => {
       if (req.method === 'POST') req.traceId = randomUUID();
@@ -36,7 +37,7 @@ export function configureSmsWebhookMiddleware(app: NestExpressApplication): void
   );
   // Express recognizes an error handler by its FOUR parameters. Parser failures
   // skip normal handlers and arrive here, including the raw parser's size error.
-  app.use('/api/sms/webhook', (error: unknown, req: SmsWebhookRequest, res: Response, next: NextFunction) => {
+  app.use(`${API_BASE_PATH}/sms/webhook`, (error: unknown, req: SmsWebhookRequest, res: Response, next: NextFunction) => {
     if (typeof error === 'object' && error !== null && 'type' in error && error.type === 'entity.too.large') {
       res.status(413).json({ error: 'Payload too large', traceId: req.traceId ?? randomUUID() });
       // The response is complete; do not continue to the webhook controller.
