@@ -6,6 +6,7 @@ import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
 import { Button } from '../components/ui/Button';
+import { fieldStateStyle, useFieldFocus } from '../components/ui/fieldState';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import type { RootStackParamList } from '../navigation/types';
 import { setAccountPhone } from '../services/accountPhone';
@@ -26,6 +27,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
+  const phoneFocus = useFieldFocus();
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -100,7 +102,9 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
               autoComplete="tel"
               accessibilityLabel="Mobile number"
               editable={!busy}
-              style={[styles.box, styles.field, (invalid || error) && styles.invalid]}
+              onFocus={phoneFocus.onFocus}
+              onBlur={phoneFocus.onBlur}
+              style={[styles.box, styles.field, fieldStateStyle(phoneFocus.focused, phone.length > 0), (invalid || error) && styles.invalid]}
             />
           </View>
           {error ? (

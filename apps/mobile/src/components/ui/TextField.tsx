@@ -1,9 +1,9 @@
-import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts, radius } from '../../theme';
+import { fieldStateStyle, useFieldFocus } from './fieldState';
 
 type TextFieldProps = Pick<TextInputProps, 'keyboardType' | 'autoCapitalize' | 'autoComplete' | 'textContentType'> & {
   label: string;
@@ -31,7 +31,7 @@ function AlertIcon() {
 
 /** Labelled input (Figma Input, 870:3017). Focused fields turn solid with a soft shadow. */
 export function TextField({ label, value, onChangeText, error, ...inputProps }: TextFieldProps) {
-  const [focused, setFocused] = useState(false);
+  const { focused, onFocus, onBlur } = useFieldFocus();
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
@@ -39,10 +39,10 @@ export function TextField({ label, value, onChangeText, error, ...inputProps }: 
         {...inputProps}
         value={value}
         onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         accessibilityLabel={label}
-        style={[styles.field, focused ? styles.fieldFocused : styles.fieldIdle]}
+        style={[styles.field, fieldStateStyle(focused, value.length > 0)]}
       />
       {/* Always reserve the row so the layout does not jump when an error appears. */}
       <View style={[styles.alert, !error && styles.alertHidden]} accessibilityLiveRegion="polite">
@@ -65,16 +65,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.text,
   },
-  fieldFocused: {
-    backgroundColor: colors.surface,
-    borderColor: colors.primary,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  fieldIdle: { backgroundColor: colors.surfaceTranslucent, borderColor: colors.primarySoft },
   alert: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 12 },
   alertHidden: { opacity: 0 },
   alertText: { fontFamily: fonts.regular, fontSize: 10, color: colors.coral },
