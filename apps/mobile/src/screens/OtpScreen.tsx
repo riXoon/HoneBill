@@ -70,6 +70,12 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
     }
   };
 
+  // The code usually arrives by autofill all at once: check it as soon as it is complete instead of waiting for a tap.
+  useEffect(() => {
+    if (code.length === OTP_LENGTH && !busy) void verify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   const resend = async () => {
     if (busy || cooldown > 0) return;
 
