@@ -23,7 +23,7 @@ async function main() {
   const baseUrl = `http://localhost:${process.env.PORT || 3000}`;
 
   const challengeResponse = await fetch(
-    `${baseUrl}/api/auth?account=${encodeURIComponent(publicKey)}`
+    `${baseUrl}/api/v2/auth?account=${encodeURIComponent(publicKey)}`
   );
   const challenge = await challengeResponse.json();
 
@@ -42,7 +42,7 @@ async function main() {
   console.log('Signed challenge XDR:');
   console.log(signedXdr);
 
-  const signedResponse = await fetch(`${baseUrl}/api/auth`, {
+  const signedResponse = await fetch(`${baseUrl}/api/v2/auth`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transaction: signedXdr }),

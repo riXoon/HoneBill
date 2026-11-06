@@ -6,8 +6,9 @@ import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { CheckIcon, CheckTitleIcon, OfflineFundsBadge, RecipientIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
-import { SERVICE_FEE, findRecipientById, formatPeso } from '../mocks/send';
+import { formatPeso } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
+import { findRecipientById } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 3 - Verification (870:2796), 402x874.
@@ -89,12 +90,11 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       <GlassCard style={styles.summary}>
         <View style={styles.breakdown}>
           <SummaryRow label="Amount sent" value={formatPeso(amount)} />
-          <SummaryRow label="Service Fee" value={formatPeso(SERVICE_FEE)} />
         </View>
         <View style={styles.divider} />
         <View style={styles.totalRow}>
           <Text style={styles.totalRowLabel}>Total deducted</Text>
-          <Text style={styles.totalRowValue}>{formatPeso(amount + SERVICE_FEE)}</Text>
+          <Text style={styles.totalRowValue}>{formatPeso(amount)}</Text>
         </View>
         <View style={styles.divider} />
       </GlassCard>

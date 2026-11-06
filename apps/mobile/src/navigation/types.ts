@@ -1,6 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-import type { DispatchMethod } from '../mocks/send';
+import type { DispatchMethod } from '../types/send';
 
 /** The four tabs behind the bottom navigation bar. */
 export type TabParamList = {
@@ -14,10 +14,15 @@ export type TabParamList = {
 export type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
-  InputNumber: undefined;
+  /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
+  InputNumber: { mode?: 'signin' } | undefined;
   Otp: { phone: string };
   UserDetails: undefined;
   MpinCreation: undefined;
+  /** One-time backup of the wallet's 12 words, shown right after the account is created. */
+  RecoveryPhrase: undefined;
+  /** Asks for a few of the phrase's words to confirm the user saved it. */
+  RecoveryQuiz: undefined;
   AccountConfirmation: undefined;
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   QrScan: undefined;
@@ -26,7 +31,8 @@ export type RootStackParamList = {
   SendAmount: { recipientId: string };
   SendVerification: SendDraft;
   SendMethod: SendDraft;
-  SendReceipt: SendDraft & { method: DispatchMethod };
+  /** Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists. */
+  SendReceipt: SendDraft & { method: DispatchMethod; reference: string; issuedAt: number };
   /** Receive flow: amount -> offline relay voucher QR. */
   ReceiveAmount: undefined;
   ReceiveQr: { amount: number };

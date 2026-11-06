@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { Recipient } from '../../mocks/send';
+import type { Recipient } from '../../types/recipient';
 import { colors, fonts } from '../../theme';
 import { StarIcon } from '../ui/smallIcons';
 import { Avatar } from './Avatar';

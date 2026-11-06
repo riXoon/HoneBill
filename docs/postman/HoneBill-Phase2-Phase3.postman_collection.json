@@ -26,9 +26,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/auth?account={{publicKey}}",
+              "raw": "{{baseUrl}}/api/v2/auth?account={{publicKey}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "auth"],
+              "path": ["api", "v2", "auth"],
               "query": [
                 { "key": "account", "value": "{{publicKey}}" }
               ]
@@ -53,9 +53,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/auth",
+              "raw": "{{baseUrl}}/api/v2/auth",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "auth"]
+              "path": ["api", "v2", "auth"]
             },
             "description": "Submit a signed SEP-10 transaction XDR. Generate and sign it from the challenge response; do not submit the sample placeholder."
           },
@@ -74,9 +74,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/pin/verify",
+              "raw": "{{baseUrl}}/api/v2/auth/pin/verify",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "pin", "verify"]
+              "path": ["api", "v2", "auth", "pin", "verify"]
             },
             "description": "Requires an account whose PIN matches the registered value."
           },
@@ -100,9 +100,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/otp/send",
+              "raw": "{{baseUrl}}/api/v2/otp/send",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "otp", "send"]
+              "path": ["api", "v2", "otp", "send"]
             },
             "description": "Sends or returns a test-mode OTP according to backend configuration. This can contact configured SMS providers; do not use it for production numbers without authorization."
           },
@@ -121,9 +121,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/otp/verify",
+              "raw": "{{baseUrl}}/api/v2/otp/verify",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "otp", "verify"]
+              "path": ["api", "v2", "otp", "verify"]
             },
             "description": "Verify the OTP first, then copy the returned verificationToken into the verificationToken collection variable before registration."
           },
@@ -147,9 +147,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/register",
+              "raw": "{{baseUrl}}/api/v2/register",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "register"]
+              "path": ["api", "v2", "register"]
             },
             "description": "Sample registration payload. If OTP verification is enabled, verificationToken must be a real token returned by the OTP verify route."
           },
@@ -161,9 +161,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/users/check?phone={{phoneNumber}}",
+              "raw": "{{baseUrl}}/api/v2/users/check?phone={{phoneNumber}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "check"],
+              "path": ["api", "v2", "users", "check"],
               "query": [
                 { "key": "phone", "value": "{{phoneNumber}}" }
               ]
@@ -178,9 +178,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/users/lookup?shortId={{shortId}}",
+              "raw": "{{baseUrl}}/api/v2/users/lookup?shortId={{shortId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "lookup"],
+              "path": ["api", "v2", "users", "lookup"],
               "query": [
                 { "key": "shortId", "value": "{{shortId}}" }
               ]
@@ -195,9 +195,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/users/lookup?phone={{phoneNumber}}",
+              "raw": "{{baseUrl}}/api/v2/users/lookup?phone={{phoneNumber}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "lookup"],
+              "path": ["api", "v2", "users", "lookup"],
               "query": [
                 { "key": "phone", "value": "{{phoneNumber}}" }
               ]
@@ -217,9 +217,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/wallet/balance?publicKey={{publicKey}}&assetCode=PHPC",
+              "raw": "{{baseUrl}}/api/v2/wallet/balance?publicKey={{publicKey}}&assetCode=PHPC",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "wallet", "balance"],
+              "path": ["api", "v2", "wallet", "balance"],
               "query": [
                 { "key": "publicKey", "value": "{{publicKey}}" },
                 { "key": "assetCode", "value": "PHPC" }
@@ -235,9 +235,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/wallet/history?shortId={{shortId}}&publicKey={{publicKey}}&limit=50&since={{since}}",
+              "raw": "{{baseUrl}}/api/v2/wallet/history?shortId={{shortId}}&publicKey={{publicKey}}&limit=50&since={{since}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "wallet", "history"],
+              "path": ["api", "v2", "wallet", "history"],
               "query": [
                 { "key": "shortId", "value": "{{shortId}}" },
                 { "key": "publicKey", "value": "{{publicKey}}" },
@@ -255,9 +255,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/vault-balance?shortId={{shortId}}&stellarPublicKey={{publicKey}}",
+              "raw": "{{baseUrl}}/api/v2/vault-balance?shortId={{shortId}}&stellarPublicKey={{publicKey}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "vault-balance"],
+              "path": ["api", "v2", "vault-balance"],
               "query": [
                 { "key": "shortId", "value": "{{shortId}}" },
                 { "key": "stellarPublicKey", "value": "{{publicKey}}" }
@@ -273,9 +273,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/transactions?shortId={{shortId}}&limit=50&since={{since}}",
+              "raw": "{{baseUrl}}/api/v2/transactions?shortId={{shortId}}&limit=50&since={{since}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "transactions"],
+              "path": ["api", "v2", "transactions"],
               "query": [
                 { "key": "shortId", "value": "{{shortId}}" },
                 { "key": "limit", "value": "50" },
@@ -299,9 +299,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/wallet/transfers/confirm",
+              "raw": "{{baseUrl}}/api/v2/wallet/transfers/confirm",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "wallet", "transfers", "confirm"]
+              "path": ["api", "v2", "wallet", "transfers", "confirm"]
             },
             "description": "Confirms a 64-character hexadecimal Stellar transaction hash. Replace the sample hash with a real submitted transaction hash."
           },
@@ -325,9 +325,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/api/settlements",
+              "raw": "{{baseUrl}}/api/v2/settlements",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "settlements"]
+              "path": ["api", "v2", "settlements"]
             },
             "description": "Offline settlement format is tokenId:senderShortId:receiverShortId:amountBase62:nonceBase64:signatureBase64. The sample nonce and signature are placeholders and must be signed by the sender's enrolled offline device key. Do not submit real funds unintentionally."
           },

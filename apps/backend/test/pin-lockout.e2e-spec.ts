@@ -46,7 +46,7 @@ describe('PIN lockout with real Redis (e2e)', () => {
       ],
     }).compile();
     const instance = moduleRef.createNestApplication();
-    instance.setGlobalPrefix('api');
+    instance.setGlobalPrefix('api/v2');
     instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
@@ -54,7 +54,7 @@ describe('PIN lockout with real Redis (e2e)', () => {
 
   const verify = (target: INestApplication, pin: string) =>
     request(target.getHttpServer())
-      .post('/api/auth/pin/verify')
+      .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: phone, pin });
 
   beforeAll(async () => {

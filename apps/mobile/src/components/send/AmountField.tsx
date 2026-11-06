@@ -1,7 +1,6 @@
 import { StyleSheet, Text, TextInput } from 'react-native';
 
-import { splitPesos } from '../../mocks/home';
-import { TRANSFER_LIMIT } from '../../mocks/send';
+import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { OutlinedField } from './OutlinedField';
 
@@ -19,11 +18,13 @@ export function sanitizeAmount(text: string): string {
   return `${cleaned.slice(0, dot).slice(0, MAX_WHOLE_DIGITS)}.${cleaned.slice(dot + 1).replace(/\./g, '').slice(0, 2)}`;
 }
 
-/** Why `amount` cannot be sent yet, or null when it can. `available` is the most the wallet can spend on it. */
-export function amountProblem(amount: number, available: number): string | null {
+/**
+ * Why `amount` cannot be used yet, or null when it can. `available` is the most the wallet can spend; leave it
+ * out when nothing caps the amount (a payment request). There is no transfer limit: the backend sets none.
+ */
+export function amountProblem(amount: number, available?: number): string | null {
   if (amount <= 0) return 'Enter Amount';
-  if (amount > TRANSFER_LIMIT) return 'Over the transfer limit';
-  if (amount > available) return 'Not enough balance';
+  if (available !== undefined && amount > available) return 'Not enough balance';
   return null;
 }
 

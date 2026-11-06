@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
 
@@ -10,10 +10,27 @@ import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import { WeakPinDialog } from '../components/ui/WeakPinDialog';
-import { MPIN_LENGTH } from '../mocks/user';
+import { useAuth } from '../context/AuthContext';
+import { MPIN_LENGTH } from '../config/limits';
 import type { RootStackParamList } from '../navigation/types';
+import { setAccountPhone } from '../services/accountPhone';
+import { registerAccount, type RegisteredAccount } from '../services/api/accounts';
+import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import { checkUser } from '../services/api/users';
+import { reportError } from '../services/errorReporting';
 import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
+import { clearSignupSession, getSignupSession, type SignupDetails, type SignupSession } from '../services/signupSession';
+import { createDeviceWallet, markDeviceWalletRegistered, type NewWallet } from '../services/wallet/deviceWallet';
 import { colors, fonts } from '../theme';
+import { afterNextPaint } from '../utils/async';
+
+/** The server's per-field validation messages, when it sent any. */
+function fieldErrorText(error: ApiError): string | null {
+  const fields = error.data?.fieldErrors;
+  if (!fields || typeof fields !== 'object') return null;
+  const messages = Object.values(fields).filter((v): v is string => typeof v === 'string');
+  return messages.length > 0 ? messages.join(' ') : null;
+}
 
 // Figma: MPIN Creation (870:2965), 402x874.
 
@@ -38,16 +55,115 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
   const [weak, setWeak] = useState<WeakMpinReason | null>(null);
   // Remounting the boxes after the dialog brings the keyboard back (the Modal steals focus).
   const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { login } = useAuth();
+  const request = useRef<AbortController | null>(null);
+  /** Created once per visit, so a retry after a lost response registers the same keys. */
+  const wallet = useRef<NewWallet | null>(null);
 
-  // The PIN is not stored yet (mock-only frontend).
-  const confirm = () => {
-    if (pin.length !== MPIN_LENGTH) return;
+  useEffect(() => () => request.current?.abort(), []);
+
+  const startOver = () => {
+    clearSignupSession();
+    navigation.popTo('InputNumber');
+  };
+
+  /**
+   * Registers the account. If the server already holds one for this phone with *our* key, an earlier
+   * attempt succeeded but its response was lost, so that counts as success.
+   */
+  const register = async (
+    session: SignupSession,
+    details: SignupDetails,
+    keys: NewWallet,
+    signal: AbortSignal,
+  ): Promise<Pick<RegisteredAccount, 'shortId' | 'stellarPublicKey'>> => {
+    try {
+      return await registerAccount(
+        {
+          stellarPublicKey: keys.publicKey,
+          offlineDeviceKey: keys.offlineDeviceKey,
+          phoneNumber: session.phone,
+          pin,
+          firstName: details.firstName,
+          lastName: details.lastName,
+          email: details.email,
+          verificationToken: session.verificationToken,
+        },
+        signal,
+      );
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        const existing = await checkUser(session.phone, signal);
+        if (existing.exists && existing.stellarPublicKey === keys.publicKey) return existing;
+      }
+      throw e;
+    }
+  };
+
+  const confirm = async () => {
+    if (busy || pin.length !== MPIN_LENGTH) return;
     const reason = weakMpinReason(pin);
     if (reason) {
       setWeak(reason);
       return;
     }
-    navigation.navigate('AccountConfirmation');
+
+    const session = getSignupSession();
+    if (!session?.details) {
+      Alert.alert('Session expired', 'Please verify your number again to continue.', [{ text: 'OK', onPress: startOver }]);
+      return;
+    }
+
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true);
+    setError(null);
+    try {
+      // Show "Creating your vault…" before the key maths starts, so a tap is acknowledged at once.
+      await afterNextPaint();
+      // The phrase is saved to the keystore before the server hears about the account, never after.
+      if (!wallet.current) wallet.current = await createDeviceWallet();
+      const account = await register(session, session.details, wallet.current, controller.signal);
+
+      await markDeviceWalletRegistered().catch((e) => reportError(e, { step: 'markDeviceWalletRegistered' }));
+      await setAccountPhone(session.phone);
+      await login({
+        shortId: account.shortId,
+        stellarPublicKey: account.stellarPublicKey,
+        firstName: session.details.firstName,
+        lastName: session.details.lastName,
+        phone: session.phone,
+      });
+      clearSignupSession();
+      // Reset: going back into this step would only fail with "already registered".
+      // The recovery phrase comes first: this is the only moment the user is told to back it up.
+      navigation.reset({ index: 0, routes: [{ name: 'RecoveryPhrase' }] });
+    } catch (e) {
+      if (isAborted(e)) return;
+      setPin('');
+      setAttempt((n) => n + 1);
+      if (e instanceof ApiError) {
+        if (e.status === 401) {
+          // The OTP proof expired (30 minutes) or does not match this number.
+          Alert.alert('Verification expired', 'Please verify your phone number again.', [{ text: 'OK', onPress: startOver }]);
+        } else if (e.status === 409) {
+          setError('This number already has an account. Go back and sign in.');
+        } else if (e.status === 400) {
+          // The server only says "Bad Request" for DTO failures, so point at the likely cause.
+          setError(fieldErrorText(e) ?? 'Some of your details were rejected. Go back and check your name and email.');
+        } else {
+          setError(errorMessage(e));
+        }
+      } else {
+        // Keystore or randomness failure while creating the wallet: nothing was sent to the server.
+        reportError(e, { step: 'createAccount' });
+        setError('We could not create your secure wallet on this device. Please try again.');
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const dismissWeak = () => {
@@ -67,9 +183,22 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
           <Text style={styles.subtitle}>Create a 4-digit PIN to protect your device</Text>
         </View>
 
-        <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+        <View style={styles.codeBlock}>
+          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+          {error ? (
+            <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {error}
+            </Text>
+          ) : null}
+        </View>
 
-        <Button label="Confirm 4-digit pin" size="large" icon={<LockIcon />} onPress={confirm} />
+        <Button
+          label={busy ? 'Creating your vault…' : 'Confirm 4-digit pin'}
+          size="large"
+          icon={busy ? undefined : <LockIcon />}
+          onPress={() => void confirm()}
+          disabled={busy}
+        />
 
         {/* Honi's image (shield and lock included) is taller than the 196 dp component; it hangs from the top. */}
         <View style={styles.mascotSlot}>
@@ -87,5 +216,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'center', padding: 40, gap: 40 },
   titleBlock: { gap: 8 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  codeBlock: { gap: 12, alignItems: 'center' },
+  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
   mascotSlot: { height: 300, alignItems: 'center' },
 });

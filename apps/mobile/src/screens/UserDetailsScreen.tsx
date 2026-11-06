@@ -8,10 +8,15 @@ import { Button } from '../components/ui/Button';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import { TextField } from '../components/ui/TextField';
 import type { RootStackParamList } from '../navigation/types';
+import { getSignupSession, setSignupDetails } from '../services/signupSession';
 import { colors, fonts } from '../theme';
 
 // Figma: User Details (870:3010), 402x874.
 const REQUIRED = 'Input is required';
+/** Same limits the server enforces, so a bad value is caught here and not after the MPIN step. */
+const NAME_MAX = 50;
+const EMAIL_MAX = 254;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Errors = { firstName?: string; lastName?: string; email?: string };
 
@@ -22,13 +27,26 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
   const [errors, setErrors] = useState<Errors>({});
 
   const submit = () => {
+    const first = firstName.trim();
+    const last = lastName.trim();
+    const mail = email.trim();
     const next: Errors = {};
-    if (!firstName.trim()) next.firstName = REQUIRED;
-    if (!lastName.trim()) next.lastName = REQUIRED;
-    if (!email.trim()) next.email = REQUIRED;
+    if (!first) next.firstName = REQUIRED;
+    else if (first.length > NAME_MAX) next.firstName = `At most ${NAME_MAX} characters`;
+    if (!last) next.lastName = REQUIRED;
+    else if (last.length > NAME_MAX) next.lastName = `At most ${NAME_MAX} characters`;
+    if (!mail) next.email = REQUIRED;
+    else if (mail.length > EMAIL_MAX || !EMAIL_PATTERN.test(mail)) next.email = 'Enter a valid email address';
     setErrors(next);
-    // Nothing is saved yet (mock-only frontend).
-    if (Object.keys(next).length === 0) navigation.navigate('MpinCreation');
+    if (Object.keys(next).length > 0) return;
+
+    // The session only exists after a verified OTP; without it the account cannot be registered.
+    if (!getSignupSession()) {
+      navigation.popTo('InputNumber');
+      return;
+    }
+    setSignupDetails({ firstName: first, lastName: last, email: mail });
+    navigation.navigate('MpinCreation');
   };
 
   return (

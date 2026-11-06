@@ -17,7 +17,7 @@
 ## Ground rules
 
 1. **Legacy is read-only.** Read `apps/_legacy/backend` for reference, copy logic into Nest, never import across the boundary and never edit it.
-2. **API contract parity.** Keep the global prefix `/api`, the same paths, methods, request/response JSON, status codes and error shape. The mobile client in `apps/mobile/src/_legacy/services/api/*` must work against Nest without changes. Any intentional break goes in the Decision log first.
+2. **API contract parity.** Keep the same paths after the global prefix (now `/api/v2`, see Decision log), methods, request/response JSON, status codes and error shape. The mobile client in `apps/mobile/src/_legacy/services/api/*` must work against Nest without changes. Any intentional break goes in the Decision log first.
 3. **Same database.** Copy `prisma/schema.prisma` and `prisma/migrations/` as-is. No schema changes during the migration; new migrations only after cutover.
 4. **Port tests with the code.** A module is not ☑ until its legacy tests are ported and passing.
 5. **Secrets stay out of git.** Same env var names as legacy unless the Decision log says otherwise.
@@ -206,8 +206,9 @@ Phase 3 migration completed (2026-10-29): all 6 endpoints implemented in `Wallet
 ### Phase 4: Engine / Soroban (highest risk)
 - [ ] Port tests first: `concurrency-hardening.test.ts`, `engine-retry-classifier.test.ts`, `stellar-transaction-manager.test.ts` (Nest lock and retry-classifier coverage plus transaction construction/submission/polling tests are in place; friendbot and settlement normalization cases remain pending their feature services)
 - [x] `Ed25519SignatureGuard` (canonical deposit/withdraw/online-transfer message verification; covered by E2E tests)
-- [ ] deposit, transfer, withdraw, offline-key, recipient-registry
-- [ ] settle as a BullMQ processor
+- [x] deposit, transfer, withdraw, offline-key, recipient-registry (implemented; `EngineService` unit-tested; live testnet check and legacy contract check still pending)
+- [x] settle as a BullMQ processor (`SettlementProcessor`, queue `engine-settlement`; live Redis worker run still pending, see Phase 5)
+- [ ] Live testnet verification of every engine route (see the Phase 4 test guide) and legacy-vs-Nest contract check
 
 ### Phase 5: SMS and queues
 - [x] TextBee client with fallback device; `TextbeeSignatureGuard`
@@ -312,6 +313,7 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-27 | Compare unknown-route behavior by status only; retain each framework's native 404 body | Next.js and NestJS format unmatched-route bodies differently, while both correctly return 404 |
 | 2026-10-29 | Preserve public transfer confirmation and settlement routes during Phase 3; confirm only advances a stored transfer after Soroban RPC success, while settlement requires a valid sender Ed25519 voucher and configured relayer | The legacy routes have no SEP-10 guard. Confirmation changes transaction metadata only, and settlement authorization is carried by the signed offline voucher; adding session authentication would break parity without adding transaction authorization |
 | 2026-10-31 | Protect `POST /api/sms/dispatch` with `SMS_DISPATCH_SECRET` in `x-sms-dispatch-secret`; keep it unavailable when the secret is unset | QStash signatures are removed with the queue migration. A dedicated shared secret protects the compatibility endpoint while dispatch is still called over HTTP; BullMQ worker delivery remains the preferred internal path. |
+| 2026-11-06 | Nest global prefix changes from `/api` to `/api/v2` (ground rule 2 no longer applies to the prefix; paths, methods, JSON and status codes after the prefix are unchanged) | Version the new API so it can run beside the legacy `/api` service. Mobile clients must add `/v2` when pointed at Nest |
 
 ## Change log
 
@@ -343,4 +345,5 @@ Legacy pages in `apps/_legacy/backend/app`: SEP-24 `deposit/`, `withdraw/` (**re
 | 2026-10-29 | Phase 4 Ed25519 signature guard | 4 (in progress) | Added shared Nest Ed25519 guard for legacy deposit/withdraw and versioned online-transfer canonical messages, with strict Base64 signature decoding and E2E coverage (5/5). |
 | 2026-10-27 | local Phase 2 parity follow-up | 2 (in progress) | Ported signup security coverage; preserved `/api/auth` legacy error bodies, memo behavior and subject-claim validation with focused tests. Full endpoint parity remains pending. |
 | 2026-10-29 | Phase 3 completion | 3 | Completed Phase 3 wallet, transactions, and settlement migration; all 19 Phase 3 tests pass, full suite (155/155 tests) and build/typecheck pass clean. |
+| 2026-11-04 | Phase 4 audit and cleanup | 4 (in progress: live verification pending) | Removed the unused duplicate `StellarTransactionManager` and retry util from `infra/stellar` (the live copies are in `modules/engine`); `StellarModule` now only provides `StellarService`. Moved the stray `test/engine.e2e-spec.ts` into `test/e2e-testing`, retargeted the manager and retry specs at the live code, removed a duplicate stale `test:e2e:phase2` script. Added `engine.service.spec.ts` (validation, 426 gate, inactive token, offline-key sync/409, registrar checks). Typecheck, build, 35 suites / 288 tests, and contract `cargo test` (29) pass. |
 | 2026-10-31 | Phase 4 implementation | 4 (implementation complete; tests pending) | Added Ed25519-protected deposit/transfer/withdraw and SEP-10 offline-key/recipient-registry routes, Soroban transaction helpers, two-phase idempotent settlement processing, retry classification, and a BullMQ queue producer/worker. Backend build passes; Phase 4 tests remain pending. |
