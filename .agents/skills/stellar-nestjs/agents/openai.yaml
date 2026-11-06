@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stellar + NestJS"
+  short_description: "Build Stellar features in HoneBill's NestJS backend"
+  default_prompt: "Use $stellar-nestjs to implement this Stellar backend change."

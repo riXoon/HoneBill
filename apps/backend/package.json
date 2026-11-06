@@ -31,6 +31,7 @@
     "test:phase3": "jest --runTestsByPath src/scripts/phase3-wallet-smoke.spec.ts src/modules/wallet/wallet.service.spec.ts src/modules/settlements/settlements.service.spec.ts src/modules/settlements/reconciliation.service.spec.ts src/scripts/reconciliation.test.ts --runInBand",
     "test:phase3:watch": "jest --watch --runTestsByPath src/scripts/phase3-wallet-smoke.spec.ts src/modules/wallet/wallet.service.spec.ts src/modules/settlements/settlements.service.spec.ts src/modules/settlements/reconciliation.service.spec.ts src/scripts/reconciliation.test.ts --runInBand",
     "phase3:script": "node -r ts-node/register ./src/scripts/phase3-wallet-smoke.ts",
+    "keys:phase4": "node ./src/scripts/generate-phase4-keys.js",
     "pretypecheck": "npm run prisma:generate"
   },
   "dependencies": {
