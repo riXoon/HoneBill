@@ -4,9 +4,10 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json apps/backend/package.json
+# Present so npm workspaces match the lockfile; mobile is never built here.
 COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/pijin_core/package.json packages/pijin_core/package.json
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --workspace=backend --include-workspace-root
 
 FROM deps AS build
 COPY . .
