@@ -50,7 +50,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
@@ -59,14 +59,14 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     await app.close();
   });
 
-  it('GET /api/auth returns the legacy challenge JSON with status 200', async () => {
+  it('GET /api/v2/auth returns the legacy challenge JSON with status 200', async () => {
     authService.getChallenge.mockReturnValue({
       transaction: 'fake-challenge-xdr',
       network_passphrase: 'Test SDF Network ; September 2015',
     });
 
     await request(app.getHttpServer())
-      .get('/api/auth')
+      .get('/api/v2/auth')
       .query({ account: 'GTEST', memo: '123' })
       .expect(200)
       .expect({
@@ -76,17 +76,17 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     expect(authService.getChallenge).toHaveBeenCalledWith('GTEST');
   });
 
-  it('POST /api/auth returns { token } with legacy status 200', async () => {
+  it('POST /api/v2/auth returns { token } with legacy status 200', async () => {
     authService.issueToken.mockResolvedValue({ token: 'fake-sep10-token' });
 
     await request(app.getHttpServer())
-      .post('/api/auth')
+      .post('/api/v2/auth')
       .send({ transaction: 'fake-signed-challenge-xdr' })
       .expect(200, { token: 'fake-sep10-token' });
     expect(authService.issueToken).toHaveBeenCalledWith('fake-signed-challenge-xdr');
   });
 
-  it('POST /api/auth preserves the scoped legacy unfunded-account body', async () => {
+  it('POST /api/v2/auth preserves the scoped legacy unfunded-account body', async () => {
     authService.issueToken.mockRejectedValueOnce(
       new ApiResponseException(401, {
         error: 'Unauthorized',
@@ -96,7 +96,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     );
 
     await request(app.getHttpServer())
-      .post('/api/auth')
+      .post('/api/v2/auth')
       .send({ transaction: 'fake-signed-challenge-xdr' })
       .expect(401, {
         error: 'Unauthorized',
@@ -105,7 +105,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       });
   });
 
-  it('POST /api/auth/pin/verify preserves success and incorrect-PIN contracts', async () => {
+  it('POST /api/v2/auth/pin/verify preserves success and incorrect-PIN contracts', async () => {
     accountsService.verifyPin
       .mockResolvedValueOnce({ success: true })
       .mockRejectedValueOnce(
@@ -113,42 +113,42 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .post('/api/auth/pin/verify')
+      .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: '09000000001', pin: '1234' })
       .expect(200, { success: true });
     await request(app.getHttpServer())
-      .post('/api/auth/pin/verify')
+      .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: '09000000001', pin: '0000' })
       .expect(401, { error: 'Incorrect PIN.', attemptsRemaining: 4 });
     expect(accountsService.verifyPin).toHaveBeenNthCalledWith(1, '09000000001', '1234');
   });
 
-  it('POST /api/auth/pin/verify trims PINs and coerces non-strings to empty', async () => {
+  it('POST /api/v2/auth/pin/verify trims PINs and coerces non-strings to empty', async () => {
     accountsService.verifyPin.mockResolvedValue({ success: true });
 
     await request(app.getHttpServer())
-      .post('/api/auth/pin/verify')
+      .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: '09000000001', pin: ' 1234 ' })
       .expect(200);
     expect(accountsService.verifyPin).toHaveBeenLastCalledWith('09000000001', '1234');
 
     await request(app.getHttpServer())
-      .post('/api/auth/pin/verify')
+      .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: 9000000001, pin: 1234 })
       .expect(200);
     expect(accountsService.verifyPin).toHaveBeenLastCalledWith('', '');
   });
 
-  it('POST /api/auth/pin/verify with no body does not crash the controller', async () => {
+  it('POST /api/v2/auth/pin/verify with no body does not crash the controller', async () => {
     accountsService.verifyPin.mockRejectedValueOnce(
       new HttpException({ error: 'A valid phone number and PIN are required.' }, 400),
     );
 
-    await request(app.getHttpServer()).post('/api/auth/pin/verify').expect(400);
+    await request(app.getHttpServer()).post('/api/v2/auth/pin/verify').expect(400);
     expect(accountsService.verifyPin).toHaveBeenCalledWith('', '');
   });
 
-  it('POST /api/auth/pin/verify returns 423 with retryAfter body and Retry-After header', async () => {
+  it('POST /api/v2/auth/pin/verify returns 423 with retryAfter body and Retry-After header', async () => {
   accountsService.verifyPin.mockRejectedValueOnce(
     new HttpException(
       { error: 'Too many incorrect PIN attempts. Please try again later.', retryAfter: 900 },
@@ -157,7 +157,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
   );
 
   const res = await request(app.getHttpServer())
-    .post('/api/auth/pin/verify')
+    .post('/api/v2/auth/pin/verify')
     .send({ phoneNumber: '09000000001', pin: '1234' })
     .expect(423, {
       error: 'Too many incorrect PIN attempts. Please try again later.',
@@ -166,7 +166,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
   expect(res.headers['retry-after']).toBe('900');
 });
 
-  it('POST /api/otp/send preserves success and rate-limit response contracts', async () => {
+  it('POST /api/v2/otp/send preserves success and rate-limit response contracts', async () => {
     otpService.send
       .mockResolvedValueOnce({
         success: true,
@@ -180,21 +180,21 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .post('/api/otp/send')
+      .post('/api/v2/otp/send')
       .set('X-Forwarded-For', '203.0.113.7, 10.0.0.1')
       .send({ phoneNumber: '09000000002' })
       .expect(200, { success: true, message: 'OTP sent successfully.' });
     expect(otpService.send).toHaveBeenNthCalledWith(1, '09000000002', '203.0.113.7');
 
     const limited = await request(app.getHttpServer())
-      .post('/api/otp/send')
+      .post('/api/v2/otp/send')
       .set('X-Forwarded-For', '203.0.113.7')
       .send({ phoneNumber: '09000000002' })
       .expect(429, { error: 'Too many OTP requests. Please wait a few minutes.' });
     expect(limited.headers['retry-after']).toBe('75');
   });
 
-  it('POST /api/otp/verify preserves success and invalid-code contracts', async () => {
+  it('POST /api/v2/otp/verify preserves success and invalid-code contracts', async () => {
     otpService.verify
       .mockResolvedValueOnce({
         success: true,
@@ -210,7 +210,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .post('/api/otp/verify')
+      .post('/api/v2/otp/verify')
       .send({ phoneNumber: '09000000003', code: '123456' })
       .expect(200, {
         success: true,
@@ -219,13 +219,13 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
         expiresIn: 1800,
       });
     await request(app.getHttpServer())
-      .post('/api/otp/verify')
+      .post('/api/v2/otp/verify')
       .send({ phoneNumber: '09000000003', code: '000000' })
       .expect(401, { error: 'Invalid verification code.', attemptsRemaining: 4 });
     expect(otpService.verify).toHaveBeenNthCalledWith(1, '09000000003', '123456');
   });
 
-  it('POST /api/register keeps the legacy 201 success status and conflict shape', async () => {
+  it('POST /api/v2/register keeps the legacy 201 success status and conflict shape', async () => {
     accountsService.register
       .mockResolvedValueOnce({ success: true, data: { id: 'fake-account-id' } })
       .mockRejectedValueOnce(
@@ -233,30 +233,30 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .post('/api/register')
+      .post('/api/v2/register')
       .send({ stellarPublicKey: 'GTEST', phoneNumber: '09000000004' })
       .expect(201, { success: true, data: { id: 'fake-account-id' } });
     await request(app.getHttpServer())
-      .post('/api/register')
+      .post('/api/v2/register')
       .send({ stellarPublicKey: 'GTEST', phoneNumber: '09000000004' })
       .expect(409, { error: 'Phone number is already registered.' });
   });
 
-  it('GET /api/users/check returns the legacy not-found result with status 200', async () => {
+  it('GET /api/v2/users/check returns the legacy not-found result with status 200', async () => {
     accountsService.checkUser.mockResolvedValue({ exists: false });
 
     await request(app.getHttpServer())
-      .get('/api/users/check')
+      .get('/api/v2/users/check')
       .query({ phone: '09000000005' })
       .expect(200, { exists: false });
     expect(accountsService.checkUser).toHaveBeenCalledWith('09000000005');
   });
 
-  it('GET /api/users/lookup preserves the legacy { found: false } 404 shape', async () => {
+  it('GET /api/v2/users/lookup preserves the legacy { found: false } 404 shape', async () => {
     accountsService.lookupUser.mockRejectedValue(new HttpException({ found: false }, 404));
 
     await request(app.getHttpServer())
-      .get('/api/users/lookup')
+      .get('/api/v2/users/lookup')
       .query({ shortId: 'AbC123' })
       .expect(404, { found: false });
     expect(accountsService.lookupUser).toHaveBeenCalledWith('AbC123', undefined);

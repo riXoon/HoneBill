@@ -54,7 +54,7 @@ describe('OTP with real Redis (e2e)', () => {
       ],
     }).compile();
     const instance = moduleRef.createNestApplication();
-    instance.setGlobalPrefix('api');
+    instance.setGlobalPrefix('api/v2');
     instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
@@ -62,13 +62,13 @@ describe('OTP with real Redis (e2e)', () => {
 
   const send = (id: Identity, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/send')
+      .post('/api/v2/otp/send')
       .set('X-Forwarded-For', id.ip)
       .send({ phoneNumber: id.phone });
 
   const verify = (id: Identity, code: string, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/verify')
+      .post('/api/v2/otp/verify')
       .send({ phoneNumber: id.phone, code });
 
   beforeAll(async () => {

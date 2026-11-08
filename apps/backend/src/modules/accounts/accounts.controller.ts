@@ -38,7 +38,7 @@ export class AccountsController {
     if (hasNoBody) {
       throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
-    if (body === null || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       throw new ApiResponseException(400, { error: 'Invalid JSON body' });
     }
     return this.accountsService.register(body);

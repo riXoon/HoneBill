@@ -8,7 +8,7 @@ import { RedisHealthIndicator } from '../../src/modules/health/indicators/redis.
 import { StellarRpcHealthIndicator } from '../../src/modules/health/indicators/stellar-rpc.health.js';
 import { SmsHealthService } from '../../src/modules/health/sms-health.service.js';
 
-describe('/api/health legacy response contract (e2e)', () => {
+describe('/api/v2/health legacy response contract (e2e)', () => {
   let app: INestApplication;
   const database = { pingCheck: jest.fn<(key: string) => Promise<unknown>>() };
   const redis = { pingCheck: jest.fn<(key: string) => Promise<unknown>>() };
@@ -27,7 +27,7 @@ describe('/api/health legacy response contract (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     await app.init();
   });
 
@@ -42,7 +42,7 @@ describe('/api/health legacy response contract (e2e)', () => {
   });
 
   it('returns HTTP 200 with the legacy health envelope when probes pass', async () => {
-    const response = await request(app.getHttpServer()).get('/api/health').expect(200);
+    const response = await request(app.getHttpServer()).get('/api/v2/health').expect(200);
 
     expect(response.body).toMatchObject({
       status: 'healthy',
@@ -62,7 +62,7 @@ describe('/api/health legacy response contract (e2e)', () => {
   it('keeps HTTP 200 and returns degraded legacy data when a probe fails', async () => {
     redis.pingCheck.mockRejectedValue(new Error('Redis is unavailable'));
 
-    const response = await request(app.getHttpServer()).get('/api/health').expect(200);
+    const response = await request(app.getHttpServer()).get('/api/v2/health').expect(200);
 
     expect(response.body.status).toBe('degraded');
     expect(response.body.checks).toEqual({

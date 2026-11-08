@@ -1,3 +1,4 @@
+import { API_BASE_PATH } from '../../common/api-prefix';
 import { createHash, randomUUID } from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger, Optional } from '@nestjs/common';
@@ -206,7 +207,7 @@ export class SmsService {
     const debug = this.config.get<boolean | string>('OFFLINE_TRANSACTION_DEBUG');
     return {
       success: true,
-      route: '/api/sms/webhook',
+      route: `${API_BASE_PATH}/sms/webhook`,
       accepts: ['POST'],
       configured: {
         textbeeWebhookSecret: Boolean(this.config.get<string>('TEXTBEE_WEBHOOK_SECRET')),

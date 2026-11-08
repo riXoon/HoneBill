@@ -2,12 +2,13 @@ import { INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NextFunction, Request, Response } from 'express';
+import { API_PREFIX } from './common/api-prefix';
 
 export function configureApp(app: INestApplication): void {
   const configService = app.get(ConfigService);
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
 
-  app.setGlobalPrefix('api', {
+  app.setGlobalPrefix(API_PREFIX, {
     exclude: [{ path: '.well-known/(.*)', method: RequestMethod.ALL }],
   });
 
@@ -59,9 +60,9 @@ export function configureApp(app: INestApplication): void {
     .setVersion('1.0.0')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup(`${API_PREFIX}/docs`, app, document);
 
-  express.get('/api/swagger', (_req: unknown, res: Response) => {
+  express.get(`/${API_PREFIX}/swagger`, (_req: unknown, res: Response) => {
     res.json(document);
   });
 }
