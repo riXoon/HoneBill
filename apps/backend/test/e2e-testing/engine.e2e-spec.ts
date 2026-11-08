@@ -30,7 +30,7 @@ describe('Engine routes (HTTP e2e)', () => {
       ],
     }).overrideGuard(Sep10JwtGuard).useValue({ canActivate: () => true }).compile();
     app = module.createNestApplication();
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     await app.init();
   });
 
@@ -39,7 +39,7 @@ describe('Engine routes (HTTP e2e)', () => {
 
   it('rejects a request with no signed-intent bearer token', async () => {
     const wallet = Keypair.random();
-    await request(app.getHttpServer()).post('/api/engine/deposit').send({
+    await request(app.getHttpServer()).post('/api/v2/engine/deposit').send({
       senderPublicKey: wallet.publicKey(), amountStroops: '100',
     }).expect(401).expect(({ body }) => {
       expect(body).toMatchObject({ message: 'Missing Authorization header', statusCode: 401 });
@@ -52,14 +52,14 @@ describe('Engine routes (HTTP e2e)', () => {
     const body = { senderPublicKey: wallet.publicKey(), amountStroops: '100' };
     const message = 'deposit:' + body.senderPublicKey + ':' + body.amountStroops;
     const signature = wallet.sign(Buffer.from(message)).toString('base64');
-    await request(app.getHttpServer()).post('/api/engine/deposit').set('Authorization', 'Bearer ' + signature)
+    await request(app.getHttpServer()).post('/api/v2/engine/deposit').set('Authorization', 'Bearer ' + signature)
       .send(body).expect(201, { xdr: 'unsigned-xdr' });
     expect(engine.prepareDeposit).toHaveBeenCalledWith(body);
   });
 
   it('rejects an invalid signature before business logic runs', async () => {
     const wallet = Keypair.random();
-    await request(app.getHttpServer()).post('/api/engine/deposit')
+    await request(app.getHttpServer()).post('/api/v2/engine/deposit')
       .set('Authorization', 'Bearer ' + Buffer.alloc(64).toString('base64'))
       .send({ senderPublicKey: wallet.publicKey(), amountStroops: '100' })
       .expect(401).expect(({ body }) => {

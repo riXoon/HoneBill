@@ -59,7 +59,7 @@ export class AnchorController {
   /** Creates a deposit transaction and returns a short-lived webview URL token. */
   initiateDeposit(
     @Headers('authorization') authorization: string | undefined,
-    @Body() body: unknown,
+    @Body() body: InteractiveRampRequestDto,
   ) {
     return this.anchorService.initiateDeposit(authorization, body);
   }
@@ -70,7 +70,7 @@ export class AnchorController {
   /** Creates a withdrawal transaction and returns a short-lived webview URL token. */
   initiateWithdrawal(
     @Headers('authorization') authorization: string | undefined,
-    @Body() body: unknown,
+    @Body() body: InteractiveRampRequestDto,
   ) {
     return this.anchorService.initiateWithdrawal(authorization, body);
   }
@@ -81,7 +81,7 @@ export class AnchorController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-forwarded-for') forwardedFor: string | undefined,
     @Headers('x-real-ip') realIp: string | undefined,
-    @Body() body: unknown,
+    @Body() body: SubmitWithdrawalRequestDto,
   ) {
     return this.anchorService.submitWithdrawal(authorization, body, forwardedFor ?? realIp);
   }
@@ -92,7 +92,7 @@ export class AnchorController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-forwarded-for') forwardedFor: string | undefined,
     @Headers('x-real-ip') realIp: string | undefined,
-    @Body() body: unknown,
+    @Body() body: ConfirmWithdrawalRequestDto,
   ) {
     return this.anchorService.confirmWithdrawal(authorization, body, forwardedFor ?? realIp);
   }
@@ -103,7 +103,7 @@ export class AnchorController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-forwarded-for') forwardedFor: string | undefined,
     @Headers('x-real-ip') realIp: string | undefined,
-    @Body() body: unknown,
+    @Body() body: SimulatePaymentRequestDto,
   ) {
     return this.anchorService.simulatePayment(authorization, body, forwardedFor ?? realIp);
   }

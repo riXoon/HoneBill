@@ -43,9 +43,9 @@ describe('AnchorService', () => {
       expect(result.status).toBe(200);
       expect(result.headers['Content-Type']).toBe('text/plain; charset=utf-8');
       expect(result.headers['Access-Control-Allow-Origin']).toBe('*');
-      expect(result.body).toContain('WEB_AUTH_ENDPOINT="https://anchor.example/api/auth"');
+      expect(result.body).toContain('WEB_AUTH_ENDPOINT="https://anchor.example/api/v2/auth"');
       expect(result.body).toContain(`SIGNING_KEY="${keypair.publicKey()}"`);
-      expect(result.body).toContain('TRANSFER_SERVER_SEP0024="https://anchor.example/api/sep24"');
+      expect(result.body).toContain('TRANSFER_SERVER_SEP0024="https://anchor.example/api/v2/sep24"');
       expect(result.body).toContain('issuer="GPHPC"');
       expect(result.body).toContain('issuer="GUSDC"');
       expect(result.body).not.toContain(keypair.secret());
