@@ -2,7 +2,6 @@ import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-import type { ActivityItem } from '../../mocks/home';
 import { colors, fonts } from '../../theme';
 
 /** Check mark from Figma (small icons, 23.7 dp). */
@@ -33,7 +32,11 @@ function SwapIcon() {
   );
 }
 
-export type ActivityRowProps = Omit<ActivityItem, 'id'> & {
+export type ActivityRowProps = {
+  title: string;
+  body: string;
+  /** Already formatted for display, e.g. "25m ago". */
+  time: string;
   /** Money in (check mark, the default) or money out (arrows). */
   kind?: 'received' | 'sent';
 };

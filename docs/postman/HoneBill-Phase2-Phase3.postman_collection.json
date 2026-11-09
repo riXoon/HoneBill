@@ -1,0 +1,339 @@
+{
+  "info": {
+    "_postman_id": "a5cc55ec-b9a4-4f3d-a0ca-7d2b0ad3db6d",
+    "name": "HoneBill Phase 2 and Phase 3",
+    "description": "Postman collection for HoneBill NestJS Phase 2 auth/OTP/accounts and Phase 3 wallet/settlement routes. Start the backend from apps/backend and import HoneBill-Phase2-Phase3.postman_environment.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "phoneNumber", "value": "+639000000001" },
+    { "key": "pin", "value": "123456" },
+    { "key": "otpCode", "value": "123456" },
+    { "key": "verificationToken", "value": "REPLACE_WITH_TOKEN_FROM_OTP_VERIFY" },
+    { "key": "publicKey", "value": "GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R" },
+    { "key": "shortId", "value": "aB3x9Q" },
+    { "key": "txHash", "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
+    { "key": "since", "value": "2024-01-01T00:00:00.000Z" }
+  ],
+  "item": [
+    {
+      "name": "Phase 2 - Auth",
+      "item": [
+        {
+          "name": "SEP-10 Challenge",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/auth?account={{publicKey}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "auth"],
+              "query": [
+                { "key": "account", "value": "{{publicKey}}" }
+              ]
+            },
+            "description": "Requests a SEP-10 challenge for a Stellar public key. Use the returned transaction as the input for the signed challenge request."
+          },
+          "response": []
+        },
+        {
+          "name": "SEP-10 Submit Signed Challenge",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transaction\": \"{{signedChallengeXdr}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/auth",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "auth"]
+            },
+            "description": "Submit a signed SEP-10 transaction XDR. Generate and sign it from the challenge response; do not submit the sample placeholder."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"pin\": \"{{pin}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/auth/pin/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "auth", "pin", "verify"]
+            },
+            "description": "Requires an account whose PIN matches the registered value."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - OTP",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/otp/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "otp", "send"]
+            },
+            "description": "Sends or returns a test-mode OTP according to backend configuration. This can contact configured SMS providers; do not use it for production numbers without authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"code\": \"{{otpCode}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/otp/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "otp", "verify"]
+            },
+            "description": "Verify the OTP first, then copy the returned verificationToken into the verificationToken collection variable before registration."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Phase 2 - Accounts",
+      "item": [
+        {
+          "name": "Register Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stellarPublicKey\": \"{{publicKey}}\",\n  \"offlineDeviceKey\": \"GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R\",\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"pin\": \"{{pin}}\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Cruz\",\n  \"email\": \"ana.cruz@example.com\",\n  \"verificationToken\": \"{{verificationToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "register"]
+            },
+            "description": "Sample registration payload. If OTP verification is enabled, verificationToken must be a real token returned by the OTP verify route."
+          },
+          "response": []
+        },
+        {
+          "name": "Check User by Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/users/check?phone={{phoneNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "users", "check"],
+              "query": [
+                { "key": "phone", "value": "{{phoneNumber}}" }
+              ]
+            },
+            "description": "Checks whether a normalized phone number is registered."
+          },
+          "response": []
+        },
+        {
+          "name": "Lookup User by Short ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/users/lookup?shortId={{shortId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "users", "lookup"],
+              "query": [
+                { "key": "shortId", "value": "{{shortId}}" }
+              ]
+            },
+            "description": "Lookup by the short ID returned from registration."
+          },
+          "response": []
+        },
+        {
+          "name": "Lookup User by Phone",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/users/lookup?phone={{phoneNumber}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "users", "lookup"],
+              "query": [
+                { "key": "phone", "value": "{{phoneNumber}}" }
+              ]
+            },
+            "description": "Lookup by normalized phone number."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - Wallet",
+      "item": [
+        {
+          "name": "Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/wallet/balance?publicKey={{publicKey}}&assetCode=PHPC",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "wallet", "balance"],
+              "query": [
+                { "key": "publicKey", "value": "{{publicKey}}" },
+                { "key": "assetCode", "value": "PHPC" }
+              ]
+            },
+            "description": "Reads a Stellar testnet/account trustline balance. Supported asset codes include PHPC and USDC."
+          },
+          "response": []
+        },
+        {
+          "name": "Wallet History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/wallet/history?shortId={{shortId}}&publicKey={{publicKey}}&limit=50&since={{since}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "wallet", "history"],
+              "query": [
+                { "key": "shortId", "value": "{{shortId}}" },
+                { "key": "publicKey", "value": "{{publicKey}}" },
+                { "key": "limit", "value": "50" },
+                { "key": "since", "value": "{{since}}" }
+              ]
+            },
+            "description": "Returns combined settlement, anchor, and online transfer history."
+          },
+          "response": []
+        },
+        {
+          "name": "Vault Balance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/vault-balance?shortId={{shortId}}&stellarPublicKey={{publicKey}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "vault-balance"],
+              "query": [
+                { "key": "shortId", "value": "{{shortId}}" },
+                { "key": "stellarPublicKey", "value": "{{publicKey}}" }
+              ]
+            },
+            "description": "Reads database-backed vault balance fields using a short ID or Stellar public key."
+          },
+          "response": []
+        },
+        {
+          "name": "Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/transactions?shortId={{shortId}}&limit=50&since={{since}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "transactions"],
+              "query": [
+                { "key": "shortId", "value": "{{shortId}}" },
+                { "key": "limit", "value": "50" },
+                { "key": "since", "value": "{{since}}" }
+              ]
+            },
+            "description": "Returns the transaction list for a short ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Wallet Transfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txHash\": \"{{txHash}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/wallet/transfers/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "wallet", "transfers", "confirm"]
+            },
+            "description": "Confirms a 64-character hexadecimal Stellar transaction hash. Replace the sample hash with a real submitted transaction hash."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Phase 3 - Settlements",
+      "item": [
+        {
+          "name": "Process Offline Settlement",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smsBody\": \"1:{{shortId}}:bCdEf2:3v5K:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:REPLACE_WITH_BASE64_SIGNATURE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/settlements",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "settlements"]
+            },
+            "description": "Offline settlement format is tokenId:senderShortId:receiverShortId:amountBase62:nonceBase64:signatureBase64. The sample nonce and signature are placeholders and must be signed by the sender's enrolled offline device key. Do not submit real funds unintentionally."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

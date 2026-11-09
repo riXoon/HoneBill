@@ -6,7 +6,7 @@ import type { RedisService } from '../../infra/redis/redis.service';
 import { AccountsService } from './accounts.service';
 import { signVerificationToken, verifyVerificationToken } from '../../common/utils/otp.util';
 import { verifyPin } from '../../common/utils/pin.util';
-import { LegacyBodyException } from '../../common/exceptions/legacy-body.exception';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception';
 
 const VALID_PUBLIC_KEY = `G${'A'.repeat(55)}`;
 const VALID_PHONE = '09000000001';
@@ -171,7 +171,7 @@ describe('signup security', () => {
 
     await expect(service.register({ stellarPublicKey: VALID_PUBLIC_KEY })).rejects.toMatchObject({
       status: 500,
-      legacyBody: {
+      responseBody: {
         error: 'Failed to generate a unique short ID. Please try again.',
       },
     });

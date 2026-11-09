@@ -94,7 +94,7 @@ describe('verification token', () => {
   });
 
   it('rejects a wrong secret, wrong purpose and expiry', () => {
-    const base = { subject: '639171234567', issuer: 'pijin-otp' };
+    const base = { subject: '639171234567', issuer: 'honebill-otp' };
     const forged = jwt.sign({ purpose: 'phone-verification' }, { secret: 'other-secret', ...base });
     expect(verifyVerificationToken(forged, '639171234567', SECRET)).toBe(false);
 

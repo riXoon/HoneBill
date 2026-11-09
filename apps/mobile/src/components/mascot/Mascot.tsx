@@ -13,9 +13,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-// Honi poses exported from the Figma `Emotes` component set (653:706). Add the other moods
-// (fail, alert, question, bill) here as their pages need them. `width` is the exported image's
-// size in dp (it includes the soft shadow/glow bleed around the 323x196 component).
+// Honi poses from the designer's asset pack (`HONI MASCOT PNG` / `HONI MASCOT ANIMATED`), mirroring
+// the Figma `Emotes` component set (653:706). `width` is the default render size in dp (it includes
+// the soft shadow/glow bleed around the 323x196 component); `aspect` is the PNG's height / width.
 type MoodDef = {
   source: number;
   width: number;
@@ -30,25 +30,32 @@ type MoodDef = {
 const LOTTIE_CANVAS_SCALE = 400 / 323;
 
 const MOODS = {
-  wave: { source: require('../../../assets/mascot/honi-wave.png'), width: 347, aspect: 740 / 1041 },
-  /** Login's idle pose, with sparkles. */
+  wave: {
+    source: require('../../../assets/mascot/honi-wave.png'),
+    width: 347,
+    aspect: 229 / 359,
+    lottie: require('../../../assets/mascot/honi-wave.json'),
+  },
+  /** Login's idle pose, with sparkles. Not in the asset pack yet; kept from the earlier Figma export. */
   idle: { source: require('../../../assets/mascot/honi-idle.png'), width: 356, aspect: 721 / 1069 },
   /** The plain `honi idle` variant (no sparkles). */
   idlePlain: {
     source: require('../../../assets/mascot/honi-idle-plain.png'),
     width: 347,
-    aspect: 680 / 1041,
+    aspect: 229 / 355,
     lottie: require('../../../assets/mascot/honi-idle.json'),
   },
-  phone: { source: require('../../../assets/mascot/honi-phone.png'), width: 347, aspect: 680 / 1041 },
-  success: { source: require('../../../assets/mascot/honi-success.png'), width: 347, aspect: 680 / 1041 },
-  secure: { source: require('../../../assets/mascot/honi-secure.png'), width: 347, aspect: 769 / 1041 },
+  phone: { source: require('../../../assets/mascot/honi-phone.png'), width: 347, aspect: 229 / 359 },
+  success: { source: require('../../../assets/mascot/honi-success.png'), width: 347, aspect: 233 / 360 },
+  secure: { source: require('../../../assets/mascot/honi-secure.png'), width: 347, aspect: 267 / 359 },
   /** Send 4 "Get help sending": Honi with the alert mark. */
-  alert: { source: require('../../../assets/mascot/honi-alert.png'), width: 347, aspect: 471 / 694 },
+  alert: { source: require('../../../assets/mascot/honi-alert.png'), width: 347, aspect: 259 / 359 },
   /** Transfer to Offline: Honi holding the offline-vault badge. */
-  bill: { source: require('../../../assets/mascot/honi-bill.png'), width: 347, aspect: 453 / 694 },
-  /** Receipt "Voucher ready illustration": Honi with a green check. Cropped to the design's 180x128 box. */
-  voucher: { source: require('../../../assets/mascot/honi-voucher.png'), width: 180, aspect: 128 / 180, fit: 'cover' },
+  bill: { source: require('../../../assets/mascot/honi-bill.png'), width: 347, aspect: 233 / 359 },
+  fail: { source: require('../../../assets/mascot/honi-fail.png'), width: 347, aspect: 228 / 360 },
+  question: { source: require('../../../assets/mascot/honi-question.png'), width: 347, aspect: 237 / 359 },
+  /** Receipt "Voucher ready illustration": the success pose cropped to the design's 180x128 box. */
+  voucher: { source: require('../../../assets/mascot/honi-success.png'), width: 180, aspect: 128 / 180, fit: 'cover' },
 } satisfies Record<string, MoodDef>;
 
 export type MascotMood = keyof typeof MOODS;

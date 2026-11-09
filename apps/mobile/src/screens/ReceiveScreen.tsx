@@ -8,8 +8,7 @@ import { GlassCard } from '../components/send/GlassCard';
 import { ModePill } from '../components/send/ModePill';
 import { SendLayout } from '../components/send/SendLayout';
 import { CheckTitleIcon, CopyIcon, GenerateQrIcon, ReceiveTitleIcon, ReceiverIcon } from '../components/ui/smallIcons';
-import { TRANSFER_LIMIT } from '../mocks/send';
-import { mockReceiver } from '../mocks/wallet';
+import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
@@ -17,6 +16,8 @@ import { colors, fonts } from '../theme';
 const COPIED_MS = 1500;
 
 export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'ReceiveAmount'>) {
+  const { activeAccount } = useAuth();
+  const walletAddress = activeAccount?.stellarPublicKey ?? '';
   const [amountText, setAmountText] = useState('');
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,11 +30,12 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
   );
 
   const amount = Number(amountText) || 0;
-  const problem = amountProblem(amount, TRANSFER_LIMIT);
+  const problem = amountProblem(amount);
   const valid = problem === null;
 
   const copyAddress = async () => {
-    await Clipboard.setStringAsync(mockReceiver.walletAddress);
+    if (!walletAddress) return;
+    await Clipboard.setStringAsync(walletAddress);
     setCopied(true);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopied(false), COPIED_MS);
@@ -51,9 +53,9 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
             </View>
             <View style={styles.receiverText}>
               <Text style={styles.name} numberOfLines={1}>
-                {mockReceiver.name}
+                {fullName(activeAccount)}
               </Text>
-              <Text style={styles.id}>ID: {mockReceiver.shortId}</Text>
+              <Text style={styles.id}>ID: {activeAccount?.shortId ?? ''}</Text>
             </View>
           </View>
 
@@ -61,7 +63,7 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
             <Text style={styles.walletLabel}>CREDIT TO WALLET</Text>
             <View style={styles.walletRow}>
               <Text style={styles.address} numberOfLines={1} ellipsizeMode="middle">
-                {mockReceiver.walletAddress}
+                {walletAddress}
               </Text>
               <Pressable
                 accessibilityRole="button"

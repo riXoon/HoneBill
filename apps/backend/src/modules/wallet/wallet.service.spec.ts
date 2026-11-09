@@ -74,7 +74,7 @@ describe('WalletService', () => {
     prisma.onlineTransfer.findUnique.mockResolvedValue({ txHash: 'a'.repeat(64), status: 'PENDING', confirmedAt: null });
     stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'NOT_FOUND' });
     await expect(service.confirmTransfer('A'.repeat(64))).rejects.toMatchObject({
-      legacyBody: { status: 'PENDING', error: 'Transaction has not reached the RPC history window yet' },
+      responseBody: { status: 'PENDING', error: 'Transaction has not reached the RPC history window yet' },
     });
     expect(prisma.onlineTransfer.update).not.toHaveBeenCalled();
     stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'SUCCESS' });

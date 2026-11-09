@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useIsFocused } from '@react-navigation/native';
@@ -15,13 +15,17 @@ import {
   InfoIcon,
   QrTitleIcon,
 } from '../components/ui/smallIcons';
+import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
+import { errorMessage, isAborted } from '../services/api/client';
+import { parseRecipientQr, resolveRecipient } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
 // Figma: QR Scan (870:3349), 402x874.
 export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'QrScan'>) {
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
+  const { activeAccount } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const handled = useRef(false);
 
@@ -33,14 +37,54 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
     if (permission && !permission.granted && permission.canAskAgain) void requestPermission();
   }, [permission, requestPermission]);
 
-  const onScanned = useCallback(({ data }: { data: string }) => {
-    if (handled.current) return;
-    handled.current = true;
-    // Mock: the Send flow is not built yet, so just surface what was read.
-    Alert.alert('QR code scanned', data, [{ text: 'OK', onPress: () => (handled.current = false) }], {
-      onDismiss: () => (handled.current = false),
-    });
-  }, []);
+  const lookup = useRef<AbortController | null>(null);
+  /** True while a scanned code is being looked up, so the screen does not look frozen after a scan. */
+  const [checking, setChecking] = useState(false);
+  useEffect(() => () => lookup.current?.abort(), []);
+
+  const onScanned = useCallback(
+    async ({ data }: { data: string }) => {
+      if (handled.current) return;
+      handled.current = true;
+      const release = () => (handled.current = false);
+
+      const shortId = parseRecipientQr(data);
+      if (!shortId) {
+        Alert.alert('Not a HoneBill code', 'This QR code is not a HoneBill payment code.', [{ text: 'OK', onPress: release }], {
+          onDismiss: release,
+        });
+        return;
+      }
+      if (shortId === activeAccount?.shortId) {
+        Alert.alert('Your own code', "You can't send money to yourself.", [{ text: 'OK', onPress: release }], {
+          onDismiss: release,
+        });
+        return;
+      }
+
+      const controller = new AbortController();
+      lookup.current = controller;
+      setChecking(true);
+      try {
+        const recipient = await resolveRecipient(shortId, controller.signal);
+        if (recipient) {
+          navigation.navigate('SendAmount', { recipientId: recipient.id });
+          // Stay locked so the camera cannot re-fire; coming back to this screen is a fresh scan.
+          setTimeout(release, 1500);
+          return;
+        }
+        Alert.alert('No account found', 'We could not find an account for this QR code.', [{ text: 'OK', onPress: release }], {
+          onDismiss: release,
+        });
+      } catch (e) {
+        if (isAborted(e)) return;
+        Alert.alert('Could not check the code', errorMessage(e), [{ text: 'OK', onPress: release }], { onDismiss: release });
+      } finally {
+        setChecking(false);
+      }
+    },
+    [activeAccount?.shortId, navigation],
+  );
 
   return (
     <View style={styles.root}>
@@ -107,7 +151,11 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
           >
             <InfoIcon />
             <Text style={styles.hintText}>
-              {blocked ? 'Camera access is off. Tap to open Settings.' : 'Point your camera at the QR code to scan.'}
+              {checking
+                ? 'Checking the code…'
+                : blocked
+                  ? 'Camera access is off. Tap to open Settings.'
+                  : 'Point your camera at the QR code to scan.'}
             </Text>
           </Pressable>
 

@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot, type MascotMood } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
-import { findRecipientById, type DispatchMethod } from '../mocks/send';
+import type { DispatchMethod } from '../types/send';
+import { findRecipientById } from '../services/recipientDirectory';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
@@ -36,6 +37,12 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     if (!findRecipientById(draft.recipientId)) navigation.goBack();
   }, [draft.recipientId, navigation]);
 
+  // Building the signed offline voucher and sending it (SMS or relay) is not implemented, so nothing can be
+  // dispatched. Say that plainly rather than showing a receipt for a transfer that never happened. When it
+  // exists, navigate to 'SendReceipt' with the reference and time the ledger returns.
+  const dispatch = (_method: DispatchMethod) =>
+    Alert.alert('Not available yet', 'Sending offline payments is not available yet. No money has been moved.');
+
   return (
     <SendLayout title="Method" icon={<SwapIcon />} onBack={navigation.goBack}>
       <Text style={styles.question} accessibilityRole="header">
@@ -48,7 +55,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
             key={o.method}
             accessibilityRole="button"
             accessibilityLabel={`${o.title}. ${o.body} ${o.badge}`}
-            onPress={() => navigation.navigate('SendReceipt', { ...draft, method: o.method })}
+            onPress={() => dispatch(o.method)}
             style={({ pressed }) => pressed && styles.pressed}
           >
             <GlassCard style={styles.card}>

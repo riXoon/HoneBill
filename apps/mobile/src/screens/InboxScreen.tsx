@@ -4,15 +4,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
 import { AppBackground } from '../components/ui/AppBackground';
+import { EmptyState } from '../components/ui/EmptyState';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { FilterChips } from '../components/ui/FilterChips';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
 import { InboxIcon } from '../components/ui/navIcons';
 import { BANNER_HONI, PromoBanner } from '../components/ui/PromoBanner';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { mockProfile } from '../mocks/profile';
-import { INBOX_FILTERS, filterInbox, mockInbox } from '../mocks/inbox';
-import type { InboxFilter, InboxItem } from '../mocks/inbox';
+import { greetingName, useAuth } from '../context/AuthContext';
+import { useInbox } from '../hooks/useInbox';
+import { INBOX_FILTERS, filterInbox } from '../types/inbox';
+import type { InboxFilter, InboxItem } from '../types/inbox';
 import { colors, fonts } from '../theme';
 
 // Figma: Inbox (870:3123), 402x874.
@@ -28,13 +30,15 @@ export function InboxScreen() {
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<InboxFilter>('All');
   const slide = useFilterSlide(INBOX_FILTERS.indexOf(filter));
-  const items = useMemo(() => filterInbox(mockInbox.items, filter), [filter]);
+  const { activeAccount } = useAuth();
+  const { items: all } = useInbox();
+  const items = useMemo(() => filterInbox(all, filter), [all, filter]);
 
   const header = (
     <View style={styles.header}>
       <ScreenHeader icon={<InboxIcon color={colors.coral} size={40} />} title="Inbox" />
       <PromoBanner
-        title={`Hello, ${mockProfile.greetingName}!`}
+        title={`Hello, ${greetingName(activeAccount)}!`}
         subtitle="Check your updates here"
         honi={BANNER_HONI.inbox}
       />
@@ -57,7 +61,7 @@ export function InboxScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <SlideRow>
-            <Text style={styles.empty}>Nothing to see here!</Text>
+            <EmptyState message={'Nothing to see here!\nYour updates will land here.'} />
           </SlideRow>
         }
         contentContainerStyle={[
@@ -78,5 +82,4 @@ const styles = StyleSheet.create({
   separator: { height: 10 },
   sectionTitle: { minHeight: 30, justifyContent: 'center' },
   sectionText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
-  empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
 });

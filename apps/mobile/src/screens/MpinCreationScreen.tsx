@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
 
@@ -10,10 +10,14 @@ import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import { WeakPinDialog } from '../components/ui/WeakPinDialog';
-import { MPIN_LENGTH } from '../mocks/user';
+import { MPIN_LENGTH } from '../config/limits';
 import type { RootStackParamList } from '../navigation/types';
+import { reportError } from '../services/errorReporting';
 import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
+import { clearSignupSession, getSignupSession, setSignupSecurity } from '../services/signupSession';
+import { createDeviceWallet, type NewWallet } from '../services/wallet/deviceWallet';
 import { colors, fonts } from '../theme';
+import { afterNextPaint } from '../utils/async';
 
 // Figma: MPIN Creation (870:2965), 402x874.
 
@@ -38,16 +42,53 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
   const [weak, setWeak] = useState<WeakMpinReason | null>(null);
   // Remounting the boxes after the dialog brings the keyboard back (the Modal steals focus).
   const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** Created once per visit, so a retry after a failure keeps the same keys. */
+  const wallet = useRef<NewWallet | null>(null);
 
-  // The PIN is not stored yet (mock-only frontend).
-  const confirm = () => {
-    if (pin.length !== MPIN_LENGTH) return;
+  const startOver = () => {
+    clearSignupSession();
+    navigation.popTo('InputNumber');
+  };
+
+  /**
+   * Creates the wallet on this device and remembers the PIN, but does NOT register with the server: the
+   * account is created on the last onboarding screen, so quitting before then leaves nothing behind.
+   */
+  const confirm = async () => {
+    if (busy || pin.length !== MPIN_LENGTH) return;
     const reason = weakMpinReason(pin);
     if (reason) {
       setWeak(reason);
       return;
     }
-    navigation.navigate('AccountConfirmation');
+
+    const session = getSignupSession();
+    if (!session?.details) {
+      Alert.alert('Session expired', 'Please verify your number again to continue.', [{ text: 'OK', onPress: startOver }]);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      // Show "Creating your vault…" before the key maths starts, so a tap is acknowledged at once.
+      await afterNextPaint();
+      // The phrase is saved to the keystore here, before it is shown for backup.
+      if (!wallet.current) wallet.current = await createDeviceWallet();
+      setSignupSecurity(pin, wallet.current);
+      // Reset: the PIN and wallet are fixed from here on; the phrase is the next step.
+      navigation.reset({ index: 0, routes: [{ name: 'RecoveryPhrase' }] });
+    } catch (e) {
+      // Keystore or randomness failure while creating the wallet.
+      reportError(e, { step: 'createWallet' });
+      setPin('');
+      setAttempt((n) => n + 1);
+      setError('We could not create your secure wallet on this device. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const dismissWeak = () => {
@@ -67,9 +108,22 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
           <Text style={styles.subtitle}>Create a 4-digit PIN to protect your device</Text>
         </View>
 
-        <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+        <View style={styles.codeBlock}>
+          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+          {error ? (
+            <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {error}
+            </Text>
+          ) : null}
+        </View>
 
-        <Button label="Confirm 4-digit pin" size="large" icon={<LockIcon />} onPress={confirm} />
+        <Button
+          label={busy ? 'Creating your vault…' : 'Confirm 4-digit pin'}
+          size="large"
+          icon={busy ? undefined : <LockIcon />}
+          onPress={() => void confirm()}
+          disabled={busy}
+        />
 
         {/* Honi's image (shield and lock included) is taller than the 196 dp component; it hangs from the top. */}
         <View style={styles.mascotSlot}>
@@ -87,5 +141,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'center', padding: 40, gap: 40 },
   titleBlock: { gap: 8 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  codeBlock: { gap: 12, alignItems: 'center' },
+  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
   mascotSlot: { height: 300, alignItems: 'center' },
 });

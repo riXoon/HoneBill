@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import Redis from 'ioredis';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../src/common/filters/api-exception.filter.js';
 import { OtpRateLimitService } from '../src/infra/redis/otp-rate-limit.service.js';
 import { RedisService } from '../src/infra/redis/redis.service.js';
 import { normalizePhoneNumber, toDbPhone } from '../src/common/utils/phone.util.js';
@@ -36,8 +36,8 @@ describe('OTP with real Redis (e2e)', () => {
     used.push(id);
     return id;
   }
-  const otpKey = (id: Identity) => `pijin:otp:${normalizePhoneNumber(id.phone)}`;
-  const attemptsKey = (id: Identity) => `pijin:otp:attempts:${normalizePhoneNumber(id.phone)}`;
+  const otpKey = (id: Identity) => `honebill:otp:${normalizePhoneNumber(id.phone)}`;
+  const attemptsKey = (id: Identity) => `honebill:otp:attempts:${normalizePhoneNumber(id.phone)}`;
 
   async function buildApp(): Promise<INestApplication> {
     const moduleRef = await Test.createTestingModule({
@@ -54,21 +54,21 @@ describe('OTP with real Redis (e2e)', () => {
       ],
     }).compile();
     const instance = moduleRef.createNestApplication();
-    instance.setGlobalPrefix('api');
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.setGlobalPrefix('api/v2');
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }
 
   const send = (id: Identity, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/send')
+      .post('/api/v2/otp/send')
       .set('X-Forwarded-For', id.ip)
       .send({ phoneNumber: id.phone });
 
   const verify = (id: Identity, code: string, target: INestApplication = app) =>
     request(target.getHttpServer())
-      .post('/api/otp/verify')
+      .post('/api/v2/otp/verify')
       .send({ phoneNumber: id.phone, code });
 
   beforeAll(async () => {

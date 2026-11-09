@@ -8,7 +8,7 @@ export { toDbPhone } from './phone.util.js';
 export const OTP_TTL_SECONDS = 300;
 export const OTP_MAX_ATTEMPTS = 5;
 export const VERIFICATION_TOKEN_TTL_SECONDS = 30 * 60;
-const TOKEN_ISSUER = 'pijin-otp';
+const TOKEN_ISSUER = 'honebill-otp';
 const TOKEN_PURPOSE = 'phone-verification';
 
 export function generateOtp(): string {

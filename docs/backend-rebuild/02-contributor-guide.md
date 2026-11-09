@@ -147,6 +147,10 @@ npm run test:e2e --workspace=backend
 npm run build --workspace=backend
 ```
 
+Tests are grouped under `apps/backend/test`: unit tests in `unit-testing/`,
+end-to-end tests in `e2e-testing/`, and parity tests and comparison scripts in
+`parity-testing/`.
+
 The API uses the global `/api` prefix. Once running, useful checks are:
 
 ```text

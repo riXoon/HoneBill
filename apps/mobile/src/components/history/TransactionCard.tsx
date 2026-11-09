@@ -1,27 +1,29 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SOURCE_LABEL, type Transaction } from '../../mocks/transactions';
-import { splitPesos } from '../../mocks/home';
+import { SOURCE_LABEL, type Transaction } from '../../types/transaction';
+import { formatAmount, formatClock } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { OfflineFundsBadge } from '../ui/smallIcons';
 
 /** Figma "Content" card (870:3181): source pill and time, description, signed amount. */
 export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { tx: Transaction; onPress?: (id: string) => void }) {
   const sign = tx.direction === 'in' ? '+' : '-';
-  const amount = `${sign} ₱${splitPesos(tx.amount).whole}`;
+  // Cents are shown: real amounts are not whole pesos like the design's samples.
+  const amount = `${sign} ${formatAmount(tx.amount, tx.assetCode)}`;
+  const time = formatClock(new Date(tx.timestamp));
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={onPress ? () => onPress(tx.id) : undefined}
       accessibilityRole="button"
-      accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${tx.time}. ${tx.description}. ${amount}`}
+      accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${time}. ${tx.description}. ${amount}`}
     >
       <View style={styles.status}>
         <View style={styles.pill}>
           <Text style={styles.pillText}>{SOURCE_LABEL[tx.source]}</Text>
         </View>
-        <Text style={styles.time}>{tx.time}</Text>
+        <Text style={styles.time}>{time}</Text>
       </View>
       <View style={styles.info}>
         <View style={styles.text}>

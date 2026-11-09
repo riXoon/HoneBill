@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
-import { LegacyHttpExceptionFilter } from '../src/common/filters/legacy-http-exception.filter.js';
+import { ApiExceptionFilter } from '../src/common/filters/api-exception.filter.js';
 import { AccountsService } from '../src/modules/accounts/accounts.service.js';
 import { AuthController } from '../src/modules/auth/auth.controller.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
@@ -36,8 +36,8 @@ describe('PIN verify IP throttle (e2e)', () => {
       ],
     }).compile();
     const instance = moduleRef.createNestApplication();
-    instance.setGlobalPrefix('api');
-    instance.useGlobalFilters(new LegacyHttpExceptionFilter());
+    instance.setGlobalPrefix('api/v2');
+    instance.useGlobalFilters(new ApiExceptionFilter());
     await instance.init();
     return instance;
   }
@@ -50,7 +50,7 @@ describe('PIN verify IP throttle (e2e)', () => {
     app = await buildApp();
     const call = () =>
       request(app.getHttpServer())
-        .post('/api/auth/pin/verify')
+        .post('/api/v2/auth/pin/verify')
         .send({ phoneNumber: '09170000001', pin: '1234' });
 
     for (let i = 0; i < 30; i += 1) {
@@ -62,10 +62,10 @@ describe('PIN verify IP throttle (e2e)', () => {
     expect(accountsService.verifyPin).toHaveBeenCalledTimes(30);
   });
 
-  it('does not apply the 30 per minute limit to GET /api/auth', async () => {
+  it('does not apply the 30 per minute limit to GET /api/v2/auth', async () => {
     app = await buildApp();
     for (let i = 0; i < 31; i += 1) {
-      await request(app.getHttpServer()).get('/api/auth').query({ account: 'GTEST' }).expect(200);
+      await request(app.getHttpServer()).get('/api/v2/auth').query({ account: 'GTEST' }).expect(200);
     }
   });
 });
