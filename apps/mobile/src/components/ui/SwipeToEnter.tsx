@@ -61,6 +61,11 @@ export function SwipeToEnter({
     if (focused) x.value = 0;
   }, [focused, x]);
 
+  // Re-enabled after work that followed a swipe (e.g. a failed transfer): put the knob back so it can be retried.
+  useEffect(() => {
+    if (!disabled) x.value = withSpring(0);
+  }, [disabled, x]);
+
   const pan = Gesture.Pan()
     .enabled(!disabled)
     .onBegin(() => {

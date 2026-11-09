@@ -1,12 +1,14 @@
-import { Alert } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { TransferForm } from '../components/send/TransferForm';
 import { CardTitleIcon } from '../components/ui/smallIcons';
+import { useWalletTransfer } from '../hooks/useWalletTransfer';
 import type { RootStackParamList } from '../navigation/types';
 
 // Figma: Transfer to Online (870:3328), 402x874.
 export function TransferToOnlineScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'TransferOnline'>) {
+  // Withdraws from the offline vault: `/engine/withdraw`, signed with the wallet key and submitted from the phone.
+  const { busy, transfer } = useWalletTransfer('online', navigation.goBack);
   return (
     <TransferForm
       to="online"
@@ -14,11 +16,8 @@ export function TransferToOnlineScreen({ navigation }: NativeStackScreenProps<Ro
       icon={<CardTitleIcon />}
       mood="phone"
       onBack={navigation.goBack}
-      // Withdrawing from the vault is `/engine/withdraw` (prepare, sign with the wallet key, submit), which is not
-      // wired. Say so rather than showing a confirmation for money that never moved.
-      onConfirm={() =>
-        Alert.alert('Not available yet', 'Moving funds to your online wallet is not available yet. No money has been moved.')
-      }
+      onConfirm={transfer}
+      busy={busy}
     />
   );
 }

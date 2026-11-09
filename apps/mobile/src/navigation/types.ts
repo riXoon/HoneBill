@@ -34,12 +34,17 @@ export type RootStackParamList = {
   SendAmount: { recipientId: string };
   SendVerification: SendDraft;
   SendMethod: SendDraft;
-  /** Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists. */
-  SendReceipt: SendDraft & { method: DispatchMethod; reference: string; issuedAt: number };
+  /**
+   * Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists.
+   * `online` is a transfer already settled on the ledger; `sms` and `relay` are offline vouchers still to dispatch.
+   */
+  SendReceipt: SendDraft & { method: DispatchMethod | 'online'; reference: string; issuedAt: number };
   /** Receive flow: amount -> offline relay voucher QR. */
   ReceiveAmount: undefined;
   ReceiveQr: { amount: number };
   TransactionDetail: { id: string };
+  /** Adds PHPC to the online wallet through the anchor's deposit. */
+  TopUp: undefined;
   /** Moves funds between the user's own wallets. */
   TransferOnline: undefined;
   TransferOffline: undefined;
