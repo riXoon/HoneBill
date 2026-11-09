@@ -1,20 +1,23 @@
+# Apline is smaller than the default node image.
 FROM node:22-alpine AS base
+# Create a working directory for the app.
 WORKDIR /app
 
+# Install Dependencies
 FROM base AS deps
-COPY package.json package-lock.json ./
-COPY apps/backend/package.json apps/backend/package.json
-# Present so npm workspaces match the lockfile; mobile is never built here.
-COPY apps/mobile/package.json apps/mobile/package.json
-COPY packages/pijin_core/package.json packages/pijin_core/package.json
-RUN npm ci --ignore-scripts --workspace=backend --include-workspace-root
+# Copy all package*.json files across all workspaces.
+COPY package*.json ./
+# Reuse cache packages (don't re-install everything)
+RUN npm install --ignore-scripts --workspace=backend --include-workspace-root
 
+#Build the backend workspace
 FROM deps AS build
 COPY . .
 RUN npm run build --workspace=pijin_core
 RUN cd apps/backend && npx prisma generate
 RUN npm run build --workspace=backend
 
+# Final stage: run the application
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules

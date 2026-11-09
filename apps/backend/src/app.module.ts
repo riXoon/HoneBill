@@ -29,7 +29,7 @@ import { AppVersionModule } from './modules/app-version/app-version.module.js';
       ignoreEnvFile: process.env.NODE_ENV === 'test',
       envFilePath: [resolve(__dirname, '../.env'), resolve(process.cwd(), '.env')],
       validationSchema: envValidationSchema,
-      validationOptions: { abortEarly: false },
+      validationOptions: { libraryOptions: { abortEarly: false } },
     }),
     CommonModule,
     ThrottlerModule.forRoot({
