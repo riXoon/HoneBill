@@ -4,8 +4,17 @@ import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
+/**
+ * Issuer of each supported asset. PHPC's comes from `PHPC_ISSUER_PUBKEY`, the same setting the anchor pays out
+ * with, so balances are read from the asset users are actually paid in. The fallback is the original testnet issuer.
+ * A getter, so the value is read when used, after the config file has been loaded.
+ */
+const LEGACY_PHPC_ISSUER = 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY';
+
 export const ASSET_ISSUERS: Record<string, string> = {
-  PHPC: 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY',
+  get PHPC() {
+    return process.env.PHPC_ISSUER_PUBKEY?.trim() || LEGACY_PHPC_ISSUER;
+  },
   USDC: 'GDQGJU5JTW5IFCGS6JZTIGK57IKPW4N4LJWWEN7F3K3GSEJEYPVJ3BYA',
 };
 
