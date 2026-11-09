@@ -57,6 +57,24 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Sign a prepared Soroban transaction
+
+Save the API response containing the unsigned `xdr` to a local JSON file, then run
+this command from PowerShell in `apps/backend`:
+
+```bash
+npm run --silent stellar:sign -- --xdr-file .\deposit-response.json |
+  Set-Content -Encoding ascii .\signed-deposit.xdr
+```
+
+The script defaults to Stellar Testnet, prompts for the source account's secret key
+without echoing it, computes the XDR hash (and checks it against `txHash` if the API
+response includes one), requires you to confirm that hash, and checks that the key
+matches the transaction source. It prints signed XDR to the output file but does
+not submit the transaction. Verify the transaction details independently before
+signing; never share or commit a secret key or signed XDR. Set
+`STELLAR_NETWORK_PASSPHRASE` if the transaction is for a different network.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

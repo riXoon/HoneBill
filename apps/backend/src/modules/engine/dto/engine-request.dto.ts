@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsString, Matches } from 'class-validator';
 
 const publicKey = /^G[A-Z2-7]{55}$/;
@@ -20,7 +19,7 @@ export class TransferRequestDto {
   @IsString() @Matches(contractAddress) tokenAddress!: string;
   @IsString() @Matches(stroops) amountStroops!: string;
   @IsIn(['online']) paymentMode!: 'online';
-  @Type(() => Number) @IsInt() @IsIn([2]) clientProtocol!: number;
+  @IsInt() @IsIn([2]) clientProtocol!: number;
 }
 
 export class WithdrawRequestDto {

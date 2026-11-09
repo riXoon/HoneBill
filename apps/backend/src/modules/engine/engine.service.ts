@@ -47,6 +47,7 @@ export class EngineService {
     const amount = parsePositiveI128(amountStroops);
     if (amount === null) throw new BadRequestException('amountStroops must be a positive integer string');
     const token = await this.activeToken(tokenAddress);
+    
     const relayer = this.relayerPublicKey();
     try {
       const contract = await this.stellar.getContract();
@@ -133,8 +134,8 @@ export class EngineService {
     const amount = parsePositiveI128(amountStroops);
     if (amount === null) throw new BadRequestException('amountStroops must be a positive integer string');
     const token = await this.activeToken(tokenAddress);
-    const relayer = this.relayerPublicKey();
     try {
+      const relayer = this.relayerPublicKey();
       const relayerAccount = await this.stellar.sorobanServer.getAccount(relayer);
       const operation = new Contract(token.contractId).call(
         'transfer',

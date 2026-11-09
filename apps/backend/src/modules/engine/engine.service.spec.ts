@@ -99,6 +99,11 @@ describe('EngineService', () => {
       await expect(service.prepareTransfer({ ...base(), recipientPublicKey: 'x' })).rejects.toThrow('Invalid public key format');
       await expect(service.prepareTransfer({ ...base(), amountStroops: 'abc' })).rejects.toThrow('positive integer');
     });
+    it('requires a configured relayer for legacy-compatible simulation', async () => {
+      delete env.RELAYER_PUBLIC_KEY;
+      await expect(service.prepareTransfer(base())).rejects.toThrow('RELAYER_PUBLIC_KEY');
+      expect(stellar.sorobanServer.getAccount).not.toHaveBeenCalled();
+    });
     it('surfaces simulation errors without persisting a transfer', async () => {
       stellar.sorobanServer.getAccount.mockResolvedValue({ accountId: () => relayer.publicKey(), sequenceNumber: () => '1', incrementSequenceNumber() {} });
       stellar.sorobanServer.simulateTransaction.mockResolvedValue({ error: 'bad' });

@@ -1,0 +1,313 @@
+{
+  "info": {
+    "_postman_id": "ce6dcafe-9606-4e8e-b207-0121400f4004",
+    "name": "HoneBill Phase 4 - Engine",
+    "description": "Phase 4 engine API preparation and authorization checks. Import HoneBill-Phase4.postman_environment.json. Deposit, transfer, and withdraw return unsigned transaction XDR for wallet signing; this collection does not broadcast transactions. Generate an operation signature using apps/backend/src/scripts/sign-engine-intent.js and set engineSignature before sending a signed request.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "enginePublicKey",
+      "value": "GCWOMLNHPXWHBUZI7ZDXOXXCOHTZ6HY66HRP5NUIWZDWNNHGHISRZQBK"
+    },
+    {
+      "key": "recipientPublicKey",
+      "value": "REPLACE_WITH_RECIPIENT_G_PUBLIC_KEY"
+    },
+    {
+      "key": "tokenAddress",
+      "value": "REPLACE_WITH_ACTIVE_TOKEN_C_ADDRESS"
+    },
+    {
+      "key": "amountStroops",
+      "value": "1000000"
+    },
+    {
+      "key": "offlineDevicePubkeyHex",
+      "value": "REPLACE_WITH_64_HEX_CHAR_DEVICE_KEY"
+    },
+    {
+      "key": "offlineDeviceKey",
+      "value": "REPLACE_WITH_DEVICE_G_PUBLIC_KEY"
+    },
+    {
+      "key": "sep10Token",
+      "value": "REPLACE_WITH_SEP10_BEARER_TOKEN"
+    },
+    {
+      "key": "engineSignature",
+      "value": "REPLACE_WITH_BASE64_SIGNATURE_FROM_SIGN_SCRIPT"
+    },
+    {
+      "key": "txHash",
+      "value": ""
+    },
+    {
+      "key": "preparedXdr",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Signed transaction preparation",
+      "item": [
+        {
+          "name": "Transfer - online protocol v2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('returns a prepared transaction', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('response includes XDR and a 64-character transaction hash', function () {",
+                  "    pm.expect(body.xdr).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.txHash).to.match(/^[a-f0-9]{64}$/i);",
+                  "  });",
+                  "  if (body.txHash) pm.environment.set('txHash', body.txHash);",
+                  "  if (body.xdr) pm.environment.set('preparedXdr', body.xdr);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{engineSignature}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderPublicKey\": \"{{enginePublicKey}}\",\n  \"recipientPublicKey\": \"{{recipientPublicKey}}\",\n  \"tokenAddress\": \"{{tokenAddress}}\",\n  \"amountStroops\": \"{{amountStroops}}\",\n  \"paymentMode\": \"online\",\n  \"clientProtocol\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "transfer"
+              ]
+            },
+            "description": "Before sending, generate the matching signature from apps/backend: node src/scripts/sign-engine-intent.js transfer <tokenAddress> <senderPublicKey> <recipientPublicKey> <amountStroops>. Copy the Base64 value after 'Authorization: Bearer' into engineSignature. On success, saves txHash and XDR to the environment. The hash identifies the prepared transaction; it is not proof of submission or confirmation."
+          },
+          "response": []
+        },
+        {
+          "name": "Deposit - prepare XDR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{engineSignature}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderPublicKey\": \"{{enginePublicKey}}\",\n  \"tokenAddress\": \"{{tokenAddress}}\",\n  \"offlineDevicePubkeyHex\": \"{{offlineDevicePubkeyHex}}\",\n  \"amountStroops\": \"{{amountStroops}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/deposit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "deposit"
+              ]
+            },
+            "description": "Before sending, generate a deposit signature: node src/scripts/sign-engine-intent.js deposit <senderPublicKey> <amountStroops>. Set engineSignature to the output's Base64 value. Returns XDR for the wallet to sign; it does not submit the transaction."
+          },
+          "response": []
+        },
+        {
+          "name": "Withdraw - prepare XDR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{engineSignature}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senderPublicKey\": \"{{enginePublicKey}}\",\n  \"tokenAddress\": \"{{tokenAddress}}\",\n  \"amountStroops\": \"{{amountStroops}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "withdraw"
+              ]
+            },
+            "description": "Before sending, generate a withdraw signature: node src/scripts/sign-engine-intent.js withdraw <senderPublicKey> <amountStroops>. Set engineSignature to the output's Base64 value. Returns XDR for the wallet to sign; it does not submit the transaction."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "SEP-10 authenticated engine routes",
+      "item": [
+        {
+          "name": "Offline key - prepare or check rotation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sep10Token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offlineDeviceKey\": \"{{offlineDeviceKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/offline-key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "offline-key"
+              ]
+            },
+            "description": "Requires a valid SEP-10 bearer token. Returns status 'synced' if already registered, otherwise returns rotation_required and unsigned XDR for the wallet to sign and submit."
+          },
+          "response": []
+        },
+        {
+          "name": "Offline key - confirm after on-chain update",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sep10Token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offlineDeviceKey\": \"{{offlineDeviceKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/offline-key",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "offline-key"
+              ]
+            },
+            "description": "Run only after the wallet has submitted the rotation transaction and the key is visible on-chain. Returns 409 while the submitted key is not confirmed."
+          },
+          "response": []
+        },
+        {
+          "name": "Recipient registry - register account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sep10Token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/engine/recipient-registry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v2",
+                "engine",
+                "recipient-registry"
+              ]
+            },
+            "description": "Requires a valid SEP-10 token for a registered account. This endpoint may submit an on-chain recipient registration transaction using the configured registrar; run only when you intend to register the recipient."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

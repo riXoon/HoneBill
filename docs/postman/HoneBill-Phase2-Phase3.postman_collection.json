@@ -1,339 +1,803 @@
-{
-  "info": {
-    "_postman_id": "a5cc55ec-b9a4-4f3d-a0ca-7d2b0ad3db6d",
-    "name": "HoneBill Phase 2 and Phase 3",
-    "description": "Postman collection for HoneBill NestJS Phase 2 auth/OTP/accounts and Phase 3 wallet/settlement routes. Start the backend from apps/backend and import HoneBill-Phase2-Phase3.postman_environment.json.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "phoneNumber", "value": "+639000000001" },
-    { "key": "pin", "value": "123456" },
-    { "key": "otpCode", "value": "123456" },
-    { "key": "verificationToken", "value": "REPLACE_WITH_TOKEN_FROM_OTP_VERIFY" },
-    { "key": "publicKey", "value": "GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R" },
-    { "key": "shortId", "value": "aB3x9Q" },
-    { "key": "txHash", "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" },
-    { "key": "since", "value": "2024-01-01T00:00:00.000Z" }
-  ],
-  "item": [
-    {
-      "name": "Phase 2 - Auth",
-      "item": [
-        {
-          "name": "SEP-10 Challenge",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/auth?account={{publicKey}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "auth"],
-              "query": [
-                { "key": "account", "value": "{{publicKey}}" }
-              ]
-            },
-            "description": "Requests a SEP-10 challenge for a Stellar public key. Use the returned transaction as the input for the signed challenge request."
-          },
-          "response": []
-        },
-        {
-          "name": "SEP-10 Submit Signed Challenge",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "auth": {
-              "type": "noauth"
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transaction\": \"{{signedChallengeXdr}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/auth",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "auth"]
-            },
-            "description": "Submit a signed SEP-10 transaction XDR. Generate and sign it from the challenge response; do not submit the sample placeholder."
-          },
-          "response": []
-        },
-        {
-          "name": "Verify PIN",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"pin\": \"{{pin}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/auth/pin/verify",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "auth", "pin", "verify"]
-            },
-            "description": "Requires an account whose PIN matches the registered value."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Phase 2 - OTP",
-      "item": [
-        {
-          "name": "Send OTP",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/otp/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "otp", "send"]
-            },
-            "description": "Sends or returns a test-mode OTP according to backend configuration. This can contact configured SMS providers; do not use it for production numbers without authorization."
-          },
-          "response": []
-        },
-        {
-          "name": "Verify OTP",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"code\": \"{{otpCode}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/otp/verify",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "otp", "verify"]
-            },
-            "description": "Verify the OTP first, then copy the returned verificationToken into the verificationToken collection variable before registration."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Phase 2 - Accounts",
-      "item": [
-        {
-          "name": "Register Account",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"stellarPublicKey\": \"{{publicKey}}\",\n  \"offlineDeviceKey\": \"GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R\",\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"pin\": \"{{pin}}\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Cruz\",\n  \"email\": \"ana.cruz@example.com\",\n  \"verificationToken\": \"{{verificationToken}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "register"]
-            },
-            "description": "Sample registration payload. If OTP verification is enabled, verificationToken must be a real token returned by the OTP verify route."
-          },
-          "response": []
-        },
-        {
-          "name": "Check User by Phone",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/users/check?phone={{phoneNumber}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "users", "check"],
-              "query": [
-                { "key": "phone", "value": "{{phoneNumber}}" }
-              ]
-            },
-            "description": "Checks whether a normalized phone number is registered."
-          },
-          "response": []
-        },
-        {
-          "name": "Lookup User by Short ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/users/lookup?shortId={{shortId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "users", "lookup"],
-              "query": [
-                { "key": "shortId", "value": "{{shortId}}" }
-              ]
-            },
-            "description": "Lookup by the short ID returned from registration."
-          },
-          "response": []
-        },
-        {
-          "name": "Lookup User by Phone",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/users/lookup?phone={{phoneNumber}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "users", "lookup"],
-              "query": [
-                { "key": "phone", "value": "{{phoneNumber}}" }
-              ]
-            },
-            "description": "Lookup by normalized phone number."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Phase 3 - Wallet",
-      "item": [
-        {
-          "name": "Wallet Balance",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/wallet/balance?publicKey={{publicKey}}&assetCode=PHPC",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "wallet", "balance"],
-              "query": [
-                { "key": "publicKey", "value": "{{publicKey}}" },
-                { "key": "assetCode", "value": "PHPC" }
-              ]
-            },
-            "description": "Reads a Stellar testnet/account trustline balance. Supported asset codes include PHPC and USDC."
-          },
-          "response": []
-        },
-        {
-          "name": "Wallet History",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/wallet/history?shortId={{shortId}}&publicKey={{publicKey}}&limit=50&since={{since}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "wallet", "history"],
-              "query": [
-                { "key": "shortId", "value": "{{shortId}}" },
-                { "key": "publicKey", "value": "{{publicKey}}" },
-                { "key": "limit", "value": "50" },
-                { "key": "since", "value": "{{since}}" }
-              ]
-            },
-            "description": "Returns combined settlement, anchor, and online transfer history."
-          },
-          "response": []
-        },
-        {
-          "name": "Vault Balance",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/vault-balance?shortId={{shortId}}&stellarPublicKey={{publicKey}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "vault-balance"],
-              "query": [
-                { "key": "shortId", "value": "{{shortId}}" },
-                { "key": "stellarPublicKey", "value": "{{publicKey}}" }
-              ]
-            },
-            "description": "Reads database-backed vault balance fields using a short ID or Stellar public key."
-          },
-          "response": []
-        },
-        {
-          "name": "Transactions",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/transactions?shortId={{shortId}}&limit=50&since={{since}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "transactions"],
-              "query": [
-                { "key": "shortId", "value": "{{shortId}}" },
-                { "key": "limit", "value": "50" },
-                { "key": "since", "value": "{{since}}" }
-              ]
-            },
-            "description": "Returns the transaction list for a short ID."
-          },
-          "response": []
-        },
-        {
-          "name": "Confirm Wallet Transfer",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"txHash\": \"{{txHash}}\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/wallet/transfers/confirm",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "wallet", "transfers", "confirm"]
-            },
-            "description": "Confirms a 64-character hexadecimal Stellar transaction hash. Replace the sample hash with a real submitted transaction hash."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Phase 3 - Settlements",
-      "item": [
-        {
-          "name": "Process Offline Settlement",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"smsBody\": \"1:{{shortId}}:bCdEf2:3v5K:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:REPLACE_WITH_BASE64_SIGNATURE\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v2/settlements",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v2", "settlements"]
-            },
-            "description": "Offline settlement format is tokenId:senderShortId:receiverShortId:amountBase62:nonceBase64:signatureBase64. The sample nonce and signature are placeholders and must be signed by the sender's enrolled offline device key. Do not submit real funds unintentionally."
-          },
-          "response": []
-        }
-      ]
-    }
-  ]
+﻿{
+    "info":  {
+                 "_postman_id":  "a5cc55ec-b9a4-4f3d-a0ca-7d2b0ad3db6d",
+                 "name":  "HoneBill Phase 2 through Phase 6",
+                 "description":  "Postman requests for HoneBill Phases 2, 3, 4, 5, and 6. Phase 4 engine requests require SEP-10 auth or an Ed25519 signed intent as indicated; preparation routes return unsigned XDR and do not broadcast.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:3000"
+                     },
+                     {
+                         "key":  "phoneNumber",
+                         "value":  "+639000000001"
+                     },
+                     {
+                         "key":  "pin",
+                         "value":  "123456"
+                     },
+                     {
+                         "key":  "otpCode",
+                         "value":  "123456"
+                     },
+                     {
+                         "key":  "verificationToken",
+                         "value":  "REPLACE_WITH_TOKEN_FROM_OTP_VERIFY"
+                     },
+                     {
+                         "key":  "publicKey",
+                         "value":  "GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R"
+                     },
+                     {
+                         "key":  "shortId",
+                         "value":  "aB3x9Q"
+                     },
+                     {
+                         "key":  "since",
+                         "value":  "2024-01-01T00:00:00.000Z"
+                     },
+                     {
+                         "key":  "enginePublicKey",
+                         "value":  "GCWOMLNHPXWHBUZI7ZDXOXXCOHTZ6HY66HRP5NUIWZDWNNHGHISRZQBK"
+                     },
+                     {
+                         "key":  "recipientPublicKey",
+                         "value":  "REPLACE_WITH_RECIPIENT_G_PUBLIC_KEY"
+                     },
+                     {
+                         "key":  "tokenAddress",
+                         "value":  "REPLACE_WITH_ACTIVE_TOKEN_C_ADDRESS"
+                     },
+                     {
+                         "key":  "amountStroops",
+                         "value":  "1000000"
+                     },
+                     {
+                         "key":  "offlineDevicePubkeyHex",
+                         "value":  "REPLACE_WITH_64_HEX_CHAR_DEVICE_KEY"
+                     },
+                     {
+                         "key":  "offlineDeviceKey",
+                         "value":  "REPLACE_WITH_DEVICE_G_PUBLIC_KEY"
+                     },
+                     {
+                         "key":  "engineSignature",
+                         "value":  "REPLACE_WITH_BASE64_SIGNATURE_FROM_SIGN_SCRIPT"
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "Phase 2 - OTP",
+                     "item":  [
+                                  {
+                                      "name":  "Send OTP",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"phoneNumber\": \"{{phoneNumber}}\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/otp/send",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "otp",
+                                                                               "send"
+                                                                           ]
+                                                              },
+                                                      "description":  "Sends or returns a test-mode OTP according to backend configuration. This can contact configured SMS providers; do not use it for production numbers without authorization."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Verify OTP",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"code\": \"{{otpCode}}\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/otp/verify",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "otp",
+                                                                               "verify"
+                                                                           ]
+                                                              },
+                                                      "description":  "Verify the OTP first, then copy the returned verificationToken into the verificationToken collection variable before registration."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 2 - Accounts",
+                     "item":  [
+                                  {
+                                      "name":  "Register Account",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"stellarPublicKey\": \"{{publicKey}}\",\n  \"offlineDeviceKey\": \"GDLE2FWXBLTJ6KI6RA4PTNYIMGSGTEFTM5ANOANBTI5ZBGOY64W6OC6R\",\n  \"phoneNumber\": \"{{phoneNumber}}\",\n  \"pin\": \"{{pin}}\",\n  \"firstName\": \"Ana\",\n  \"lastName\": \"Cruz\",\n  \"email\": \"ana.cruz@example.com\",\n  \"verificationToken\": \"{{verificationToken}}\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/register",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "register"
+                                                                           ]
+                                                              },
+                                                      "description":  "Sample registration payload. If OTP verification is enabled, verificationToken must be a real token returned by the OTP verify route."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Check User by Phone",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/users/check?phone={{phoneNumber}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "users",
+                                                                               "check"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "phone",
+                                                                                    "value":  "{{phoneNumber}}"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Checks whether a normalized phone number is registered."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 3 - Wallet",
+                     "item":  [
+                                  {
+                                      "name":  "Wallet Balance",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/wallet/balance?publicKey={{publicKey}}\u0026assetCode=PHPC",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "wallet",
+                                                                               "balance"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "publicKey",
+                                                                                    "value":  "{{publicKey}}"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "assetCode",
+                                                                                    "value":  "PHPC"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Reads a Stellar testnet/account trustline balance. Supported asset codes include PHPC and USDC."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Wallet History",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/wallet/history?shortId={{shortId}}\u0026publicKey={{publicKey}}\u0026limit=50\u0026since={{since}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "wallet",
+                                                                               "history"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "shortId",
+                                                                                    "value":  "{{shortId}}"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "publicKey",
+                                                                                    "value":  "{{publicKey}}"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "limit",
+                                                                                    "value":  "50"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "since",
+                                                                                    "value":  "{{since}}"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Returns combined settlement, anchor, and online transfer history."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 5 - SMS and service health",
+                     "item":  [
+                                  {
+                                      "name":  "Backend Health (deep)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/health?deep=1",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "health"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "deep",
+                                                                                    "value":  "1"
+                                                                                }
+                                                                            ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Readiness checks plus TextBee primary/fallback device status. Deep checks may contact the configured TextBee API."
+                                  },
+                                  {
+                                      "name":  "SMS Webhook Health",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/sms/webhook",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "sms",
+                                                                               "webhook"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Returns non-secret SMS webhook configuration metadata; does not send an SMS."
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 6 - Anchor (SEP-1 / SEP-24)",
+                     "item":  [
+                                  {
+                                      "name":  "SEP-24 Info",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/sep24/info",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "sep24",
+                                                                               "info"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Public discovery of supported assets, deposit/withdraw availability, and configured limits."
+                                  },
+                                  {
+                                      "name":  "SEP-24 Transaction Lookup",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{sep10Token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/sep24/transaction?id={{transactionId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "sep24",
+                                                                               "transaction"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "id",
+                                                                                    "value":  "{{transactionId}}"
+                                                                                }
+                                                                            ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Looks up a transaction owned by the account identified by the SEP-10 bearer token."
+                                  },
+                                  {
+                                      "name":  "Initiate Deposit (interactive)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"asset_code\":  \"{{assetCode}}\",\r\n    \"memo\":  \"Postman deposit test\",\r\n    \"memo_type\":  \"text\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{sep10Token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/sep24/transactions/deposit/interactive",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "sep24",
+                                                                               "transactions",
+                                                                               "deposit",
+                                                                               "interactive"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Creates an incomplete deposit transaction and returns a short-lived interactive URL. Requires a valid SEP-10 token; creates a database record."
+                                  },
+                                  {
+                                      "name":  "Initiate Withdrawal (interactive)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"asset_code\":  \"{{assetCode}}\",\r\n    \"memo\":  \"Postman withdrawal test\",\r\n    \"memo_type\":  \"text\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{sep10Token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/sep24/transactions/withdraw/interactive",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "sep24",
+                                                                               "transactions",
+                                                                               "withdraw",
+                                                                               "interactive"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Creates an incomplete withdrawal transaction and returns a short-lived interactive URL. Requires a valid SEP-10 token; creates a database record."
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 4 - Engine",
+                     "item":  [
+                                  {
+                                      "name":  "Prepare Online Transfer",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{engineSignature}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"senderPublicKey\":  \"{{enginePublicKey}}\",\r\n    \"recipientPublicKey\":  \"{{recipientPublicKey}}\",\r\n    \"tokenAddress\":  \"{{tokenAddress}}\",\r\n    \"amountStroops\":  \"{{amountStroops}}\",\r\n    \"paymentMode\":  \"online\",\r\n    \"clientProtocol\":  2\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/transfer",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "transfer"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires an Ed25519 signed-intent bearer signature matching transfer:v2:online:\u003ctoken\u003e:\u003csender\u003e:\u003crecipient\u003e:\u003camount\u003e. Returns unsigned transaction XDR for wallet signing; it does not broadcast."
+                                  },
+                                  {
+                                      "name":  "Prepare Deposit",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{engineSignature}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"senderPublicKey\":  \"{{enginePublicKey}}\",\r\n    \"tokenAddress\":  \"{{tokenAddress}}\",\r\n    \"offlineDevicePubkeyHex\":  \"{{offlineDevicePubkeyHex}}\",\r\n    \"amountStroops\":  \"{{amountStroops}}\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/deposit",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "deposit"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires an Ed25519 signed-intent signature for the deposit. Returns unsigned XDR for wallet signing; it does not broadcast."
+                                  },
+                                  {
+                                      "name":  "Prepare Withdrawal",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{engineSignature}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"senderPublicKey\":  \"{{enginePublicKey}}\",\r\n    \"tokenAddress\":  \"{{tokenAddress}}\",\r\n    \"amountStroops\":  \"{{amountStroops}}\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/withdraw",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "withdraw"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires an Ed25519 signed-intent signature for the withdrawal. Returns unsigned XDR for wallet signing; it does not broadcast."
+                                  },
+                                  {
+                                      "name":  "Prepare Offline Key Rotation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"offlineDeviceKey\":  \"{{offlineDeviceKey}}\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/offline-key",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "offline-key"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires SEP-10 authentication. Checks whether the offline key needs rotation and may return unsigned XDR."
+                                  },
+                                  {
+                                      "name":  "Confirm Offline Key Rotation",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\r\n    \"offlineDeviceKey\":  \"{{offlineDeviceKey}}\"\r\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/offline-key",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "offline-key"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires SEP-10 authentication and should be sent only after the rotation transaction is submitted on-chain."
+                                  },
+                                  {
+                                      "name":  "Register Recipient",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{sep10Token}}",
+                                                                         "type":  "text"
+                                                                     }
+                                                                 ],
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{sep10Token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/v2/engine/recipient-registry",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "v2",
+                                                                               "engine",
+                                                                               "recipient-registry"
+                                                                           ]
+                                                              }
+                                                  },
+                                      "response":  [
+
+                                                   ],
+                                      "description":  "Requires SEP-10 authentication. May submit an on-chain recipient registration through the configured registrar; use only when you intend to register the recipient."
+                                  }
+                              ]
+                 }
+             ]
 }

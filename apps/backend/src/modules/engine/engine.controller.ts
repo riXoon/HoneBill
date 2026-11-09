@@ -9,7 +9,6 @@ import { EngineService } from './engine.service.js';
 import {
   DepositRequestDto,
   OfflineKeyRequestDto,
-  TransferRequestDto,
   WithdrawRequestDto,
 } from './dto/engine-request.dto.js';
 
@@ -36,7 +35,7 @@ export class EngineController {
       ? `transfer:v2:online:${body.tokenAddress}:${body.senderPublicKey}:${body.recipientPublicKey}:${body.amountStroops}`
       : null;
   })
-  transfer(@Body() body: TransferRequestDto) {
+  transfer(@Body() body: Record<string, unknown>) {
     return this.engine.prepareTransfer(body ?? {});
   }
 

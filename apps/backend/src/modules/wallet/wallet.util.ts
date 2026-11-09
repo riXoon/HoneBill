@@ -5,7 +5,7 @@ import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
 export const ASSET_ISSUERS: Record<string, string> = {
-  PHPC: 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY',
+  PHPC: 'GBH62WU4CSD2VEBUNCQP5BTZPOITNBE6ERUPJKBZDF7RMIUE7O2VAJRG',
   USDC: 'GDQGJU5JTW5IFCGS6JZTIGK57IKPW4N4LJWWEN7F3K3GSEJEYPVJ3BYA',
 };
 
