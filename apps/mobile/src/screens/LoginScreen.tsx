@@ -158,6 +158,28 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
     }
   }, [unlockable, signInWithBiometrics]);
 
+  const [biometric, setBiometric] = useState(false);
+
+  const signIn = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
+
+  // Mock-only: a real build would unlock a key kept in SecureStore behind this check instead of just signing in.
+  const signInWithBiometrics = useCallback(async () => {
+    if (await authenticateWithBiometrics()) signIn();
+  }, [signIn]);
+
+  // Offer the fingerprint button when the phone supports it, and prompt once on arrival. Cancelling falls back to the MPIN.
+  useEffect(() => {
+    let active = true;
+    void isBiometricAvailable().then((ok) => {
+      if (!active || !ok) return;
+      setBiometric(true);
+      void signInWithBiometrics();
+    });
+    return () => {
+      active = false;
+    };
+  }, [signInWithBiometrics]);
+
   const onDigit = useCallback(
     (digit: string) => {
       if (busy || entering || !phone) return;
