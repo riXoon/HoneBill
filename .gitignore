@@ -103,3 +103,12 @@ apps/mobile/eas.json
 apps/mobile/android/
 apps/mobile/ios/
 .neon
+
+# local logs and test/debug output
+*.log
+.expo/
+Microsoft/
+apps/backend/*-result*.txt
+apps/backend/*-output.txt
+apps/backend/parity-*.txt
+apps/backend/nest-auth.txt
