@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
@@ -12,10 +12,11 @@ import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, WalletIcon } from '../components/ui/smallIcons';
+import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, VaultIcon, WalletIcon } from '../components/ui/smallIcons';
 import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
+import { isValidStellarPublicKey } from '../services/wallet/stellarKeys';
 import { colors, fonts } from '../theme';
 
 // Figma: Profile (942:5362), 402x874. Positions below are read off the frame, relative to the
@@ -70,9 +71,15 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { activeAccount, logout } = useAuth();
-  const address = activeAccount?.stellarPublicKey ?? '';
-  // Shortened the way the design prints it: start, ellipsis, end.
-  const addressShort = address ? `${address.slice(0, 12)}...${address.slice(-10)}` : '';
+  // Only a well-formed address (right length, alphabet, version and checksum) is shown or copied: anything else
+  // would send money to a key nobody owns.
+  const stored = activeAccount?.stellarPublicKey ?? '';
+  const address = isValidStellarPublicKey(stored) ? stored : '';
+  // Shortened the way the design prints it: start, ellipsis, end. The copy always takes the full address.
+  const addressShort = address ? `${address.slice(0, 12)}...${address.slice(-10)}` : 'Vault address unavailable';
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
 
   const signOut = async () => {
     await logout();
@@ -85,6 +92,9 @@ export function ProfileScreen() {
   const copyAddress = async () => {
     if (!address) return;
     await Clipboard.setStringAsync(address);
+    setCopied(true);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 1800);
     AccessibilityInfo.announceForAccessibility('Vault address copied');
   };
 
@@ -155,11 +165,11 @@ export function ProfileScreen() {
             <MenuRow icon={<View style={styles.glyph}><LockIcon /></View>} label="Change MPIN" trailing={<ChevronRightIcon />} />
             <MenuRow
               tinted
-              icon={<View style={styles.glyph}><LockIcon /></View>}
-              label={addressShort}
-              accessibilityLabel="Copy vault address"
-              onPress={copyAddress}
-              trailing={<CopyIcon />}
+              icon={<View style={styles.glyph}><VaultIcon /></View>}
+              label={copied ? 'Address copied!' : addressShort}
+              accessibilityLabel={address ? 'Copy vault address' : 'Vault address unavailable'}
+              onPress={address ? copyAddress : undefined}
+              trailing={<CopyIcon color={copied ? colors.primary : colors.textMuted} />}
             />
           </View>
         </View>

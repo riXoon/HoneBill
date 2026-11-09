@@ -2,6 +2,7 @@ import { StyleSheet, Text, TextInput } from 'react-native';
 
 import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
+import { useFieldFocus } from '../ui/fieldState';
 import { OutlinedField } from './OutlinedField';
 
 const MAX_WHOLE_DIGITS = 9;
@@ -43,7 +44,9 @@ type AmountFieldProps = {
 
 /** Figma amount "input": the "PHP" tag and a 32 dp number, centred together. Formats to 1,000.00 on blur. */
 export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFieldProps) {
+  const { focused, onFocus, onBlur } = useFieldFocus();
   const formatOnBlur = () => {
+    onBlur();
     const amount = Number(value) || 0;
     if (amount <= 0) return;
     const { whole, cents } = splitPesos(amount);
@@ -51,11 +54,12 @@ export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFie
   };
 
   return (
-    <OutlinedField style={styles.field}>
+    <OutlinedField style={styles.field} focused={focused} filled={value.length > 0}>
       <Text style={styles.currency}>{currency}</Text>
       <TextInput
         value={value}
         onChangeText={(t) => onChangeText(sanitizeAmount(t))}
+        onFocus={onFocus}
         onBlur={formatOnBlur}
         placeholder="0.00"
         placeholderTextColor="rgba(34, 32, 33, 0.2)"

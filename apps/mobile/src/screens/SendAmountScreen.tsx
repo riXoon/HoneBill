@@ -9,6 +9,7 @@ import { BalanceBar } from '../components/send/BalanceBar';
 import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { SendLayout } from '../components/send/SendLayout';
+import { useFieldFocus } from '../components/ui/fieldState';
 import { MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
@@ -26,6 +27,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   const { balances } = useWalletData();
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
+  const noteFocus = useFieldFocus();
   const [favorite, setFavorite] = useState(recipient?.favorite ?? false);
 
   useEffect(() => {
@@ -122,11 +124,13 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
             {note.length}/{NOTE_MAX}
           </Text>
         </View>
-        <OutlinedField>
+        <OutlinedField focused={noteFocus.focused} filled={note.length > 0}>
           <TextInput
             value={note}
             onChangeText={setNote}
             maxLength={NOTE_MAX}
+            onFocus={noteFocus.onFocus}
+            onBlur={noteFocus.onBlur}
             accessibilityLabel="Note, optional"
             style={styles.noteInput}
           />

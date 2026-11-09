@@ -66,6 +66,31 @@ export function encodeStellarPublicKey(publicKey: Uint8Array): string {
   return base32(payload);
 }
 
+/**
+ * True only for a well-formed Stellar public address: "G", 56 base32 characters, version byte and CRC16 checksum
+ * all correct. A key that fails this was truncated, altered or is not an address, and must not be shown as
+ * the account's address or copied for someone to send money to.
+ */
+export function isValidStellarPublicKey(address: string): boolean {
+  if (!/^G[A-Z2-7]{55}$/.test(address)) return false;
+  let bits = 0;
+  let value = 0;
+  const bytes: number[] = [];
+  for (const char of address) {
+    value = (value << 5) | BASE32_ALPHABET.indexOf(char);
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+  // 1 version byte + 32 key bytes + 2 checksum bytes.
+  if (bytes.length !== 35 || bytes[0] !== 6 << 3) return false;
+  const payload = Uint8Array.from(bytes.slice(0, 33));
+  const crc = crc16(payload);
+  return bytes[33] === (crc & 0xff) && bytes[34] === crc >> 8;
+}
+
 export type DeviceKeyPair = {
   /** 32-byte ed25519 private seed as 64 hex characters. It signs offline vouchers and never leaves the phone. */
   privateKeyHex: string;
