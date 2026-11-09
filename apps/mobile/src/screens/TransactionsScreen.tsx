@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DateDivider } from '../components/history/DateDivider';
 import { TransactionCard } from '../components/history/TransactionCard';
 import { AppBackground } from '../components/ui/AppBackground';
+import { EmptyState } from '../components/ui/EmptyState';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { FilterChips } from '../components/ui/FilterChips';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
@@ -18,7 +19,7 @@ import { useWalletData } from '../context/WalletDataContext';
 import { TRANSACTION_FILTERS, buildHistoryRows } from '../types/transaction';
 import type { HistoryRow, TransactionFilter } from '../types/transaction';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, fonts } from '../theme';
+import { colors } from '../theme';
 
 // Figma: Transactions (870:3169), 402x874. Reached from the "History" tab.
 const keyExtractor = (item: HistoryRow) => item.id;
@@ -70,9 +71,11 @@ export function TransactionsScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <SlideRow>
-            <Text style={error ? styles.error : styles.empty} accessibilityRole={error ? 'alert' : undefined}>
-              {status === 'loading' || status === 'idle' ? 'Loading…' : error ?? 'Nothing to see here!'}
-            </Text>
+            <EmptyState
+              loading={status === 'loading' || status === 'idle'}
+              message={error ?? undefined}
+              isError={Boolean(error)}
+            />
           </SlideRow>
         }
         refreshControl={
@@ -99,6 +102,4 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 30 },
   header: { gap: 20, marginBottom: 20 },
   separator: { height: 10 },
-  empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
-  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
 });

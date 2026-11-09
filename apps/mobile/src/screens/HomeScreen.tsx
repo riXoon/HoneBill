@@ -12,6 +12,9 @@ import { QuickActions, type QuickActionKey } from '../components/home/QuickActio
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
+import { EMPTY_TRANSACTIONS_MESSAGE } from '../components/ui/EmptyState';
+import { SpeechBubble } from '../components/ui/SpeechBubble';
+import { useLoadingMessage } from '../hooks/useLoadingMessage';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
@@ -50,6 +53,11 @@ export function HomeScreen() {
   );
 
   const recent = transactions.slice(0, RECENT_COUNT);
+  // Honi rests above the nav bar when there is nothing to list (offline, or no activity yet) and keeps the user
+  // company during the first load, with a speech bubble that chats instead of a plain "Loading…".
+  const showRestHoni = !online || recent.length === 0;
+  const loadingFirst = recent.length === 0 && (status === 'loading' || status === 'idle');
+  const chatter = useLoadingMessage(loadingFirst);
 
   return (
     <View style={styles.root}>
@@ -71,7 +79,7 @@ export function HomeScreen() {
         }
       >
         {/* Online: Honi peeks in from the top right, tilted -20.87 degrees, behind the cards. */}
-        {online ? (
+        {online && !showRestHoni ? (
           <Animated.View
             entering={FadeIn.duration(FADE_MS)}
             exiting={FadeOut.duration(FADE_MS)}
@@ -117,12 +125,16 @@ export function HomeScreen() {
             <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
               <View style={styles.activityTitle}>
                 <Text style={styles.activityHeading}>Recent Activity</Text>
-                <Text style={styles.seeAll} accessibilityRole="button">
-                  See All
-                </Text>
+                {/* Nothing to see yet, and the bubble above Honi needs that corner. */}
+                {recent.length === 0 ? null : (
+                  <Text style={styles.seeAll} accessibilityRole="button">
+                    See All
+                  </Text>
+                )}
               </View>
               {recent.length === 0 ? (
-                <Text style={styles.empty}>{status === 'loading' ? 'Loading…' : 'Nothing to see here!'}</Text>
+                // The message (loading chatter or "nothing here") is Honi's speech bubble, in his layer below.
+                null
               ) : (
                 <View style={styles.activityList}>
                   {recent.map((tx) => (
@@ -140,14 +152,13 @@ export function HomeScreen() {
           ) : (
             <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
               <Text style={styles.activityHeading}>Recent Activity</Text>
-              <Text style={styles.empty}>Nothing to see here!</Text>
             </Animated.View>
           )}
         </View>
       </ScrollView>
 
-      {/* Offline: Honi sits above the nav bar, centred, with the empty activity state. */}
-      {online ? null : (
+      {/* Empty activity (offline, or online with nothing yet): Honi sits above the nav bar, centred. */}
+      {showRestHoni ? (
         <Animated.View
           entering={FadeIn.duration(FADE_MS)}
           exiting={FadeOut.duration(FADE_MS)}
@@ -155,8 +166,12 @@ export function HomeScreen() {
           style={[styles.honiRest, { bottom: 98.5 + Math.max(0, insets.bottom - 24) }]}
         >
           <Mascot mood="idlePlain" />
+          {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
+          <View style={styles.honiBubble}>
+            <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
+          </View>
         </Animated.View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -167,6 +182,9 @@ const styles = StyleSheet.create({
   // Centre (354, 130) in a 402 dp frame; the image is 347x227.
   honiPeek: { position: 'absolute', left: 180.5, top: 16.5, transform: [{ rotate: '-20.87deg' }] },
   honiRest: { position: 'absolute', alignSelf: 'center' },
+  // Anchored by its bottom edge (the tail) 31 dp below the top of Honi's 224 dp box, so a longer message grows
+  // upward, away from his head. Nudged right to keep clear of the "Recent Activity" heading.
+  honiBubble: { position: 'absolute', bottom: 193, left: 0, right: 0, paddingLeft: 80, alignItems: 'center' },
   topBar: { width: 342, height: 68, flexDirection: 'row', alignItems: 'center', gap: 10 },
   topText: { flex: 1, gap: 4, padding: 10 },
   hello: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
@@ -179,6 +197,5 @@ const styles = StyleSheet.create({
   activityHeading: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
-  empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
   error: { width: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
 });

@@ -6,9 +6,11 @@ import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
 import { Button } from '../components/ui/Button';
+import { fieldStateStyle, useFieldFocus } from '../components/ui/fieldState';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import type { RootStackParamList } from '../navigation/types';
 import { setAccountPhone } from '../services/accountPhone';
+import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { errorMessage, isAborted } from '../services/api/client';
 import { sendOtp } from '../services/api/otp';
 import { checkUser } from '../services/api/users';
@@ -19,13 +21,14 @@ const COUNTRY_CODE = '+63';
 const PHONE_LENGTH = 10;
 
 export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'InputNumber'>) {
-  // `signin` reuses this screen to find an existing account (the MPIN is the check, so no OTP).
+  // `signin` reuses this screen to find an existing account: no OTP on a phone that already holds its wallet, OTP + recovery phrase otherwise.
   const signin = route.params?.mode === 'signin';
   const [phone, setPhone] = useState('');
   const [invalid, setInvalid] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
+  const phoneFocus = useFieldFocus();
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -49,8 +52,15 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
           setError('No account found for this number.');
           return;
         }
-        await setAccountPhone(fullPhone);
-        navigation.popTo('Login');
+        // Only a phone that already holds this account's wallet may skip straight to the MPIN. Any other phone
+        // (a new device, or a different account) proves the number by OTP, then restores the wallet from its phrase.
+        if ((await getDevicePublicKey()) === account.stellarPublicKey) {
+          await setAccountPhone(fullPhone);
+          navigation.popTo('Login');
+          return;
+        }
+        await sendOtp(fullPhone, controller.signal);
+        navigation.navigate('Otp', { phone: fullPhone, purpose: 'recover' });
         return;
       }
       if (account.exists) {
@@ -100,7 +110,9 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
               autoComplete="tel"
               accessibilityLabel="Mobile number"
               editable={!busy}
-              style={[styles.box, styles.field, (invalid || error) && styles.invalid]}
+              onFocus={phoneFocus.onFocus}
+              onBlur={phoneFocus.onBlur}
+              style={[styles.box, styles.field, fieldStateStyle(phoneFocus.focused, phone.length > 0), (invalid || error) && styles.invalid]}
             />
           </View>
           {error ? (

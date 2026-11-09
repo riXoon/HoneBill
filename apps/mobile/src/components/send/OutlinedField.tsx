@@ -3,18 +3,25 @@ import { StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { colors } from '../../theme';
+import { fieldStateStyle } from '../ui/fieldState';
 
 /** Figma "input": 1 dp orange outline, 12 dp radius, 20% white fill, 12 dp padding, 42 dp tall. */
 export function OutlinedField({
   children,
   invalid = false,
+  focused,
+  filled = false,
   style,
 }: {
   children: ReactNode;
   invalid?: boolean;
+  /** Pass for a field that wraps a TextInput: it then follows the shared blank / filled / selected look. Omit for a static box. */
+  focused?: boolean;
+  filled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  return <View style={[styles.field, invalid && styles.invalid, style]}>{children}</View>;
+  const state = focused === undefined ? null : fieldStateStyle(focused, filled);
+  return <View style={[styles.field, state, invalid && styles.invalid, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

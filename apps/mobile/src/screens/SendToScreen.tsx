@@ -6,6 +6,7 @@ import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { RecipientCard } from '../components/send/RecipientCard';
 import { SendLayout } from '../components/send/SendLayout';
+import { useFieldFocus } from '../components/ui/fieldState';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
 import { AddBoxIcon, BankIcon, ContactCardIcon, MoneyOutIcon, QrTitleIcon } from '../components/ui/smallIcons';
 import { SHORT_ID_LENGTH } from '../config/limits';
@@ -25,6 +26,7 @@ type Tab = (typeof TABS)[number];
 export function SendToScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'SendTo'>) {
   const { activeAccount } = useAuth();
   const [shortId, setShortId] = useState('');
+  const idFocus = useFieldFocus();
   const [invalid, setInvalid] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   /** True while the complete ID is being looked up, so a slow network does not look like nothing happened. */
@@ -92,7 +94,7 @@ export function SendToScreen({ navigation }: NativeStackScreenProps<RootStackPar
     <SendLayout title="Send" icon={<MoneyOutIcon />} onBack={navigation.goBack}>
       <GlassCard style={styles.sendTo}>
         <Text style={styles.label}>Send to</Text>
-        <OutlinedField invalid={invalid}>
+        <OutlinedField invalid={invalid} focused={idFocus.focused} filled={shortId.length > 0}>
           <Text style={styles.idTag}>ID</Text>
           <TextInput
             value={shortId}
@@ -104,6 +106,8 @@ export function SendToScreen({ navigation }: NativeStackScreenProps<RootStackPar
             maxLength={SHORT_ID_LENGTH}
             accessibilityLabel="Recipient short ID"
             accessibilityHint={lookupError ?? undefined}
+            onFocus={idFocus.onFocus}
+            onBlur={idFocus.onBlur}
             style={styles.idInput}
           />
           <ContactCardIcon />

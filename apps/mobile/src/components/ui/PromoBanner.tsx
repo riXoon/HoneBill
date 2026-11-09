@@ -77,7 +77,8 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
   },
   clip: { ...StyleSheet.absoluteFill, borderRadius: 12, overflow: 'hidden' },
-  text: { position: 'absolute', left: 19, top: 15.5, width: 208, gap: 2 },
+  // Greeting at the top, subtext pinned to the bottom edge so the two read as separate lines with room between.
+  text: { position: 'absolute', left: 19, top: 16, bottom: 16, width: 208, justifyContent: 'space-between' },
   title: { fontFamily: fonts.medium, fontSize: 18, color: colors.surface },
   subtitle: { fontFamily: fonts.light, fontSize: 12, color: colors.surface },
   honiFrame: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },

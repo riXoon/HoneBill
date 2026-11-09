@@ -60,7 +60,7 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   const pairs = Object.entries(query ?? {})
     .filter((entry): entry is [string, string] => entry[1] !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-  return `${API_BASE_URL}/api${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
+  return `${API_BASE_URL}/api/v2${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
 }
 
 export async function apiRequest<T>(method: 'GET' | 'POST', path: string, options: RequestOptions = {}): Promise<T> {
