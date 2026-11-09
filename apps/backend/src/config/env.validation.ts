@@ -28,6 +28,7 @@ export const envValidationSchema = Joi.object({
   RAMP_DAILY_MAX_PER_USER_USDC: Joi.number().positive().optional(),
   PHPC_DISTRIBUTOR_SECRET: Joi.string().allow('').optional(),
   USDC_DISTRIBUTOR_SECRET: Joi.string().allow('').optional(),
+  WALLET_FUNDING_XLM: Joi.number().min(1).optional(),
   REDIS_URL: Joi.string().uri().optional(),
   REDIS_HOST: Joi.string().default('127.0.0.1'),
   REDIS_PORT: Joi.number().port().default(6379),
