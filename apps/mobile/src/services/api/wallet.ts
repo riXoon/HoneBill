@@ -38,3 +38,11 @@ export async function getHistory(account: AccountRef, limit = 50, signal?: Abort
   });
   return result.transactions;
 }
+
+/**
+ * Puts a registered wallet on the Stellar ledger (a small XLM reserve the app never shows). Safe to repeat:
+ * an account that is already there answers `exists`. Sign-in with the wallet key (SEP-10) needs this first.
+ */
+export function fundWallet(publicKey: string, signal?: AbortSignal): Promise<{ status: 'created' | 'exists' }> {
+  return apiRequest('POST', '/wallet/fund', { body: { publicKey }, signal });
+}

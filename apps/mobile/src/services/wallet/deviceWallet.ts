@@ -56,6 +56,33 @@ export async function createDeviceWallet(): Promise<NewWallet> {
   return { publicKey, offlineDeviceKey: deviceKey.publicKey };
 }
 
+/**
+ * Puts an existing account's wallet on this device from its recovery phrase (the caller has already checked the
+ * phrase's address matches the account). The offline device key is not derived from the phrase, so this device
+ * gets a fresh one. The account is already registered, so the secrets are marked as such and a later sign-up
+ * keeps them as `previous`.
+ */
+export async function restoreDeviceWallet(mnemonic: string): Promise<NewWallet> {
+  const publicKey = await publicKeyFromMnemonic(mnemonic);
+  await yieldToEventLoop();
+  const deviceKey = createDeviceKeyPair();
+
+  const [existing, existingOffline, registered] = await Promise.all([
+    SecureStore.getItemAsync(KEY_MNEMONIC, OPTIONS),
+    SecureStore.getItemAsync(KEY_OFFLINE, OPTIONS),
+    SecureStore.getItemAsync(KEY_REGISTERED, OPTIONS),
+  ]);
+  if (registered === '1' && existing && existing !== mnemonic) {
+    await SecureStore.setItemAsync(KEY_PREVIOUS, existing, OPTIONS);
+    if (existingOffline) await SecureStore.setItemAsync(KEY_PREVIOUS_OFFLINE, existingOffline, OPTIONS);
+  }
+
+  await SecureStore.setItemAsync(KEY_MNEMONIC, mnemonic, OPTIONS);
+  await SecureStore.setItemAsync(KEY_OFFLINE, deviceKey.privateKeyHex, OPTIONS);
+  await SecureStore.setItemAsync(KEY_REGISTERED, '1', OPTIONS);
+  return { publicKey, offlineDeviceKey: deviceKey.publicKey };
+}
+
 /** Call once the server has accepted the account, so a later sign-up knows to preserve these secrets. */
 export async function markDeviceWalletRegistered(): Promise<void> {
   await SecureStore.setItemAsync(KEY_REGISTERED, '1', OPTIONS);

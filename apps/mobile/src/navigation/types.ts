@@ -16,7 +16,10 @@ export type RootStackParamList = {
   Login: undefined;
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
   InputNumber: { mode?: 'signin' } | undefined;
-  Otp: { phone: string };
+  /** `recover` is a sign-in from a phone that does not hold this account's wallet: OTP, then the recovery phrase. */
+  Otp: { phone: string; purpose?: 'recover' };
+  /** Restores an existing account's wallet on this phone from its 12 words. */
+  VerifySeedPhrase: { phone: string };
   UserDetails: undefined;
   MpinCreation: undefined;
   /** One-time backup of the wallet's 12 words, shown right after the account is created. */

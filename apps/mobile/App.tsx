@@ -38,6 +38,7 @@ import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
 import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
 import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
 import { UserDetailsScreen } from './src/screens/UserDetailsScreen';
+import { VerifySeedPhraseScreen } from './src/screens/VerifySeedPhraseScreen';
 import { MainTabs } from './src/navigation/MainTabs';
 import type { RootStackParamList } from './src/navigation/types';
 import { fonts } from './src/theme';
@@ -56,6 +57,7 @@ function RootNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
+        <Stack.Screen name="VerifySeedPhrase" component={VerifySeedPhraseScreen} />
         <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
         <Stack.Screen name="MpinCreation" component={MpinCreationScreen} />
         <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} options={{ gestureEnabled: false }} />

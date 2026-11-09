@@ -30,6 +30,7 @@ function verifyErrorMessage(error: unknown): string {
 
 export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Otp'>) {
   const { phone } = route.params;
+  const recover = route.params.purpose === 'recover';
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   /** True while a new code is being requested, so the Resend link can say so. */
@@ -59,8 +60,12 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
     setError(null);
     try {
       const result = await verifyOtp(phone, code, controller.signal);
-      setSignupSession({ phone, verificationToken: result.verificationToken });
-      navigation.navigate('UserDetails');
+      if (recover) {
+        navigation.navigate('VerifySeedPhrase', { phone });
+      } else {
+        setSignupSession({ phone, verificationToken: result.verificationToken });
+        navigation.navigate('UserDetails');
+      }
     } catch (e) {
       if (isAborted(e)) return;
       setCode('');
@@ -99,7 +104,7 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome step={2} onBack={navigation.goBack} />
+      <AuthChrome step={recover ? undefined : 2} onBack={navigation.goBack} />
 
       <View style={styles.content}>
         <View style={styles.header}>

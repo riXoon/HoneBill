@@ -2,6 +2,7 @@ import { setAccountPhone } from './accountPhone';
 import { registerAccount, type RegisteredAccount } from './api/accounts';
 import { ApiError } from './api/client';
 import { checkUser } from './api/users';
+import { fundWallet } from './api/wallet';
 import { reportError } from './errorReporting';
 import { getSignupSession } from './signupSession';
 import { markDeviceWalletRegistered } from './wallet/deviceWallet';
@@ -59,6 +60,8 @@ export async function completeSignup(signal: AbortSignal): Promise<AccountProfil
     account = existing;
   }
 
+  // Best effort: the account exists either way, and any later step that needs the wallet on the ledger retries this.
+  await fundWallet(account.stellarPublicKey, signal).catch((e) => reportError(e, { step: 'fundWallet' }));
   await markDeviceWalletRegistered().catch((e) => reportError(e, { step: 'markDeviceWalletRegistered' }));
   await setAccountPhone(phone);
   return {
