@@ -36,8 +36,8 @@ describe('ApiExceptionFilter', () => {
   it('normalizes malformed registration JSON to the legacy response', () => {
     const { host, request, response } = createHost();
     request.method = 'POST';
-    request.path = '/api/register';
-    request.originalUrl = '/api/register?source=test';
+    request.path = '/api/v2/register';
+    request.originalUrl = '/api/v2/register?source=test';
     const error = new BadRequestException(
       "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
     );
@@ -51,7 +51,7 @@ describe('ApiExceptionFilter', () => {
   it('normalizes strict-parser errors for JSON primitives on registration', () => {
     const { host, request, response } = createHost();
     request.method = 'POST';
-    request.path = '/api/register';
+    request.path = '/api/v2/register';
     const error = new BadRequestException(`Unexpected token 'n', "null" is not valid JSON`);
 
     filter.catch(error, host);
@@ -62,14 +62,14 @@ describe('ApiExceptionFilter', () => {
 
   it.each([
     [
-      '/api/auth?source=test',
+      '/api/v2/auth?source=test',
       {
         error: 'Bad Request',
         message: "Request body must contain a valid 'transaction' field.",
       },
     ],
-    ['/api/auth/pin/verify', { error: 'A valid phone number and PIN are required.' }],
-    ['/api/register', { error: 'Invalid JSON body' }],
+    ['/api/v2/auth/pin/verify', { error: 'A valid phone number and PIN are required.' }],
+    ['/api/v2/register', { error: 'Invalid JSON body' }],
   ])('normalizes malformed JSON for %s', (originalUrl, body) => {
     const { host, request, response } = createHost();
     request.method = 'POST';

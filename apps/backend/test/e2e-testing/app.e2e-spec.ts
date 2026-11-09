@@ -18,8 +18,8 @@ describe('Swagger endpoint (e2e)', () => {
     await app.init();
   });
 
-  it('/api/docs-json (GET)', async () => {
-    const response = await request(app.getHttpServer()).get('/api/docs-json');
+  it('/api/v2/docs-json (GET)', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v2/docs-json');
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('openapi');
   });

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { BackHandler, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,8 +9,9 @@ import { ReceiptBarcode, VoucherEdge } from '../components/send/ReceiptBarcode';
 import { SendLayout } from '../components/send/SendLayout';
 import { DownloadIcon, ReceiptIcon } from '../components/ui/smallIcons';
 import { Button } from '../components/ui/Button';
-import { SERVICE_FEE, findRecipientById, formatPeso, formatReceiptDate } from '../mocks/send';
+import { formatPeso, formatReceiptDate, shortRef } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
+import { findRecipientById } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
 // Figma: Reciept (870:2835), 402x874.
@@ -26,10 +27,8 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 }
 
 export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendReceipt'>) {
-  const { recipientId, amount } = route.params;
+  const { recipientId, amount, reference, issuedAt } = route.params;
   const recipient = findRecipientById(recipientId);
-  // Mock: the real reference number and timestamp come from the ledger once dispatch is wired in.
-  const [issued] = useState(() => ({ at: new Date(), ref: String(Date.now() % 1_000_000_000).padStart(9, '0') }));
 
   // The receipt ends the flow: Back (button or hardware) goes home instead of back into the finished steps.
   const goHome = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);
@@ -74,16 +73,15 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
             <DetailRow label="Recipient" value={recipient.name} strong={false} />
             <DetailRow label="Short ID" value={recipient.shortId} />
             <DetailRow label="Amount sent" value={formatPeso(amount)} />
-            <DetailRow label="Service Fee" value={formatPeso(SERVICE_FEE)} />
-            <DetailRow label="Ref. Number" value={PENDING} />
+            <DetailRow label="Ref. Number" value={shortRef(reference)} />
             <DetailRow label="Stellar Ledger" value={PENDING} />
           </View>
           <View style={styles.divider} />
           <View style={styles.identifier}>
             <ReceiptBarcode />
             <View style={styles.identifierText}>
-              <Text style={styles.identifierLine}>Ref No. {issued.ref}</Text>
-              <Text style={styles.identifierLine}>{formatReceiptDate(issued.at)}</Text>
+              <Text style={styles.identifierLine}>Ref No. {shortRef(reference)}</Text>
+              <Text style={styles.identifierLine}>{formatReceiptDate(new Date(issuedAt))}</Text>
             </View>
           </View>
           {/* Scalloped tear-off edge, overhanging the 1 dp outline by 1 dp on each side. */}

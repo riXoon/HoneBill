@@ -79,10 +79,10 @@ describe('SMS to settlement integration', () => {
       providers: [SmsService, { provide: ConfigService, useValue: f.config }, { provide: RedisService, useValue: f.redis }, { provide: TextbeeService, useValue: f.textbee }],
     }).overrideProvider(getQueueToken(SETTLEMENT_QUEUE_NAME)).useValue({ add: f.add }).compile();
     app = moduleRef.createNestApplication({ rawBody: true });
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api/v2');
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
-    await request(app.getHttpServer()).post('/api/sms/webhook').type('application/json')
+    await request(app.getHttpServer()).post('/api/v2/sms/webhook').type('application/json')
       .set('x-signature', createHmac('sha256', 'webhook-secret').update(f.raw).digest('hex')).send(f.raw.toString())
       .expect(200).expect(({ body }) => expect(body.status).toBe('Buffered'));
     const job = [...f.jobs.values()][0];
