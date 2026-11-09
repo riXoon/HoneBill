@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd ../.. && npm ci",
+  "installCommand": "cd ../.. && npm ci --ignore-scripts",
   "buildCommand": "cd ../.. && npm run build --workspace=pijin_core && cd apps/backend && npx prisma generate && npm run build",
   "functions": {
     "api/index.ts": {
