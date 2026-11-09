@@ -132,11 +132,22 @@ async function seedFromMnemonic(mnemonic: string): Promise<Uint8Array> {
   return pbkdf2Async(sha512, mnemonic.normalize('NFKD'), 'mnemonic', { c: 2048, dkLen: 64, asyncTick: SEED_SLICE_MS });
 }
 
-/** The account's public address for a recovery phrase. The private key is never returned. */
-export async function publicKeyFromMnemonic(mnemonic: string): Promise<string> {
+async function accountKeyFromMnemonic(mnemonic: string): Promise<HDKey> {
   const seed = await seedFromMnemonic(mnemonic);
   // The curve maths below cannot be sliced, so give the UI a turn before it starts.
   await yieldToEventLoop();
-  const account = HDKey.fromMasterSeed(seed).derive(STELLAR_PATH);
-  return encodeStellarPublicKey(account.publicKeyRaw);
+  return HDKey.fromMasterSeed(seed).derive(STELLAR_PATH);
+}
+
+/** The account's public address for a recovery phrase. The private key is never returned. */
+export async function publicKeyFromMnemonic(mnemonic: string): Promise<string> {
+  return encodeStellarPublicKey((await accountKeyFromMnemonic(mnemonic)).publicKeyRaw);
+}
+
+/**
+ * The wallet's 32-byte ed25519 seed (`Keypair.fromRawEd25519Seed` takes it), for signing only. Hold it no
+ * longer than the signature needs, and never store, log or send it.
+ */
+export async function walletSeedFromMnemonic(mnemonic: string): Promise<Uint8Array> {
+  return (await accountKeyFromMnemonic(mnemonic)).privateKey;
 }

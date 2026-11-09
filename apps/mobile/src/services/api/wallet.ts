@@ -40,6 +40,14 @@ export async function getHistory(account: AccountRef, limit = 50, signal?: Abort
 }
 
 /**
+ * Marks an online transfer settled once the ledger has it. 409 means the RPC has not indexed it yet (retry);
+ * 422 means it failed on-chain.
+ */
+export function confirmTransfer(txHash: string, signal?: AbortSignal): Promise<{ txHash: string; status: string }> {
+  return apiRequest('POST', '/wallet/transfers/confirm', { body: { txHash }, signal });
+}
+
+/**
  * Puts a registered wallet on the Stellar ledger (a small XLM reserve the app never shows). Safe to repeat:
  * an account that is already there answers `exists`. Sign-in with the wallet key (SEP-10) needs this first.
  */

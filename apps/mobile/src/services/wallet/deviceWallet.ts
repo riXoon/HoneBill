@@ -102,3 +102,12 @@ export async function getDevicePublicKey(): Promise<string | null> {
   const mnemonic = await SecureStore.getItemAsync(KEY_MNEMONIC, OPTIONS);
   return mnemonic ? publicKeyFromMnemonic(mnemonic) : null;
 }
+
+/** The secrets a signer needs, read straight from the keystore. Only `services/wallet/signer.ts` calls this. */
+export async function readSigningSecrets(): Promise<{ mnemonic: string | null; offlineKeyHex: string | null }> {
+  const [mnemonic, offlineKeyHex] = await Promise.all([
+    SecureStore.getItemAsync(KEY_MNEMONIC, OPTIONS),
+    SecureStore.getItemAsync(KEY_OFFLINE, OPTIONS),
+  ]);
+  return { mnemonic, offlineKeyHex };
+}

@@ -1,10 +1,11 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 import { clearStoredAccount, saveStoredAccount } from '../services/accountStorage';
+import { clearSession } from '../services/session';
 
 /**
- * Who is signed in. The app has no server session yet (that needs the SEP-10 sign-in), so this is
- * local state: the account the MPIN just unlocked, held in memory for the screens to read.
+ * Who is signed in: the account the MPIN just unlocked, held in memory for the screens to read. The SEP-10
+ * server session is separate (`services/session.ts`), made on demand by the actions that need it.
  */
 
 export type UserMode = 'customer' | 'merchant';
@@ -24,7 +25,6 @@ export type StoredAccount = AccountProfile & { role: string };
 type AuthContextType = {
   activeAccount: StoredAccount | null;
   connectedWalletPublicKey: string | null;
-  jwt: string | null;
   userMode: UserMode;
   isAppReady: boolean;
   login: (profile: AccountProfile) => Promise<void>;
@@ -39,12 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userMode, setUserMode] = useState<UserMode>('customer');
 
   const login = useCallback(async (profile: AccountProfile) => {
+    clearSession();
     setActiveAccount({ ...profile, role: 'USER' });
     setUserMode('customer');
     await saveStoredAccount(profile);
   }, []);
 
   const logout = useCallback(async () => {
+    clearSession();
     setActiveAccount(null);
     await clearStoredAccount();
   }, []);
@@ -53,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       activeAccount,
       connectedWalletPublicKey: activeAccount?.stellarPublicKey ?? null,
-      jwt: null,
       userMode,
       isAppReady: true,
       login,

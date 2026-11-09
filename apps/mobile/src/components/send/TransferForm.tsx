@@ -26,13 +26,15 @@ type TransferFormProps = {
   onBack: () => void;
   /** Called with the amount once the swipe completes. */
   onConfirm: (amount: number) => void;
+  /** The transfer is being signed and submitted: the amount is locked and the swipe disabled. */
+  busy?: boolean;
 };
 
 /**
  * Shared body of "Transfer to Online" (870:3328) and "Transfer to Offline" (870:3307): move funds
  * between the user's own wallets. The amount card, the source-wallet note, Honi and the swipe.
  */
-export function TransferForm({ to, title, icon, mood, onBack, onConfirm }: TransferFormProps) {
+export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = false }: TransferFormProps) {
   const from: WalletKind = to === 'online' ? 'offline' : 'online';
   const [amountText, setAmountText] = useState('');
 
@@ -56,9 +58,15 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm }: Trans
         <View style={styles.footer}>
           <Mascot mood={mood} width={264} />
           <SwipeToEnter
-            label="SWIPE TO  PROCEED"
-            accessibilityLabel={valid ? `Swipe to transfer ${formatPeso(amount)}` : 'Swipe to proceed, enter a valid amount first'}
-            disabled={!valid}
+            label={busy ? 'TRANSFERRING…' : 'SWIPE TO  PROCEED'}
+            accessibilityLabel={
+              busy
+                ? `Transferring ${formatPeso(amount)}, please wait`
+                : valid
+                  ? `Swipe to transfer ${formatPeso(amount)}`
+                  : 'Swipe to proceed, enter a valid amount first'
+            }
+            disabled={!valid || busy}
             onComplete={() => onConfirm(amount)}
           />
         </View>
@@ -79,7 +87,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm }: Trans
           ratio={destinationAfter !== null && total > 0 ? destinationAfter / total : 0}
         />
 
-        <AmountField value={amountText} onChangeText={setAmountText} />
+        <AmountField value={amountText} onChangeText={busy ? () => undefined : setAmountText} />
 
         <View>
           <Text style={styles.hint}>
