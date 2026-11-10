@@ -34,6 +34,8 @@ export const envValidationSchema = Joi.object({
   REDIS_PORT: Joi.number().port().default(6379),
   REDIS_DB: Joi.number().min(0).default(0),
   QUEUE_ENABLED: Joi.boolean().default(false),
+  QUEUE_WORKER_ENABLED: Joi.boolean().default(true),
+  CRON_SECRET: Joi.string().allow('').optional(),
   TEXTBEE_GATEWAY_URL: Joi.string().uri().optional(),
   TEXTBEE_API_KEY: Joi.string().optional(),
   TEXTBEE_DEVICE_ID: Joi.string().allow('').optional(),

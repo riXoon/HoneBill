@@ -13,6 +13,11 @@ function makeService(overrides: Record<string, any> = {}) {
       findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
       update: jest.fn<(...args: any[]) => Promise<any>>(),
     },
+    walletMove: {
+      findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]),
+      findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
+      update: jest.fn<(...args: any[]) => Promise<any>>(),
+    },
     anchorTransaction: { findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
     account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>(), findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
     token: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
@@ -67,6 +72,66 @@ describe('WalletService', () => {
     await expect(service.getVaultBalance('abc123')).resolves.toMatchObject({
       balanceStroops: '10000001', offlineBalanceStroops: '900719925474099312345', shortId: 'abc123',
     });
+  });
+
+  it('lists a confirmed move as one entry per wallet, the credit side marked as a mirror', async () => {
+    const { service, prisma } = makeService();
+    prisma.walletMove.findMany.mockResolvedValue([
+      {
+        id: 'm1',
+        txHash: 'b'.repeat(64),
+        direction: 'TO_OFFLINE',
+        amountStroops: 125_000_000n,
+        status: 'SETTLED',
+        createdAt: new Date('2026-11-10T01:00:00.000Z'),
+        confirmedAt: new Date('2026-11-10T01:00:06.000Z'),
+        token: { symbol: 'PHPC', decimals: 7 },
+      },
+    ]);
+    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    expect(prisma.walletMove.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ accountPublicKey: PUBLIC_KEY, status: 'SETTLED' }) }),
+    );
+    expect(transactions).toHaveLength(2);
+    expect(transactions.find((t) => t.id === 'move:m1:out')).toMatchObject({
+      tag: 'WALLET', title: 'Transferred to Offline Balance', amount: '-12.5', txHash: 'b'.repeat(64),
+    });
+    expect(transactions.find((t) => t.id === 'move:m1:in')).toMatchObject({
+      tag: 'OFFLINE', title: 'Received from Online Balance', amount: '12.5', mirror: true,
+    });
+  });
+
+  it('swaps the wallets for a move from offline to online', async () => {
+    const { service, prisma } = makeService();
+    prisma.walletMove.findMany.mockResolvedValue([
+      {
+        id: 'm2', txHash: 'c'.repeat(64), direction: 'TO_ONLINE', amountStroops: 50_000_000n, status: 'SETTLED',
+        createdAt: new Date('2026-11-10T02:00:00.000Z'), confirmedAt: null, token: { symbol: 'PHPC', decimals: 7 },
+      },
+    ]);
+    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    expect(transactions.find((t) => t.id === 'move:m2:out')).toMatchObject({ tag: 'OFFLINE', title: 'Transferred to Online Balance' });
+    expect(transactions.find((t) => t.id === 'move:m2:in')).toMatchObject({ tag: 'WALLET', title: 'Received from Offline Balance', mirror: true });
+  });
+
+  it('confirms a wallet move only after the ledger has applied it', async () => {
+    const { service, prisma, stellar } = makeService();
+    await expect(service.confirmMove('nope')).rejects.toThrow('64-character');
+    prisma.walletMove.findUnique.mockResolvedValue(null);
+    await expect(service.confirmMove('d'.repeat(64))).rejects.toThrow('Unknown wallet move');
+
+    prisma.walletMove.findUnique.mockResolvedValue({ txHash: 'd'.repeat(64), status: 'PENDING', confirmedAt: null });
+    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'NOT_FOUND' });
+    await expect(service.confirmMove('D'.repeat(64))).rejects.toMatchObject({ responseBody: { status: 'PENDING' } });
+    expect(prisma.walletMove.update).not.toHaveBeenCalled();
+
+    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'FAILED' });
+    prisma.walletMove.update.mockResolvedValue({ status: 'FAILED' });
+    await expect(service.confirmMove('d'.repeat(64))).rejects.toMatchObject({ responseBody: { status: 'FAILED' } });
+
+    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'SUCCESS' });
+    prisma.walletMove.update.mockResolvedValue({ status: 'SETTLED', confirmedAt: new Date('2026-11-10') });
+    await expect(service.confirmMove('d'.repeat(64))).resolves.toMatchObject({ status: 'SETTLED' });
   });
 
   it('checks Soroban status before promoting an online transfer', async () => {

@@ -57,6 +57,11 @@ export class WalletController {
     return this.walletService.getTransactions(shortId ?? '', Number(limit ?? 50), since);
   }
 
+  @Post('wallet/moves/confirm')
+  confirmMove(@Body() body: ConfirmTransferDto) {
+    return this.walletService.confirmMove(body.txHash);
+  }
+
   @Post('wallet/transfers/confirm')
   confirmTransfer(@Body() body: ConfirmTransferDto) {
     return this.walletService.confirmTransfer(body.txHash);
