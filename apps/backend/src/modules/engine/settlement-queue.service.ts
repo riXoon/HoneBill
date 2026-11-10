@@ -1,18 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { createHash } from 'node:crypto';
-import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
 import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME, type SettlementJobData } from '../settlements/settlement-queue.constants.js';
+import { SettlementPublisher, settlementJobIdFor } from './settlement-publisher.js';
 
 export const ENGINE_SETTLEMENT_QUEUE = SETTLEMENT_QUEUE_NAME;
 export const ENGINE_SETTLEMENT_JOB = SETTLEMENT_JOB_NAME;
 
 let afterEnqueue: (() => void) | undefined;
 
+/** The BullMQ transport: adds each voucher to the Redis queue (SETTLEMENT_TRANSPORT=bullmq). */
 @Injectable()
-export class SettlementQueueService {
-  constructor(@InjectQueue(ENGINE_SETTLEMENT_QUEUE) private readonly queue: Queue) {}
+export class SettlementQueueService extends SettlementPublisher {
+  constructor(@InjectQueue(ENGINE_SETTLEMENT_QUEUE) private readonly queue: Queue) {
+    super();
+  }
 
   /**
    * Registers what to do right after a voucher is queued (e.g. start a serverless drain). Replaces any earlier one.
@@ -24,8 +26,7 @@ export class SettlementQueueService {
 
   async enqueue(smsBody: string, metadata: Pick<SettlementJobData, 'senderPhone' | 'traceId'> = {}): Promise<{ jobId: string }> {
     // Validate and canonicalize the idempotency key before storing an untrusted job.
-    const { nonce } = parseOfflineVoucher(smsBody);
-    const jobId = `settlement-${createHash('sha256').update(nonce).digest('hex')}`;
+    const jobId = settlementJobIdFor(smsBody);
     const job = await this.queue.add(
       ENGINE_SETTLEMENT_JOB,
       { ...metadata, smsBody } satisfies SettlementJobData,

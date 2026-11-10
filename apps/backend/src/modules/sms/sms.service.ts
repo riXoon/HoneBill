@@ -6,7 +6,8 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bullmq';
 import { RedisService } from '../../infra/redis/redis.service.js';
-import { SettlementQueueService } from '../engine/settlement-queue.service.js';
+import { SettlementPublisher } from '../engine/settlement-publisher.js';
+import { resolveSettlementTransport } from '../engine/settlement-transport.js';
 import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
 import { TextbeeService } from '../otp/textbee.service.js';
 import {
@@ -83,7 +84,7 @@ export class SmsService {
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
     @Optional() @InjectQueue(SMS_QUEUE_NAME) private readonly smsQueue?: Queue<SmsJob>,
-    @Optional() private readonly settlementQueue?: SettlementQueueService,
+    @Optional() private readonly settlementQueue?: SettlementPublisher,
   ) {}
 
   /** Queues an outbound notification, falling back to direct gateway delivery if queues are unavailable. */
@@ -211,7 +212,11 @@ export class SmsService {
       accepts: ['POST'],
       configured: {
         textbeeWebhookSecret: Boolean(this.config.get<string>('TEXTBEE_WEBHOOK_SECRET')),
-        qstashToken: false,
+        qstashToken: Boolean(this.config.get<string>('QSTASH_TOKEN')),
+        qstashSigningKeys: Boolean(
+          this.config.get<string>('QSTASH_CURRENT_SIGNING_KEY') && this.config.get<string>('QSTASH_NEXT_SIGNING_KEY'),
+        ),
+        settlementTransport: resolveSettlementTransport(),
         nextPublicAppUrl: Boolean(this.config.get<string>('NEXT_PUBLIC_APP_URL')),
         textbeeGateway: Boolean(this.config.get<string>('TEXTBEE_GATEWAY_URL') || this.config.get<string>('TEXTBEE_DEVICE_ID')),
         textbeeApiKey: Boolean(this.config.get<string>('TEXTBEE_API_KEY')),

@@ -74,7 +74,7 @@ describe('SMS to settlement integration', () => {
   it('routes a signed webhook through the shared module producer into the real worker and signature verification', async () => {
     const f = fixture();
     const moduleRef = await Test.createTestingModule({
-      imports: [SettlementQueueModule.register(true)],
+      imports: [SettlementQueueModule.register('bullmq')],
       controllers: [SmsController],
       providers: [SmsService, { provide: ConfigService, useValue: f.config }, { provide: RedisService, useValue: f.redis }, { provide: TextbeeService, useValue: f.textbee }],
     }).overrideProvider(getQueueToken(SETTLEMENT_QUEUE_NAME)).useValue({ add: f.add }).compile();

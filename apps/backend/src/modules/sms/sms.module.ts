@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { DynamicModule, Module } from '@nestjs/common';
 import { OtpModule } from '../otp/otp.module.js';
 import { SettlementQueueModule } from '../engine/settlement-queue.module.js';
+import { resolveSettlementTransport } from '../engine/settlement-transport.js';
 import { SmsDispatchSecretGuard } from './guards/sms-dispatch-secret.guard.js';
 import { TextbeeSignatureGuard } from './guards/textbee-signature.guard.js';
 import { SmsDispatchProcessor } from './processors/sms-dispatch.processor.js';
@@ -23,7 +24,7 @@ export class SmsModule {
       module: SmsModule,
       imports: [
         OtpModule,
-        SettlementQueueModule.register(queueEnabled),
+        SettlementQueueModule.register(resolveSettlementTransport()),
         ...(queueEnabled
           ? [BullModule.registerQueue({ name: SMS_QUEUE_NAME })]
           : []),

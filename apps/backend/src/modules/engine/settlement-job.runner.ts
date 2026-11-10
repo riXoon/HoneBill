@@ -1,15 +1,18 @@
 import { Logger } from '@nestjs/common';
-import { UnrecoverableError, type Job } from 'bullmq';
+import { UnrecoverableError } from 'bullmq';
 import { SettlementsService } from '../settlements/settlements.util.js';
 import { SmsService } from '../sms/sms.service.js';
 import { normalizeSettlementFailure, isRetryableSettlementError } from './engine-retry.util.js';
 import { ENGINE_SETTLEMENT_JOB } from './settlement-queue.service.js';
 import type { SettlementJobData } from '../settlements/settlement-queue.constants.js';
 
+/** What the runner needs from a job: BullMQ's Job has these, and the QStash route builds one from its request. */
+export type SettlementJob = { id?: string; name: string; data: SettlementJobData };
+
 /**
- * Settles one queued offline voucher. It is the whole job, kept apart from BullMQ's worker so it runs the same way
- * whether a long-lived worker (`SettlementProcessor`) or an on-demand drain inside a serverless request
- * (`SettlementDrainService`) picked the job up.
+ * Settles one queued offline voucher. It is the whole job, kept apart from any transport so it runs the same way
+ * whether a long-lived BullMQ worker (`SettlementProcessor`), an on-demand drain (`SettlementDrainService`) or a
+ * QStash delivery (`SettlementQStashController`) picked the job up.
  */
 export class SettlementJobRunner {
   private readonly logger = new Logger(SettlementJobRunner.name);
@@ -20,7 +23,7 @@ export class SettlementJobRunner {
   ) {}
 
   /** Validates and processes one voucher job, retries transient failures, and queues a deduplicated receipt after settlement. */
-  async run(job: Job<SettlementJobData>) {
+  async run(job: SettlementJob) {
     if (job.name !== ENGINE_SETTLEMENT_JOB) {
       throw new UnrecoverableError(`Unsupported settlement job: ${job.name}`);
     }
