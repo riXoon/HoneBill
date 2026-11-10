@@ -146,12 +146,16 @@ export class SmsService {
     const body = parsed as WebhookPayload;
 
     if (body.webhookEvent === 'MESSAGE_SENT' || body.status === 'sent' || body.event === 'MESSAGE_SENT') {
+      this.logger.log(`SMS webhook ignored: delivery receipt for a sent message. traceId=${traceId}`);
       return { success: true, message: 'Delivery receipt ignored' };
     }
     const legacyEvent = body.event === 'MESSAGE_RECEIVED';
     const newEvent = body.type === 'RECEIVED';
     const otherNamedEvent = Boolean(body.event && body.event !== 'MESSAGE_RECEIVED');
-    if (!legacyEvent && !newEvent && otherNamedEvent) return { success: true, status: 'Ignored' };
+    if (!legacyEvent && !newEvent && otherNamedEvent) {
+      this.logger.log(`SMS webhook ignored: event "${String(body.event)}" is not a received message. traceId=${traceId}`);
+      return { success: true, status: 'Ignored' };
+    }
 
     const sms = extractSmsPayload(body);
     if (!sms) return { error: 'Missing sender or message field' };
@@ -160,7 +164,10 @@ export class SmsService {
     }
 
     const withinLimit = await this.allowWebhookSender(sms.senderPhone);
-    if (!withinLimit) return { success: true, status: 'Rate Limited' };
+    if (!withinLimit) {
+      this.logger.warn(`SMS webhook rate limited: sender=${maskPhoneNumber(sms.senderPhone)} sent more than 3 in a minute. traceId=${traceId}`);
+      return { success: true, status: 'Rate Limited' };
+    }
 
     let voucher;
     try {
@@ -172,7 +179,10 @@ export class SmsService {
     const redis = this.redisService.getClient();
     const nonceKey = `honebill:sms:nonce:${voucher.nonce.toString('base64')}`;
     try {
-      if (await redis.get(nonceKey)) return { success: true, status: 'Duplicate Replay', traceId };
+      if (await redis.get(nonceKey)) {
+        this.logger.warn(`SMS webhook ignored: this voucher was already received (replay). sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
+        return { success: true, status: 'Duplicate Replay', traceId };
+      }
     } catch (error) {
       // This short-lived cache is defense in depth; database and Soroban nonce checks remain authoritative.
       this.logger.warn(`SMS nonce cache unavailable; continuing fail-open. traceId=${traceId}: ${this.errorMessage(error)}`);
@@ -196,7 +206,10 @@ export class SmsService {
     // atomic job-ID deduplication; an ambiguous publish failure can also be retried.
     try {
       const marked = await redis.set(nonceKey, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
-      if (marked === null) return { success: true, status: 'Duplicate Replay', traceId };
+      if (marked === null) {
+        this.logger.warn(`SMS webhook: voucher was queued but another request had already marked it. traceId=${traceId}`);
+        return { success: true, status: 'Duplicate Replay', traceId };
+      }
     } catch (error) {
       this.logger.warn(`SMS nonce cache unavailable after publish. traceId=${traceId}: ${this.errorMessage(error)}`);
     }
