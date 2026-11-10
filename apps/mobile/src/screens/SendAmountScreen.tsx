@@ -3,16 +3,19 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { AmountField, amountProblem } from '../components/send/AmountField';
+import { AmountField, amountProblem, parseAmount } from '../components/send/AmountField';
 import { Avatar } from '../components/send/Avatar';
 import { BalanceBar } from '../components/send/BalanceBar';
 import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { SendLayout } from '../components/send/SendLayout';
+import { useFieldFocus } from '../components/ui/fieldState';
 import { MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
 import { useWalletData } from '../context/WalletDataContext';
+import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { useSendMode } from '../hooks/useSendMode';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatWhole } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
@@ -24,8 +27,10 @@ const FADE_MS = 250;
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
   const { balances } = useWalletData();
+  const online = useSendMode(route.params.mode) === 'online';
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
+  const noteFocus = useFieldFocus();
   const [favorite, setFavorite] = useState(recipient?.favorite ?? false);
 
   useEffect(() => {
@@ -33,13 +38,15 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   }, [recipient, navigation]);
   if (!recipient) return null;
 
-  const amount = Number(amountText) || 0;
-  // This flow sends offline funds (the vault), so the vault balance is what can be spent.
-  const available = balances?.offline ?? null;
-  const balanceAfter = available === null ? null : available - (amount > 0 ? amount : 0);
+  const amount = parseAmount(amountText);
+  // The view this was started from decides: Online spends the online wallet and settles now; Offline spends the vault.
+  const available = balances ? (online ? balances.online : balances.offline) : null;
+  // An offline payment also costs the toll, which the vault pays on top of the amount.
+  const fee = online ? 0 : OFFLINE_TOLL_PESOS;
+  const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
 
   // Without a balance read from the server there is nothing to check an amount against.
-  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
+  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, Math.max(0, available - fee));
   const valid = problem === null;
 
   return (
@@ -53,7 +60,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           label="SWIPE TO  PROCEED"
           accessibilityLabel={valid ? `Swipe to proceed with ${formatPeso(amount)}` : 'Swipe to proceed, enter a valid amount first'}
           disabled={!valid}
-          onComplete={() => navigation.navigate('SendVerification', { recipientId: recipient.id, amount, note: note.trim() })}
+          onComplete={() => navigation.navigate('SendVerification', { recipientId: recipient.id, amount, note: note.trim(), mode: route.params.mode })}
         />
       }
     >
@@ -122,11 +129,13 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
             {note.length}/{NOTE_MAX}
           </Text>
         </View>
-        <OutlinedField>
+        <OutlinedField focused={noteFocus.focused} filled={note.length > 0}>
           <TextInput
             value={note}
             onChangeText={setNote}
             maxLength={NOTE_MAX}
+            onFocus={noteFocus.onFocus}
+            onBlur={noteFocus.onBlur}
             accessibilityLabel="Note, optional"
             style={styles.noteInput}
           />

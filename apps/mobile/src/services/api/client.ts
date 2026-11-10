@@ -29,13 +29,23 @@ export class ApiError extends Error {
   }
 }
 
+/** A failure outside the HTTP layer (signing, the ledger) whose message is written for the user. */
+export class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserFacingError';
+  }
+}
+
 export function isAborted(error: unknown): boolean {
   return error instanceof ApiError && error.kind === 'aborted';
 }
 
 /** Text a screen can show for any caught error. */
 export function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Something went wrong. Please try again.';
+  return error instanceof ApiError || error instanceof UserFacingError
+    ? error.message
+    : 'Something went wrong. Please try again.';
 }
 
 type RequestOptions = {
@@ -44,15 +54,23 @@ type RequestOptions = {
   /** Cancels the request, e.g. when the screen unmounts. */
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Sent as `Authorization: Bearer <value>`: a SEP-10 token, or a signed-intent signature on `/engine/*`. */
+  bearer?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-/** The backend answers with `{ error }` (legacy shape) or Nest's `{ message }`, which may be a list. */
+/**
+ * The backend answers with Nest's `{ statusCode, message, error }`, where `message` is the reason (a string, or a
+ * list for validation) and `error` is only the status text ("Unauthorized"), or with the older `{ error }` alone.
+ * `message` wins when there is one, so a 401 says why, not just "Unauthorized".
+ */
 function messageFromBody(body: ErrorBody | null, status: number): string {
-  const text = body?.error ?? body?.message;
+  const reason = body?.message;
+  if (typeof reason === 'string' && reason) return reason;
+  if (Array.isArray(reason) && reason.length > 0) return reason.join(', ');
+  const text = body?.error;
   if (typeof text === 'string' && text) return text;
-  if (Array.isArray(text) && text.length > 0) return text.join(', ');
   return `Request failed (${status}).`;
 }
 
@@ -60,10 +78,10 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   const pairs = Object.entries(query ?? {})
     .filter((entry): entry is [string, string] => entry[1] !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-  return `${API_BASE_URL}/api${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
+  return `${API_BASE_URL}/api/v2${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
 }
 
-export async function apiRequest<T>(method: 'GET' | 'POST', path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options: RequestOptions = {}): Promise<T> {
   if (!API_BASE_URL) {
     throw new ApiError('config', 0, 'The server address is not set. Add EXPO_PUBLIC_API_BASE_URL to .env.');
   }
@@ -86,6 +104,7 @@ export async function apiRequest<T>(method: 'GET' | 'POST', path: string, option
         headers: {
           Accept: 'application/json',
           ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(options.bearer ? { Authorization: `Bearer ${options.bearer}` } : {}),
         },
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
         signal: controller.signal,

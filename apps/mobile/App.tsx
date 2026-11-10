@@ -35,9 +35,11 @@ import { SendMethodScreen } from './src/screens/SendMethodScreen';
 import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
 import { SendToScreen } from './src/screens/SendToScreen';
 import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
+import { TopUpScreen } from './src/screens/TopUpScreen';
 import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
 import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
 import { UserDetailsScreen } from './src/screens/UserDetailsScreen';
+import { VerifySeedPhraseScreen } from './src/screens/VerifySeedPhraseScreen';
 import { MainTabs } from './src/navigation/MainTabs';
 import type { RootStackParamList } from './src/navigation/types';
 import { fonts } from './src/theme';
@@ -56,6 +58,7 @@ function RootNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
+        <Stack.Screen name="VerifySeedPhrase" component={VerifySeedPhraseScreen} />
         <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
         <Stack.Screen name="MpinCreation" component={MpinCreationScreen} />
         <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} options={{ gestureEnabled: false }} />
@@ -71,6 +74,7 @@ function RootNavigator() {
         <Stack.Screen name="ReceiveAmount" component={ReceiveScreen} />
         <Stack.Screen name="ReceiveQr" component={ReceiveQrScreen} />
         <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
+        <Stack.Screen name="TopUp" component={TopUpScreen} />
         <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
         <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />
         {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}

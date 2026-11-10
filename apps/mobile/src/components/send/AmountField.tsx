@@ -2,6 +2,7 @@ import { StyleSheet, Text, TextInput } from 'react-native';
 
 import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
+import { useFieldFocus } from '../ui/fieldState';
 import { OutlinedField } from './OutlinedField';
 
 const MAX_WHOLE_DIGITS = 9;
@@ -16,6 +17,11 @@ export function sanitizeAmount(text: string): string {
   const dot = cleaned.indexOf('.');
   if (dot === -1) return cleaned.slice(0, MAX_WHOLE_DIGITS);
   return `${cleaned.slice(0, dot).slice(0, MAX_WHOLE_DIGITS)}.${cleaned.slice(dot + 1).replace(/\./g, '').slice(0, 2)}`;
+}
+
+/** The number in the field's text. The field shows "1,000.00" after blur, which `Number()` alone reads as NaN. */
+export function parseAmount(text: string): number {
+  return Number(text.replace(/,/g, '')) || 0;
 }
 
 /**
@@ -43,19 +49,22 @@ type AmountFieldProps = {
 
 /** Figma amount "input": the "PHP" tag and a 32 dp number, centred together. Formats to 1,000.00 on blur. */
 export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFieldProps) {
+  const { focused, onFocus, onBlur } = useFieldFocus();
   const formatOnBlur = () => {
-    const amount = Number(value) || 0;
+    onBlur();
+    const amount = parseAmount(value);
     if (amount <= 0) return;
     const { whole, cents } = splitPesos(amount);
     onChangeText(`${whole}.${cents}`);
   };
 
   return (
-    <OutlinedField style={styles.field}>
+    <OutlinedField style={styles.field} focused={focused} filled={value.length > 0}>
       <Text style={styles.currency}>{currency}</Text>
       <TextInput
         value={value}
         onChangeText={(t) => onChangeText(sanitizeAmount(t))}
+        onFocus={onFocus}
         onBlur={formatOnBlur}
         placeholder="0.00"
         placeholderTextColor="rgba(34, 32, 33, 0.2)"

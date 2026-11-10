@@ -37,6 +37,7 @@ describe('EngineService', () => {
       token: { findUnique: jest.fn(async () => ({ id: 1, contractId: TOKEN, symbol: 'PHPC', isActive: true })) },
       account: { findUnique: jest.fn(), update: jest.fn() },
       onlineTransfer: { upsert: jest.fn() },
+      walletMove: { upsert: jest.fn() },
     };
     stellar = {
       networkPassphrase: Networks.TESTNET,

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
 import { AppBackground } from '../components/ui/AppBackground';
+import { EmptyState } from '../components/ui/EmptyState';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { FilterChips } from '../components/ui/FilterChips';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
@@ -60,7 +61,7 @@ export function InboxScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <SlideRow>
-            <Text style={styles.empty}>Nothing to see here!</Text>
+            <EmptyState message={'Nothing to see here!\nYour updates will land here.'} />
           </SlideRow>
         }
         contentContainerStyle={[
@@ -81,5 +82,4 @@ const styles = StyleSheet.create({
   separator: { height: 10 },
   sectionTitle: { minHeight: 30, justifyContent: 'center' },
   sectionText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
-  empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
 });

@@ -21,6 +21,8 @@ export type HistoryItem = {
   timestamp: string;
   txHash?: string;
   nonce?: string;
+  /** The credit side of a move between the user's own wallets (the combined list leaves it out). */
+  mirror?: boolean;
 };
 
 type AccountRef = { shortId: string; stellarPublicKey: string };
@@ -37,4 +39,28 @@ export async function getHistory(account: AccountRef, limit = 50, signal?: Abort
     signal,
   });
   return result.transactions;
+}
+
+/**
+ * Marks a move between the user's own wallets settled once the ledger has it, which is what puts it in History on
+ * every device. 409 means the RPC has not indexed it yet (retry); 422 means it failed on-chain.
+ */
+export function confirmMove(txHash: string, signal?: AbortSignal): Promise<{ txHash: string; status: string }> {
+  return apiRequest('POST', '/wallet/moves/confirm', { body: { txHash }, signal });
+}
+
+/**
+ * Marks an online transfer settled once the ledger has it. 409 means the RPC has not indexed it yet (retry);
+ * 422 means it failed on-chain.
+ */
+export function confirmTransfer(txHash: string, signal?: AbortSignal): Promise<{ txHash: string; status: string }> {
+  return apiRequest('POST', '/wallet/transfers/confirm', { body: { txHash }, signal });
+}
+
+/**
+ * Puts a registered wallet on the Stellar ledger (a small XLM reserve the app never shows). Safe to repeat:
+ * an account that is already there answers `exists`. Sign-in with the wallet key (SEP-10) needs this first.
+ */
+export function fundWallet(publicKey: string, signal?: AbortSignal): Promise<{ status: 'created' | 'exists' }> {
+  return apiRequest('POST', '/wallet/fund', { body: { publicKey }, signal });
 }

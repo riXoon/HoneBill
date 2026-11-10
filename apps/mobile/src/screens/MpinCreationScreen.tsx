@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
@@ -10,27 +10,14 @@ import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import { WeakPinDialog } from '../components/ui/WeakPinDialog';
-import { useAuth } from '../context/AuthContext';
 import { MPIN_LENGTH } from '../config/limits';
 import type { RootStackParamList } from '../navigation/types';
-import { setAccountPhone } from '../services/accountPhone';
-import { registerAccount, type RegisteredAccount } from '../services/api/accounts';
-import { ApiError, errorMessage, isAborted } from '../services/api/client';
-import { checkUser } from '../services/api/users';
 import { reportError } from '../services/errorReporting';
 import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
-import { clearSignupSession, getSignupSession, type SignupDetails, type SignupSession } from '../services/signupSession';
-import { createDeviceWallet, markDeviceWalletRegistered, type NewWallet } from '../services/wallet/deviceWallet';
+import { clearSignupSession, getSignupSession, setSignupSecurity } from '../services/signupSession';
+import { createDeviceWallet, type NewWallet } from '../services/wallet/deviceWallet';
 import { colors, fonts } from '../theme';
 import { afterNextPaint } from '../utils/async';
-
-/** The server's per-field validation messages, when it sent any. */
-function fieldErrorText(error: ApiError): string | null {
-  const fields = error.data?.fieldErrors;
-  if (!fields || typeof fields !== 'object') return null;
-  const messages = Object.values(fields).filter((v): v is string => typeof v === 'string');
-  return messages.length > 0 ? messages.join(' ') : null;
-}
 
 // Figma: MPIN Creation (870:2965), 402x874.
 
@@ -57,12 +44,8 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login } = useAuth();
-  const request = useRef<AbortController | null>(null);
-  /** Created once per visit, so a retry after a lost response registers the same keys. */
+  /** Created once per visit, so a retry after a failure keeps the same keys. */
   const wallet = useRef<NewWallet | null>(null);
-
-  useEffect(() => () => request.current?.abort(), []);
 
   const startOver = () => {
     clearSignupSession();
@@ -70,38 +53,9 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
   };
 
   /**
-   * Registers the account. If the server already holds one for this phone with *our* key, an earlier
-   * attempt succeeded but its response was lost, so that counts as success.
+   * Creates the wallet on this device and remembers the PIN, but does NOT register with the server: the
+   * account is created on the last onboarding screen, so quitting before then leaves nothing behind.
    */
-  const register = async (
-    session: SignupSession,
-    details: SignupDetails,
-    keys: NewWallet,
-    signal: AbortSignal,
-  ): Promise<Pick<RegisteredAccount, 'shortId' | 'stellarPublicKey'>> => {
-    try {
-      return await registerAccount(
-        {
-          stellarPublicKey: keys.publicKey,
-          offlineDeviceKey: keys.offlineDeviceKey,
-          phoneNumber: session.phone,
-          pin,
-          firstName: details.firstName,
-          lastName: details.lastName,
-          email: details.email,
-          verificationToken: session.verificationToken,
-        },
-        signal,
-      );
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        const existing = await checkUser(session.phone, signal);
-        if (existing.exists && existing.stellarPublicKey === keys.publicKey) return existing;
-      }
-      throw e;
-    }
-  };
-
   const confirm = async () => {
     if (busy || pin.length !== MPIN_LENGTH) return;
     const reason = weakMpinReason(pin);
@@ -116,51 +70,22 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
       return;
     }
 
-    const controller = new AbortController();
-    request.current = controller;
     setBusy(true);
     setError(null);
     try {
       // Show "Creating your vault…" before the key maths starts, so a tap is acknowledged at once.
       await afterNextPaint();
-      // The phrase is saved to the keystore before the server hears about the account, never after.
+      // The phrase is saved to the keystore here, before it is shown for backup.
       if (!wallet.current) wallet.current = await createDeviceWallet();
-      const account = await register(session, session.details, wallet.current, controller.signal);
-
-      await markDeviceWalletRegistered().catch((e) => reportError(e, { step: 'markDeviceWalletRegistered' }));
-      await setAccountPhone(session.phone);
-      await login({
-        shortId: account.shortId,
-        stellarPublicKey: account.stellarPublicKey,
-        firstName: session.details.firstName,
-        lastName: session.details.lastName,
-        phone: session.phone,
-      });
-      clearSignupSession();
-      // Reset: going back into this step would only fail with "already registered".
-      // The recovery phrase comes first: this is the only moment the user is told to back it up.
+      setSignupSecurity(pin, wallet.current);
+      // Reset: the PIN and wallet are fixed from here on; the phrase is the next step.
       navigation.reset({ index: 0, routes: [{ name: 'RecoveryPhrase' }] });
     } catch (e) {
-      if (isAborted(e)) return;
+      // Keystore or randomness failure while creating the wallet.
+      reportError(e, { step: 'createWallet' });
       setPin('');
       setAttempt((n) => n + 1);
-      if (e instanceof ApiError) {
-        if (e.status === 401) {
-          // The OTP proof expired (30 minutes) or does not match this number.
-          Alert.alert('Verification expired', 'Please verify your phone number again.', [{ text: 'OK', onPress: startOver }]);
-        } else if (e.status === 409) {
-          setError('This number already has an account. Go back and sign in.');
-        } else if (e.status === 400) {
-          // The server only says "Bad Request" for DTO failures, so point at the likely cause.
-          setError(fieldErrorText(e) ?? 'Some of your details were rejected. Go back and check your name and email.');
-        } else {
-          setError(errorMessage(e));
-        }
-      } else {
-        // Keystore or randomness failure while creating the wallet: nothing was sent to the server.
-        reportError(e, { step: 'createAccount' });
-        setError('We could not create your secure wallet on this device. Please try again.');
-      }
+      setError('We could not create your secure wallet on this device. Please try again.');
     } finally {
       setBusy(false);
     }

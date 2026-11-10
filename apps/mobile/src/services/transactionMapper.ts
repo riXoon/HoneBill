@@ -26,6 +26,8 @@ export function toTransaction(item: HistoryItem): Transaction | null {
     description: item.title,
     status: statusOf(item.status),
     ref: item.txHash ?? item.nonce ?? item.id,
+    ...(item.nonce ? { nonce: item.nonce } : {}),
+    ...(item.mirror ? { mirror: true } : {}),
   };
 }
 

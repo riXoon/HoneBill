@@ -16,6 +16,7 @@ import { colors, fonts } from '../theme';
 
 // Figma: Reciept (870:2835), 402x874.
 const PENDING = 'Pending Dispatch';
+const SETTLED = 'Confirmed';
 
 function DetailRow({ label, value, strong = true }: { label: string; value: string; strong?: boolean }) {
   return (
@@ -27,7 +28,7 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 }
 
 export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendReceipt'>) {
-  const { recipientId, amount, reference, issuedAt } = route.params;
+  const { recipientId, amount, reference, issuedAt, method } = route.params;
   const recipient = findRecipientById(recipientId);
 
   // The receipt ends the flow: Back (button or hardware) goes home instead of back into the finished steps.
@@ -74,7 +75,7 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
             <DetailRow label="Short ID" value={recipient.shortId} />
             <DetailRow label="Amount sent" value={formatPeso(amount)} />
             <DetailRow label="Ref. Number" value={shortRef(reference)} />
-            <DetailRow label="Stellar Ledger" value={PENDING} />
+            <DetailRow label="Stellar Ledger" value={method === 'online' ? SETTLED : PENDING} />
           </View>
           <View style={styles.divider} />
           <View style={styles.identifier}>

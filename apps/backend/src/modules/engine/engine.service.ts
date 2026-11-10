@@ -67,14 +67,13 @@ export class EngineService {
         this.contractId(),
         [transfer],
       );
-      return {
-        xdr: rebuildForSourceAccount({
-          envelopeXdr: authored,
-          sourceAccount: await this.stellar.sorobanServer.getAccount(senderPublicKey),
-          networkPassphrase: this.stellar.networkPassphrase,
-          sorobanData: assembled.simulation?.transactionData,
-        }),
-      };
+      const xdr = rebuildForSourceAccount({
+        envelopeXdr: authored,
+        sourceAccount: await this.stellar.sorobanServer.getAccount(senderPublicKey),
+        networkPassphrase: this.stellar.networkPassphrase,
+        sorobanData: assembled.simulation?.transactionData,
+      });
+      return { xdr, txHash: await this.recordMove(xdr, senderPublicKey, 'TO_OFFLINE', token.id, amount) };
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(`Failed to prepare deposit transaction: ${errorMessage(error)}`);
@@ -102,18 +101,42 @@ export class EngineService {
         assembled.built.toEnvelope().toXDR('base64'),
         this.contractId(),
       );
-      return {
-        xdr: rebuildForSourceAccount({
-          envelopeXdr: authored,
-          sourceAccount: await this.stellar.sorobanServer.getAccount(senderPublicKey),
-          networkPassphrase: this.stellar.networkPassphrase,
-          sorobanData: assembled.simulation?.transactionData,
-        }),
-      };
+      const xdr = rebuildForSourceAccount({
+        envelopeXdr: authored,
+        sourceAccount: await this.stellar.sorobanServer.getAccount(senderPublicKey),
+        networkPassphrase: this.stellar.networkPassphrase,
+        sorobanData: assembled.simulation?.transactionData,
+      });
+      return { xdr, txHash: await this.recordMove(xdr, senderPublicKey, 'TO_ONLINE', token.id, amount) };
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(`Soroban simulation failed: ${errorMessage(error)}`);
     }
+  }
+
+  /**
+   * Notes a move between the user's own wallets as PENDING under the hash of the transaction just prepared (signing
+   * does not change a transaction's hash), so History can list it once the app confirms it landed. A failure here
+   * must not block the move itself, so it is swallowed: the money still moves, it just is not listed.
+   */
+  private async recordMove(
+    xdr: string,
+    accountPublicKey: string,
+    direction: 'TO_OFFLINE' | 'TO_ONLINE',
+    tokenId: number,
+    amountStroops: bigint,
+  ): Promise<string> {
+    const txHash = TransactionBuilder.fromXDR(xdr, this.stellar.networkPassphrase).hash().toString('hex');
+    try {
+      await this.prisma.walletMove.upsert({
+        where: { txHash },
+        update: { accountPublicKey, direction, tokenId, amountStroops },
+        create: { txHash, accountPublicKey, direction, tokenId, amountStroops },
+      });
+    } catch (error) {
+      console.error(`[engine] could not record wallet move ${txHash}: ${errorMessage(error)}`);
+    }
+    return txHash;
   }
 
   async prepareTransfer(body: Record<string, unknown>) {

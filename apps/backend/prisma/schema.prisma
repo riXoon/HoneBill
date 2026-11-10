@@ -110,6 +110,7 @@ model Token {
 
   settlements     Settlement[]
   onlineTransfers OnlineTransfer[]
+  walletMoves     WalletMove[]
 
   @@map("token")
 }
@@ -190,4 +191,29 @@ model OnlineTransfer {
   @@index([senderPublicKey, createdAt])
   @@index([recipientPublicKey, createdAt])
   @@map("online_transfer")
+}
+
+enum MoveDirection {
+  TO_OFFLINE // online wallet -> offline vault (deposit)
+  TO_ONLINE  // offline vault -> online wallet (withdraw)
+}
+
+/// A move between a user's own online wallet and offline vault.
+/// Recorded as PENDING when the server prepares the transaction (its hash is known then) and promoted to SETTLED
+/// only after Soroban RPC confirms it, exactly like OnlineTransfer. History lists SETTLED moves only.
+model WalletMove {
+  id               String           @id @default(uuid())
+  txHash           String           @unique @map("tx_hash")
+  accountPublicKey String           @map("account_public_key")
+  direction        MoveDirection
+  tokenId          Int              @map("token_id")
+  amountStroops    BigInt           @map("amount_stroops")
+  status           SettlementStatus @default(PENDING)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  confirmedAt      DateTime?        @map("confirmed_at")
+
+  token Token @relation(fields: [tokenId], references: [id])
+
+  @@index([accountPublicKey, createdAt])
+  @@map("wallet_move")
 }

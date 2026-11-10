@@ -1,13 +1,20 @@
-import { useEffect } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot, type MascotMood } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
+import { SMS_GATEWAY_NUMBER } from '../config/env';
+import { useAuth } from '../context/AuthContext';
+import { useWalletData } from '../context/WalletDataContext';
 import type { DispatchMethod } from '../types/send';
+import { errorMessage, UserFacingError } from '../services/api/client';
+import { reportError } from '../services/errorReporting';
+import { buildOfflineVoucher } from '../services/offline/voucher';
 import { findRecipientById } from '../services/recipientDirectory';
+import { pesosToStroops } from '../services/walletActions';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
@@ -37,11 +44,91 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     if (!findRecipientById(draft.recipientId)) navigation.goBack();
   }, [draft.recipientId, navigation]);
 
-  // Building the signed offline voucher and sending it (SMS or relay) is not implemented, so nothing can be
-  // dispatched. Say that plainly rather than showing a receipt for a transfer that never happened. When it
-  // exists, navigate to 'SendReceipt' with the reference and time the ledger returns.
-  const dispatch = (_method: DispatchMethod) =>
-    Alert.alert('Not available yet', 'Sending offline payments is not available yet. No money has been moved.');
+  const { activeAccount } = useAuth();
+  const [building, setBuilding] = useState(false);
+  // The signed voucher for this draft. Kept so a retry texts the same voucher (same nonce) instead of signing a
+  // second one: the contract settles a nonce once, so a repeat can never pay twice.
+  const voucher = useRef<string | null>(null);
+  const awaitingSend = useRef(false);
+
+  const { addPendingOffline } = useWalletData();
+
+  const finish = useCallback(
+    (signed: string) => {
+      // The voucher's fifth field is its nonce, unique to this payment, so it serves as the reference.
+      const nonce = signed.split(':')[4] ?? signed;
+      const issuedAt = Date.now();
+      const recipient = findRecipientById(draft.recipientId);
+      // The server lists this only after it has settled the text, which can be long after (the sender may have no
+      // data). Showing it as pending now means the sender's History is not blank about a payment they just made.
+      addPendingOffline({
+        id: `pending:${nonce}`,
+        timestamp: issuedAt,
+        source: 'offline',
+        direction: 'out',
+        amount: draft.amount,
+        assetCode: 'PHPC',
+        description: `Sent to ${recipient?.name ?? 'recipient'}`,
+        status: 'pending',
+        ref: nonce,
+        nonce,
+      });
+      navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt });
+    },
+    [navigation, draft, addPendingOffline],
+  );
+
+  // The text app cannot say whether the message went out, so when the user comes back, ask.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || !awaitingSend.current || !voucher.current) return;
+      awaitingSend.current = false;
+      const signed = voucher.current;
+      Alert.alert('Did you send the text?', 'Your payment is only made once the message has been sent.', [
+        { text: 'Not yet', style: 'cancel' },
+        { text: 'Yes, I sent it', onPress: () => finish(signed) },
+      ]);
+    });
+    return () => sub.remove();
+  }, [finish]);
+
+  const sendBySms = async () => {
+    if (!activeAccount || building) return;
+    if (!SMS_GATEWAY_NUMBER) {
+      Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
+      return;
+    }
+    const recipient = findRecipientById(draft.recipientId);
+    if (!recipient) return;
+    setBuilding(true);
+    try {
+      voucher.current ??= await buildOfflineVoucher({
+        walletPublicKey: activeAccount.stellarPublicKey,
+        senderShortId: activeAccount.shortId,
+        receiverShortId: recipient.shortId,
+        amountStroops: BigInt(pesosToStroops(draft.amount)),
+      });
+      awaitingSend.current = true;
+      const separator = Platform.OS === 'ios' ? '&' : '?';
+      await Linking.openURL(`sms:${SMS_GATEWAY_NUMBER}${separator}body=${encodeURIComponent(voucher.current)}`);
+    } catch (error) {
+      awaitingSend.current = false;
+      if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendBySms' });
+      Alert.alert(
+        'Could not prepare the payment',
+        error instanceof UserFacingError ? errorMessage(error) : 'No messaging app could be opened. No money has been moved.',
+      );
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  // Relaying lets a partner text the voucher for the user. The partner's scan-and-send side is not built, so say so
+  // rather than showing a receipt for a payment that was never sent.
+  const dispatch = (method: DispatchMethod) => {
+    if (method === 'sms') void sendBySms();
+    else Alert.alert('Not available yet', 'Getting help to send is not available yet. No money has been moved.');
+  };
 
   return (
     <SendLayout title="Method" icon={<SwapIcon />} onBack={navigation.goBack}>

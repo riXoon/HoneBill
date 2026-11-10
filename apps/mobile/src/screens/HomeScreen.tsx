@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -12,9 +12,14 @@ import { QuickActions, type QuickActionKey } from '../components/home/QuickActio
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
+import { EMPTY_TRANSACTIONS_MESSAGE } from '../components/ui/EmptyState';
+import { SpeechBubble } from '../components/ui/SpeechBubble';
+import { useLoadingMessage } from '../hooks/useLoadingMessage';
+import { useOfflineSetup } from '../hooks/useOfflineSetup';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
+import { useIsOnline } from '../hooks/useIsOnline';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { SOURCE_LABEL } from '../types/transaction';
@@ -28,6 +33,7 @@ const FADE_MS = 250;
 const QUICK_ACTION_ROUTE = {
   send: 'SendTo',
   receive: 'ReceiveAmount',
+  topup: 'TopUp',
   online: 'TransferOnline',
   offline: 'TransferOffline',
 } as const satisfies Partial<Record<QuickActionKey, keyof RootStackParamList>>;
@@ -37,8 +43,14 @@ export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeAccount } = useAuth();
   const { balances, transactions, status, error, refresh } = useWalletData();
-  // Tapping the cards switches the view. It is not tied to connectivity yet (that needs a NetInfo hookup).
+  useOfflineSetup();
+  const connected = useIsOnline();
+  // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
+  // Offline (the only view that can pay); getting it back leaves the choice to the user.
   const [mode, setMode] = useState<BalanceMode>('online');
+  useEffect(() => {
+    if (!connected) setMode('offline');
+  }, [connected]);
   const online = mode === 'online';
   const toggle = () => setMode((m) => (m === 'online' ? 'offline' : 'online'));
 
@@ -49,7 +61,17 @@ export function HomeScreen() {
     }, [refresh]),
   );
 
-  const recent = transactions.slice(0, RECENT_COUNT);
+  // Each view lists its own money: Online shows the wallet's activity, Offline shows the offline funds' (payments,
+  // including ones sent from this phone that are not settled yet, and moves to and from the online balance).
+  const recent = useMemo(
+    () => transactions.filter((tx) => tx.source === (online ? 'wallet' : 'offline')).slice(0, RECENT_COUNT),
+    [online, transactions],
+  );
+  // Honi rests above the nav bar when there is nothing to list in the current view and keeps the user
+  // company during the first load, with a speech bubble that chats instead of a plain "Loading…".
+  const showRestHoni = recent.length === 0;
+  const loadingFirst = recent.length === 0 && (status === 'loading' || status === 'idle');
+  const chatter = useLoadingMessage(loadingFirst);
 
   return (
     <View style={styles.root}>
@@ -71,7 +93,7 @@ export function HomeScreen() {
         }
       >
         {/* Online: Honi peeks in from the top right, tilted -20.87 degrees, behind the cards. */}
-        {online ? (
+        {online && !showRestHoni ? (
           <Animated.View
             entering={FadeIn.duration(FADE_MS)}
             exiting={FadeOut.duration(FADE_MS)}
@@ -106,48 +128,44 @@ export function HomeScreen() {
           </Text>
         ) : null}
 
-        <QuickActions online={online} onPress={(key) => {
-            // Top-up has no screen yet.
-            if (key !== 'topup') navigation.navigate(QUICK_ACTION_ROUTE[key]);
-          }}
-        />
+        <QuickActions online={online} onPress={(key) => (key === 'send' ? navigation.navigate('SendTo', { mode }) : navigation.navigate(QUICK_ACTION_ROUTE[key]))} />
 
         <View style={styles.activity}>
-          {online ? (
-            <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
-              <View style={styles.activityTitle}>
-                <Text style={styles.activityHeading}>Recent Activity</Text>
+          <Animated.View
+            key={mode}
+            entering={FadeIn.duration(FADE_MS)}
+            exiting={FadeOut.duration(FADE_MS)}
+            style={styles.activityBlock}
+          >
+            <View style={styles.activityTitle}>
+              <Text style={styles.activityHeading}>Recent Activity</Text>
+              {/* Nothing to see yet, and the bubble above Honi needs that corner. */}
+              {recent.length === 0 ? null : (
                 <Text style={styles.seeAll} accessibilityRole="button">
                   See All
                 </Text>
-              </View>
-              {recent.length === 0 ? (
-                <Text style={styles.empty}>{status === 'loading' ? 'Loading…' : 'Nothing to see here!'}</Text>
-              ) : (
-                <View style={styles.activityList}>
-                  {recent.map((tx) => (
-                    <ActivityRow
-                      key={tx.id}
-                      kind={tx.direction === 'in' ? 'received' : 'sent'}
-                      title={tx.description}
-                      body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}`}
-                      time={formatRelative(new Date(tx.timestamp))}
-                    />
-                  ))}
-                </View>
               )}
-            </Animated.View>
-          ) : (
-            <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
-              <Text style={styles.activityHeading}>Recent Activity</Text>
-              <Text style={styles.empty}>Nothing to see here!</Text>
-            </Animated.View>
-          )}
+            </View>
+            {recent.length === 0 ? null : (
+              // With nothing to list, the message (loading chatter or "nothing here") is Honi's speech bubble, below.
+              <View style={styles.activityList}>
+                {recent.map((tx) => (
+                  <ActivityRow
+                    key={tx.id}
+                    kind={tx.direction === 'in' ? 'received' : 'sent'}
+                    title={tx.description}
+                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${tx.status === 'pending' ? ' · Pending' : ''}`}
+                    time={formatRelative(new Date(tx.timestamp))}
+                  />
+                ))}
+              </View>
+            )}
+          </Animated.View>
         </View>
       </ScrollView>
 
-      {/* Offline: Honi sits above the nav bar, centred, with the empty activity state. */}
-      {online ? null : (
+      {/* Empty activity (offline, or online with nothing yet): Honi sits above the nav bar, centred. */}
+      {showRestHoni ? (
         <Animated.View
           entering={FadeIn.duration(FADE_MS)}
           exiting={FadeOut.duration(FADE_MS)}
@@ -155,8 +173,12 @@ export function HomeScreen() {
           style={[styles.honiRest, { bottom: 98.5 + Math.max(0, insets.bottom - 24) }]}
         >
           <Mascot mood="idlePlain" />
+          {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
+          <View style={styles.honiBubble}>
+            <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
+          </View>
         </Animated.View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -167,6 +189,9 @@ const styles = StyleSheet.create({
   // Centre (354, 130) in a 402 dp frame; the image is 347x227.
   honiPeek: { position: 'absolute', left: 180.5, top: 16.5, transform: [{ rotate: '-20.87deg' }] },
   honiRest: { position: 'absolute', alignSelf: 'center' },
+  // Anchored by its bottom edge (the tail) 31 dp below the top of Honi's 224 dp box, so a longer message grows
+  // upward, away from his head. Nudged right to keep clear of the "Recent Activity" heading.
+  honiBubble: { position: 'absolute', bottom: 193, left: 0, right: 0, paddingLeft: 80, alignItems: 'center' },
   topBar: { width: 342, height: 68, flexDirection: 'row', alignItems: 'center', gap: 10 },
   topText: { flex: 1, gap: 4, padding: 10 },
   hello: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
@@ -179,6 +204,5 @@ const styles = StyleSheet.create({
   activityHeading: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
-  empty: { fontFamily: fonts.regular, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
   error: { width: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
 });

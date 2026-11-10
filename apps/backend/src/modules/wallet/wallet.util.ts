@@ -4,8 +4,17 @@ import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
+/**
+ * Issuer of each supported asset. PHPC's comes from `PHPC_ISSUER_PUBKEY`, the same setting the anchor pays out
+ * with, so balances are read from the asset users are actually paid in. The fallback is the original testnet issuer.
+ * A getter, so the value is read when used, after the config file has been loaded.
+ */
+const LEGACY_PHPC_ISSUER = 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY';
+
 export const ASSET_ISSUERS: Record<string, string> = {
-  PHPC: 'GDDKZAOAME26SD2GAQGGDUTI6F5VQ5CLXXELWOYOAXLUIQTQVLIFWZLY',
+  get PHPC() {
+    return process.env.PHPC_ISSUER_PUBKEY?.trim() || LEGACY_PHPC_ISSUER;
+  },
   USDC: 'GDQGJU5JTW5IFCGS6JZTIGK57IKPW4N4LJWWEN7F3K3GSEJEYPVJ3BYA',
 };
 
@@ -96,7 +105,7 @@ export class WalletService {
     const dateFilter = validSince ? { gte: validSince } : undefined;
 
     try {
-      const [settlements, anchorTransactions, onlineTransfers] = await Promise.all([
+      const [settlements, anchorTransactions, onlineTransfers, walletMoves] = await Promise.all([
         this.prisma.settlement.findMany({
           where: {
             OR: [{ senderShortId: shortId }, { receiverShortId: shortId }],
@@ -123,6 +132,19 @@ export class WalletService {
           orderBy: { createdAt: 'desc' },
           take: limit,
         }),
+        // Moves between the user's own wallets: only the ones the ledger has confirmed.
+        this.prisma.walletMove?.findMany
+          ? this.prisma.walletMove.findMany({
+              where: {
+                accountPublicKey: publicKey,
+                status: 'SETTLED',
+                ...(dateFilter ? { createdAt: dateFilter } : {}),
+              },
+              include: { token: true },
+              orderBy: { createdAt: 'desc' },
+              take: limit,
+            })
+          : Promise.resolve([] as any[]),
       ]);
 
       const shortIds = [...new Set(settlements.flatMap((item: any) => [item.senderShortId, item.receiverShortId]))];
@@ -187,7 +209,41 @@ export class WalletService {
         };
       });
 
-      return { transactions: buildTransactionHistory([...settlementItems, ...anchorItems, ...transferItems], limit) };
+      // One move is two entries, one per wallet it touches, so each wallet's view can list its own side.
+      // `mirror` marks the credit side, which History's combined list leaves out so the move shows once.
+      const moveItems = walletMoves.flatMap((item: any) => {
+        const toOffline = item.direction === 'TO_OFFLINE';
+        const amount = stroopsToDecimalString(item.amountStroops, item.token?.decimals ?? 7);
+        const base = {
+          assetCode: item.token?.symbol ?? 'PHPC',
+          status: item.status,
+          timestamp: (item.confirmedAt ?? item.createdAt).toISOString(),
+          txHash: item.txHash,
+        };
+        return [
+          {
+            ...base,
+            id: `move:${item.id}:out`,
+            type: 'MOVE',
+            tag: toOffline ? 'WALLET' : 'OFFLINE',
+            title: toOffline ? 'Transferred to Offline Balance' : 'Transferred to Online Balance',
+            amount: `-${amount}`,
+          },
+          {
+            ...base,
+            id: `move:${item.id}:in`,
+            type: 'MOVE',
+            tag: toOffline ? 'OFFLINE' : 'WALLET',
+            title: toOffline ? 'Received from Online Balance' : 'Received from Offline Balance',
+            amount,
+            mirror: true,
+          },
+        ];
+      });
+
+      return {
+        transactions: buildTransactionHistory([...settlementItems, ...anchorItems, ...transferItems, ...moveItems], limit),
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       throw new BadGatewayException('Failed to fetch transaction history.');
@@ -333,6 +389,43 @@ export class WalletService {
       success: true,
       data: serialized,
     };
+  }
+
+  /** Marks a move between the user's own wallets SETTLED once the ledger has applied it. Same contract as `confirmTransfer`. */
+  async confirmMove(txHash: string) {
+    const normalizedTxHash = (txHash ?? '').trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/i.test(normalizedTxHash)) {
+      throw new BadRequestException('txHash must be a 64-character hexadecimal string');
+    }
+
+    const move = await this.prisma.walletMove.findUnique({ where: { txHash: normalizedTxHash } });
+    if (!move) throw new NotFoundException('Unknown wallet move');
+    if (move.status === 'SETTLED') {
+      return { txHash: normalizedTxHash, status: move.status, confirmedAt: move.confirmedAt };
+    }
+
+    try {
+      const chainTx: any = await this.stellar.sorobanServer.getTransaction(normalizedTxHash);
+      if (chainTx.status === 'NOT_FOUND') {
+        throw new ApiResponseException(409, {
+          txHash: normalizedTxHash,
+          status: 'PENDING',
+          error: 'Transaction has not reached the RPC history window yet',
+        });
+      }
+      if (chainTx.status === 'FAILED') {
+        const failed = await this.prisma.walletMove.update({ where: { txHash: normalizedTxHash }, data: { status: 'FAILED' } });
+        throw new ApiResponseException(422, { txHash: normalizedTxHash, status: failed.status });
+      }
+      const settled = await this.prisma.walletMove.update({
+        where: { txHash: normalizedTxHash },
+        data: { status: 'SETTLED', confirmedAt: new Date() },
+      });
+      return { txHash: normalizedTxHash, status: settled.status, confirmedAt: settled.confirmedAt };
+    } catch (error: any) {
+      if (error instanceof ApiResponseException) throw error;
+      throw new BadGatewayException('Unable to verify transaction with Soroban RPC');
+    }
   }
 
   async confirmTransfer(txHash: string) {

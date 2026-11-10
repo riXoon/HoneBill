@@ -6,7 +6,8 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bullmq';
 import { RedisService } from '../../infra/redis/redis.service.js';
-import { SettlementQueueService } from '../engine/settlement-queue.service.js';
+import { SettlementPublisher } from '../engine/settlement-publisher.js';
+import { resolveSettlementTransport } from '../engine/settlement-transport.js';
 import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
 import { TextbeeService } from '../otp/textbee.service.js';
 import {
@@ -83,7 +84,7 @@ export class SmsService {
     private readonly redisService: RedisService,
     private readonly config: ConfigService,
     @Optional() @InjectQueue(SMS_QUEUE_NAME) private readonly smsQueue?: Queue<SmsJob>,
-    @Optional() private readonly settlementQueue?: SettlementQueueService,
+    @Optional() private readonly settlementQueue?: SettlementPublisher,
   ) {}
 
   /** Queues an outbound notification, falling back to direct gateway delivery if queues are unavailable. */
@@ -145,12 +146,16 @@ export class SmsService {
     const body = parsed as WebhookPayload;
 
     if (body.webhookEvent === 'MESSAGE_SENT' || body.status === 'sent' || body.event === 'MESSAGE_SENT') {
+      this.logger.log(`SMS webhook ignored: delivery receipt for a sent message. traceId=${traceId}`);
       return { success: true, message: 'Delivery receipt ignored' };
     }
     const legacyEvent = body.event === 'MESSAGE_RECEIVED';
     const newEvent = body.type === 'RECEIVED';
     const otherNamedEvent = Boolean(body.event && body.event !== 'MESSAGE_RECEIVED');
-    if (!legacyEvent && !newEvent && otherNamedEvent) return { success: true, status: 'Ignored' };
+    if (!legacyEvent && !newEvent && otherNamedEvent) {
+      this.logger.log(`SMS webhook ignored: event "${String(body.event)}" is not a received message. traceId=${traceId}`);
+      return { success: true, status: 'Ignored' };
+    }
 
     const sms = extractSmsPayload(body);
     if (!sms) return { error: 'Missing sender or message field' };
@@ -159,7 +164,10 @@ export class SmsService {
     }
 
     const withinLimit = await this.allowWebhookSender(sms.senderPhone);
-    if (!withinLimit) return { success: true, status: 'Rate Limited' };
+    if (!withinLimit) {
+      this.logger.warn(`SMS webhook rate limited: sender=${maskPhoneNumber(sms.senderPhone)} sent more than 3 in a minute. traceId=${traceId}`);
+      return { success: true, status: 'Rate Limited' };
+    }
 
     let voucher;
     try {
@@ -171,7 +179,10 @@ export class SmsService {
     const redis = this.redisService.getClient();
     const nonceKey = `honebill:sms:nonce:${voucher.nonce.toString('base64')}`;
     try {
-      if (await redis.get(nonceKey)) return { success: true, status: 'Duplicate Replay', traceId };
+      if (await redis.get(nonceKey)) {
+        this.logger.warn(`SMS webhook ignored: this voucher was already received (replay). sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
+        return { success: true, status: 'Duplicate Replay', traceId };
+      }
     } catch (error) {
       // This short-lived cache is defense in depth; database and Soroban nonce checks remain authoritative.
       this.logger.warn(`SMS nonce cache unavailable; continuing fail-open. traceId=${traceId}: ${this.errorMessage(error)}`);
@@ -195,7 +206,10 @@ export class SmsService {
     // atomic job-ID deduplication; an ambiguous publish failure can also be retried.
     try {
       const marked = await redis.set(nonceKey, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
-      if (marked === null) return { success: true, status: 'Duplicate Replay', traceId };
+      if (marked === null) {
+        this.logger.warn(`SMS webhook: voucher was queued but another request had already marked it. traceId=${traceId}`);
+        return { success: true, status: 'Duplicate Replay', traceId };
+      }
     } catch (error) {
       this.logger.warn(`SMS nonce cache unavailable after publish. traceId=${traceId}: ${this.errorMessage(error)}`);
     }
@@ -211,7 +225,11 @@ export class SmsService {
       accepts: ['POST'],
       configured: {
         textbeeWebhookSecret: Boolean(this.config.get<string>('TEXTBEE_WEBHOOK_SECRET')),
-        qstashToken: false,
+        qstashToken: Boolean(this.config.get<string>('QSTASH_TOKEN')),
+        qstashSigningKeys: Boolean(
+          this.config.get<string>('QSTASH_CURRENT_SIGNING_KEY') && this.config.get<string>('QSTASH_NEXT_SIGNING_KEY'),
+        ),
+        settlementTransport: resolveSettlementTransport(),
         nextPublicAppUrl: Boolean(this.config.get<string>('NEXT_PUBLIC_APP_URL')),
         textbeeGateway: Boolean(this.config.get<string>('TEXTBEE_GATEWAY_URL') || this.config.get<string>('TEXTBEE_DEVICE_ID')),
         textbeeApiKey: Boolean(this.config.get<string>('TEXTBEE_API_KEY')),

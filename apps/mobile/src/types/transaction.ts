@@ -18,6 +18,10 @@ export type Transaction = {
   status: TransactionStatus;
   /** The Stellar transaction hash when there is one, otherwise the settlement nonce or record id. */
   ref: string;
+  /** The offline voucher's nonce when the server sent one; it matches a payment sent from this phone to its record. */
+  nonce?: string;
+  /** The credit side of a move between the user's own wallets. History's "All" list shows the move once, by its debit side. */
+  mirror?: boolean;
 };
 
 export const TRANSACTION_FILTERS = ['All', 'Wallet', 'Offline Funds'] as const;
@@ -38,6 +42,7 @@ export function buildHistoryRows(items: Transaction[], filter: TransactionFilter
   for (const tx of items) {
     if (filter === 'Wallet' && tx.source !== 'wallet') continue;
     if (filter === 'Offline Funds' && tx.source !== 'offline') continue;
+    if (filter === 'All' && tx.mirror) continue;
     const label = formatDayHeading(new Date(tx.timestamp));
     if (label !== lastDate) {
       rows.push({ type: 'date', id: `d-${label}`, label });

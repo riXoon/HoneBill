@@ -1,6 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-import type { DispatchMethod } from '../types/send';
+import type { DispatchMethod, SendMode } from '../types/send';
 
 /** The four tabs behind the bottom navigation bar. */
 export type TabParamList = {
@@ -16,7 +16,10 @@ export type RootStackParamList = {
   Login: undefined;
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
   InputNumber: { mode?: 'signin' } | undefined;
-  Otp: { phone: string };
+  /** `recover` is a sign-in from a phone that does not hold this account's wallet: OTP, then the recovery phrase. */
+  Otp: { phone: string; purpose?: 'recover' };
+  /** Restores an existing account's wallet on this phone from its 12 words. */
+  VerifySeedPhrase: { phone: string };
   UserDetails: undefined;
   MpinCreation: undefined;
   /** One-time backup of the wallet's 12 words, shown right after the account is created. */
@@ -27,20 +30,25 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   QrScan: undefined;
   /** Send flow: To -> Amount -> Verification -> Method -> Receipt. */
-  SendTo: undefined;
-  SendAmount: { recipientId: string };
+  SendTo: { mode?: SendMode } | undefined;
+  SendAmount: { recipientId: string; mode?: SendMode };
   SendVerification: SendDraft;
   SendMethod: SendDraft;
-  /** Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists. */
-  SendReceipt: SendDraft & { method: DispatchMethod; reference: string; issuedAt: number };
+  /**
+   * Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists.
+   * `online` is a transfer already settled on the ledger; `sms` and `relay` are offline vouchers still to dispatch.
+   */
+  SendReceipt: SendDraft & { method: DispatchMethod | 'online'; reference: string; issuedAt: number };
   /** Receive flow: amount -> offline relay voucher QR. */
   ReceiveAmount: undefined;
   ReceiveQr: { amount: number };
   TransactionDetail: { id: string };
+  /** Adds PHPC to the online wallet through the anchor's deposit. */
+  TopUp: undefined;
   /** Moves funds between the user's own wallets. */
   TransferOnline: undefined;
   TransferOffline: undefined;
 };
 
 /** What the Send steps carry forward. Ids and numbers only, so the params stay serializable. */
-export type SendDraft = { recipientId: string; amount: number; note: string };
+export type SendDraft = { recipientId: string; amount: number; note: string; mode?: SendMode };

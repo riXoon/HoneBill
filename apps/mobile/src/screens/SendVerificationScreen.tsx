@@ -1,14 +1,25 @@
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { CheckIcon, CheckTitleIcon, OfflineFundsBadge, RecipientIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
+import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { useAuth } from '../context/AuthContext';
+import { useWalletData } from '../context/WalletDataContext';
+import { useIsOnline } from '../hooks/useIsOnline';
+import { useSendMode } from '../hooks/useSendMode';
+import { afterNextPaint } from '../utils/async';
 import { formatPeso } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
+import { errorMessage, UserFacingError } from '../services/api/client';
+import { reportError } from '../services/errorReporting';
 import { findRecipientById } from '../services/recipientDirectory';
+import { PendingTransactionError } from '../services/stellar/sorobanRpc';
+import { loadStellar } from '../services/wallet/signer';
+import { sendOnline } from '../services/walletActions';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 3 - Verification (870:2796), 402x874.
@@ -40,15 +51,65 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 export function SendVerificationScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendVerification'>) {
-  const { recipientId, amount, note } = route.params;
+  const { recipientId, amount, note, mode } = route.params;
   const recipient = findRecipientById(recipientId);
   // The design shows the box ticked; it starts unticked here so authorising is always a deliberate step.
   const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const running = useRef(false);
+  const connected = useIsOnline();
+  // Which funds this spends is the view the payment was started from, not whether the phone has internet.
+  const online = useSendMode(mode) === 'online';
+  const { activeAccount } = useAuth();
+  const { balances, refresh } = useWalletData();
+  // The connection can change between steps, so the funds are checked again for the path taken now.
+  const available = balances ? (online ? balances.online : balances.offline) : null;
+  // An offline payment also costs the toll, which the vault pays on top of the amount.
+  const fee = online ? 0 : OFFLINE_TOLL_PESOS;
+  const total = Math.round((amount + fee) * 100) / 100;
+  const enough = available !== null && total <= available;
 
   useEffect(() => {
     if (!recipient) navigation.goBack();
   }, [recipient, navigation]);
+
+  // The Stellar SDK is large and is otherwise evaluated at the first signature, inside the swipe's wait. Loading it
+  // while the user reads this screen takes that off the critical path. It holds no secrets.
+  useEffect(() => {
+    void loadStellar().catch(() => undefined);
+  }, []);
   if (!recipient) return null;
+
+  /** Online there is nothing to choose: the transfer goes straight through. Offline, Method decides how the voucher leaves. */
+  const authorize = async () => {
+    if (!online) {
+      navigation.navigate('SendMethod', { recipientId, amount, note, mode: 'offline' });
+      return;
+    }
+    if (!connected) {
+      Alert.alert('No internet connection', 'An online payment needs a connection. Switch to the Offline view on Home to pay with a voucher.');
+      return;
+    }
+    if (!activeAccount || !recipient.stellarPublicKey || running.current) return;
+    running.current = true;
+    setBusy(true);
+    await afterNextPaint();
+    try {
+      const hash = await sendOnline(activeAccount.stellarPublicKey, recipient.stellarPublicKey, amount);
+      void refresh({ force: true });
+      navigation.navigate('SendReceipt', { recipientId, amount, note, mode: 'online', method: 'online', reference: hash, issuedAt: Date.now() });
+    } catch (error) {
+      if (error instanceof PendingTransactionError) void refresh({ force: true });
+      if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendOnline' });
+      Alert.alert('Payment not sent', errorMessage(error));
+    } finally {
+      running.current = false;
+      setBusy(false);
+    }
+  };
+
+  const canAuthorize = confirmed && enough && !busy && (!online || Boolean(recipient.stellarPublicKey));
+  const swipeLabel = busy ? 'SENDING…' : 'SWIPE TO  AUTHORIZE';
 
   return (
     <SendLayout
@@ -58,10 +119,19 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       gap={12}
       footer={
         <SwipeToEnter
-          label="SWIPE TO  AUTHORIZE"
-          accessibilityLabel={confirmed ? 'Swipe to authorize' : 'Swipe to authorize, confirm the details first'}
-          disabled={!confirmed}
-          onComplete={() => navigation.navigate('SendMethod', { recipientId, amount, note })}
+          label={swipeLabel}
+          accessibilityLabel={
+            busy
+              ? 'Sending, please wait'
+              : !enough
+                ? 'Swipe to authorize, not enough balance'
+                : confirmed
+                  ? 'Swipe to authorize'
+                  : 'Swipe to authorize, confirm the details first'
+          }
+          disabled={!canAuthorize}
+          busy={busy}
+          onComplete={() => void authorize()}
         />
       }
     >
@@ -71,16 +141,28 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
           {formatPeso(amount)}
         </Text>
         <View style={styles.escrow}>
-          <View style={styles.escrowDot} />
-          <Text style={styles.escrowText}>offline local escrow</Text>
+          <View style={[styles.escrowDot, online && styles.escrowDotOnline]} />
+          <Text style={styles.escrowText}>{online ? 'online transfer' : 'offline local escrow'}</Text>
         </View>
       </View>
+
+      {!enough ? (
+        <Text style={styles.problem} accessibilityLiveRegion="polite">
+          {available === null
+            ? 'Balance unavailable'
+            : `Not enough ${online ? 'online' : 'offline'} balance. Go back and lower the amount.`}
+        </Text>
+      ) : null}
 
       <GlassCard style={styles.panel}>
         <Text style={styles.caption}>RECIPIENT ACCOUNT</Text>
         <AccountRow icon={<RecipientIcon />} title={recipient.name} subtitle={`Short ID: ${recipient.shortId}`} />
         <Text style={styles.caption}>SENDER ACCOUNT</Text>
-        <AccountRow icon={<OfflineFundsBadge color={colors.surface} />} title="My Vault Wallet" subtitle="Offline funds" />
+        <AccountRow
+          icon={<OfflineFundsBadge color={colors.surface} />}
+          title={online ? 'My Wallet' : 'My Vault Wallet'}
+          subtitle={online ? 'Online funds' : 'Offline funds'}
+        />
         <View style={styles.memo}>
           <Text style={styles.caption}>NOTE / MEMO</Text>
           <Text style={styles.memoText}>{note || DEFAULT_MEMO}</Text>
@@ -90,11 +172,12 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       <GlassCard style={styles.summary}>
         <View style={styles.breakdown}>
           <SummaryRow label="Amount sent" value={formatPeso(amount)} />
+          {fee > 0 ? <SummaryRow label="Offline fee" value={formatPeso(fee)} /> : null}
         </View>
         <View style={styles.divider} />
         <View style={styles.totalRow}>
           <Text style={styles.totalRowLabel}>Total deducted</Text>
-          <Text style={styles.totalRowValue}>{formatPeso(amount)}</Text>
+          <Text style={styles.totalRowValue}>{formatPeso(total)}</Text>
         </View>
         <View style={styles.divider} />
       </GlassCard>
@@ -128,8 +211,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceTranslucent,
   },
   escrowDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.statusOffline },
+  escrowDotOnline: { backgroundColor: colors.statusOnline },
   escrowText: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase' },
 
+  problem: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
   panel: { padding: 12, gap: 6 },
   caption: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted },
   account: { height: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
