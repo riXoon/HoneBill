@@ -8,6 +8,7 @@ import type { Queue } from 'bullmq';
 import { RedisService } from '../../infra/redis/redis.service.js';
 import { SettlementPublisher } from '../engine/settlement-publisher.js';
 import { resolveSettlementTransport } from '../engine/settlement-transport.js';
+import { configValue } from '../engine/env-value.js';
 import { parseOfflineVoucher } from '../settlements/offline-voucher.util.js';
 import { TextbeeService } from '../otp/textbee.service.js';
 import {
@@ -225,9 +226,9 @@ export class SmsService {
       accepts: ['POST'],
       configured: {
         textbeeWebhookSecret: Boolean(this.config.get<string>('TEXTBEE_WEBHOOK_SECRET')),
-        qstashToken: Boolean(this.config.get<string>('QSTASH_TOKEN')),
+        qstashToken: Boolean(configValue(this.config, 'QSTASH_TOKEN')),
         qstashSigningKeys: Boolean(
-          this.config.get<string>('QSTASH_CURRENT_SIGNING_KEY') && this.config.get<string>('QSTASH_NEXT_SIGNING_KEY'),
+          configValue(this.config, 'QSTASH_CURRENT_SIGNING_KEY') && configValue(this.config, 'QSTASH_NEXT_SIGNING_KEY'),
         ),
         settlementTransport: resolveSettlementTransport(),
         nextPublicAppUrl: Boolean(this.config.get<string>('NEXT_PUBLIC_APP_URL')),

@@ -1,3 +1,5 @@
+import { cleanEnvValue } from './env-value.js';
+
 /**
  * How a voucher received by the SMS webhook gets to the code that settles it.
  *
@@ -12,7 +14,8 @@
 export type SettlementTransport = 'qstash' | 'bullmq' | 'none';
 
 export function resolveSettlementTransport(env: NodeJS.ProcessEnv = process.env): SettlementTransport {
-  const chosen = (env.SETTLEMENT_TRANSPORT ?? '').trim().toLowerCase();
+  // Hosting dashboards keep quotes pasted from a .env file as part of the value, so strip them as well as spaces.
+  const chosen = cleanEnvValue(env.SETTLEMENT_TRANSPORT).toLowerCase();
   if (chosen === 'qstash') return 'qstash';
   if (chosen === 'none') return 'none';
   // `bullmq`, or unset: the queue only exists when Redis queues are switched on.

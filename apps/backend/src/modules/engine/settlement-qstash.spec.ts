@@ -48,6 +48,9 @@ describe('resolveSettlementTransport', () => {
     expect(resolveSettlementTransport({ SETTLEMENT_TRANSPORT: 'bullmq', QUEUE_ENABLED: 'true' })).toBe('bullmq');
     expect(resolveSettlementTransport({ SETTLEMENT_TRANSPORT: 'bullmq' })).toBe('none');
     expect(resolveSettlementTransport({})).toBe('none');
+    // A value pasted into a hosting dashboard with its quotes still counts.
+    expect(resolveSettlementTransport({ SETTLEMENT_TRANSPORT: '"qstash"', QUEUE_ENABLED: 'true' })).toBe('qstash');
+    expect(resolveSettlementTransport({ SETTLEMENT_TRANSPORT: "'qstash' " })).toBe('qstash');
   });
 });
 
@@ -69,6 +72,12 @@ describe('QStashSettlementPublisher', () => {
     // Same ID the BullMQ transport uses for this voucher: SHA-256 of the nonce's bytes.
     expect(sent.deduplicationId).toBe(`settlement-${createHash('sha256').update(Buffer.alloc(32, 7)).digest('hex')}`);
     expect(sent.retries).toBe(3);
+  });
+
+  it('reads URLs and the retry count pasted with quotes', async () => {
+    const publisher = new TestPublisher(config({ QSTASH_SETTLEMENT_URL: '"https://x.test/hook"', QSTASH_SETTLEMENT_RETRIES: '"2"' }));
+    await publisher.enqueue(VOUCHER);
+    expect(publisher.sent[0]).toMatchObject({ url: 'https://x.test/hook', retries: 2 });
   });
 
   it('prefers QSTASH_SETTLEMENT_URL and the configured retry count', async () => {
@@ -99,6 +108,11 @@ describe('QStashSignatureGuard', () => {
     await expect(guard.canActivate(guardContext({ 'upstash-signature': await qstashSignature(body, 'wrong') }, body))).rejects.toThrow(UnauthorizedException);
     const signed = await qstashSignature(body);
     await expect(guard.canActivate(guardContext({ 'upstash-signature': signed }, body.replace('EMtVZn', 'xxxxxx')))).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('accepts signing keys pasted with quotes around them', async () => {
+    const quoted = new QStashSignatureGuard(config({ QSTASH_CURRENT_SIGNING_KEY: `"${CURRENT_KEY}"`, QSTASH_NEXT_SIGNING_KEY: ` '${NEXT_KEY}' ` }));
+    await expect(quoted.canActivate(guardContext({ 'upstash-signature': await qstashSignature(body) }, body))).resolves.toBe(true);
   });
 
   it('rejects everything when the signing keys are not configured', async () => {
