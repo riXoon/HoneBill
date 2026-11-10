@@ -10,6 +10,7 @@ import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
+import { useSendMode } from '../hooks/useSendMode';
 import { afterNextPaint } from '../utils/async';
 import { formatPeso } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
@@ -17,6 +18,7 @@ import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
 import { findRecipientById } from '../services/recipientDirectory';
 import { PendingTransactionError } from '../services/stellar/sorobanRpc';
+import { loadStellar } from '../services/wallet/signer';
 import { sendOnline } from '../services/walletActions';
 import { colors, fonts } from '../theme';
 
@@ -49,13 +51,15 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 }
 
 export function SendVerificationScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendVerification'>) {
-  const { recipientId, amount, note } = route.params;
+  const { recipientId, amount, note, mode } = route.params;
   const recipient = findRecipientById(recipientId);
   // The design shows the box ticked; it starts unticked here so authorising is always a deliberate step.
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
-  const online = useIsOnline();
+  const connected = useIsOnline();
+  // Which funds this spends is the view the payment was started from, not whether the phone has internet.
+  const online = useSendMode(mode) === 'online';
   const { activeAccount } = useAuth();
   const { balances, refresh } = useWalletData();
   // The connection can change between steps, so the funds are checked again for the path taken now.
@@ -68,12 +72,22 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   useEffect(() => {
     if (!recipient) navigation.goBack();
   }, [recipient, navigation]);
+
+  // The Stellar SDK is large and is otherwise evaluated at the first signature, inside the swipe's wait. Loading it
+  // while the user reads this screen takes that off the critical path. It holds no secrets.
+  useEffect(() => {
+    void loadStellar().catch(() => undefined);
+  }, []);
   if (!recipient) return null;
 
   /** Online there is nothing to choose: the transfer goes straight through. Offline, Method decides how the voucher leaves. */
   const authorize = async () => {
     if (!online) {
-      navigation.navigate('SendMethod', { recipientId, amount, note });
+      navigation.navigate('SendMethod', { recipientId, amount, note, mode: 'offline' });
+      return;
+    }
+    if (!connected) {
+      Alert.alert('No internet connection', 'An online payment needs a connection. Switch to the Offline view on Home to pay with a voucher.');
       return;
     }
     if (!activeAccount || !recipient.stellarPublicKey || running.current) return;
@@ -83,7 +97,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
     try {
       const hash = await sendOnline(activeAccount.stellarPublicKey, recipient.stellarPublicKey, amount);
       void refresh({ force: true });
-      navigation.navigate('SendReceipt', { recipientId, amount, note, method: 'online', reference: hash, issuedAt: Date.now() });
+      navigation.navigate('SendReceipt', { recipientId, amount, note, mode: 'online', method: 'online', reference: hash, issuedAt: Date.now() });
     } catch (error) {
       if (error instanceof PendingTransactionError) void refresh({ force: true });
       if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendOnline' });
@@ -116,6 +130,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
                   : 'Swipe to authorize, confirm the details first'
           }
           disabled={!canAuthorize}
+          busy={busy}
           onComplete={() => void authorize()}
         />
       }

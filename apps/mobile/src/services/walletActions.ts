@@ -2,7 +2,7 @@ import { HORIZON_URL, PHPC_ISSUER, STELLAR_NETWORK_PASSPHRASE, TOKEN_CONTRACT_ID
 import { settleDeposit, startDeposit } from './api/anchor';
 import { ApiError, UserFacingError } from './api/client';
 import { prepareDeposit, prepareTransfer, prepareWithdraw } from './api/engine';
-import { confirmTransfer } from './api/wallet';
+import { confirmMove, confirmTransfer } from './api/wallet';
 import { reportError } from './errorReporting';
 import { getSessionToken } from './session';
 import { loadAccount, submitTransaction, type HorizonAccount } from './stellar/horizon';
@@ -44,7 +44,9 @@ export async function moveToOffline(walletPublicKey: string, pesos: number): Pro
     },
     signer.signMessage(`deposit:${signer.publicKey}:${amountStroops}`),
   );
-  return submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  void confirmInBackground(hash, confirmMove, 'confirmMove');
+  return hash;
 }
 
 /** Offline vault -> online wallet (`/engine/withdraw`). */
@@ -56,7 +58,9 @@ export async function moveToOnline(walletPublicKey: string, pesos: number): Prom
     { senderPublicKey: signer.publicKey, tokenAddress: TOKEN_CONTRACT_ID, amountStroops },
     signer.signMessage(`withdraw:${signer.publicKey}:${amountStroops}`),
   );
-  return submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  void confirmInBackground(hash, confirmMove, 'confirmMove');
+  return hash;
 }
 
 const CONFIRM_ATTEMPTS = 4;
@@ -65,31 +69,47 @@ const CONFIRM_DELAY_MS = 2_000;
 /** Online wallet -> someone else's online wallet (`/engine/transfer`), then marks it settled on the backend. */
 export async function sendOnline(walletPublicKey: string, recipientPublicKey: string, pesos: number): Promise<string> {
   requireConfig();
+  const started = Date.now();
+  const lap = (name: string) => {
+    if (__DEV__) console.log(`[send] +${Date.now() - started}ms ${name}`);
+  };
   const amountStroops = pesosToStroops(pesos);
   const signer = await openWalletSigner(walletPublicKey);
+  lap('wallet key ready');
+  const intent = signer.signMessage(
+    `transfer:v2:online:${TOKEN_CONTRACT_ID}:${signer.publicKey}:${recipientPublicKey}:${amountStroops}`,
+  );
   const { xdr } = await prepareTransfer(
     { senderPublicKey: signer.publicKey, recipientPublicKey, tokenAddress: TOKEN_CONTRACT_ID, amountStroops },
-    signer.signMessage(
-      `transfer:v2:online:${TOKEN_CONTRACT_ID}:${signer.publicKey}:${recipientPublicKey}:${amountStroops}`,
-    ),
+    intent,
   );
+  lap('backend prepared the transaction');
   const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  lap('ledger applied it');
 
-  // The money has moved; confirming only updates the backend's record, so a failure here is reported, not thrown.
+  // The money has moved, so the receipt must not wait on the backend's bookkeeping (which can retry for seconds).
+  void confirmInBackground(hash, confirmTransfer, 'confirmTransfer');
+  return hash;
+}
+
+/**
+ * Tells the backend a transaction settled, which is what puts it in History on every device. It only updates the
+ * backend's record, so a failure is reported, not thrown.
+ */
+async function confirmInBackground(hash: string, confirm: (hash: string) => Promise<unknown>, step: string): Promise<void> {
   for (let attempt = 1; attempt <= CONFIRM_ATTEMPTS; attempt += 1) {
     try {
-      await confirmTransfer(hash);
-      break;
+      await confirm(hash);
+      return;
     } catch (error) {
       const retryable = error instanceof ApiError && (error.status === 409 || error.kind !== 'http');
       if (!retryable || attempt === CONFIRM_ATTEMPTS) {
-        reportError(error, { step: 'confirmTransfer', hash });
-        break;
+        reportError(error, { step, hash });
+        return;
       }
       await new Promise((resolve) => setTimeout(resolve, CONFIRM_DELAY_MS));
     }
   }
-  return hash;
 }
 
 const PHPC = 'PHPC';

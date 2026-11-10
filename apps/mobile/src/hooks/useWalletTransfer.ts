@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
+import { buildMoveEntries } from '../services/ownTransfers';
 import { PendingTransactionError } from '../services/stellar/sorobanRpc';
 import { moveToOffline, moveToOnline } from '../services/walletActions';
 import { afterNextPaint } from '../utils/async';
@@ -18,7 +19,7 @@ const LABEL = { online: 'online', offline: 'offline' } as const;
  */
 export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) {
   const { activeAccount } = useAuth();
-  const { refresh } = useWalletData();
+  const { refresh, addMoves } = useWalletData();
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
 
@@ -30,7 +31,10 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
       // Deriving the key is CPU work; let "Transferring…" draw first.
       await afterNextPaint();
       try {
-        await (to === 'online' ? moveToOnline : moveToOffline)(activeAccount.stellarPublicKey, amount);
+        const hash = await (to === 'online' ? moveToOnline : moveToOffline)(activeAccount.stellarPublicKey, amount);
+        // Listed right away from this phone; the server records it too (confirmed in the background) and its copy
+        // replaces this one on the next refresh, which is also what shows it on other devices.
+        addMoves(buildMoveEntries(to, amount, hash));
         void refresh({ force: true });
         Alert.alert('Transfer complete', `${formatPeso(amount)} is now in your ${LABEL[to]} wallet.`, [
           { text: 'OK', onPress: onDone },
@@ -45,7 +49,7 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         setBusy(false);
       }
     },
-    [activeAccount, to, refresh, onDone],
+    [activeAccount, to, refresh, addMoves, onDone],
   );
 
   return { busy, transfer };

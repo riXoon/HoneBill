@@ -8,6 +8,7 @@ import { SendLayout } from '../components/send/SendLayout';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
 import { SMS_GATEWAY_NUMBER } from '../config/env';
 import { useAuth } from '../context/AuthContext';
+import { useWalletData } from '../context/WalletDataContext';
 import type { DispatchMethod } from '../types/send';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
@@ -50,17 +51,31 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   const voucher = useRef<string | null>(null);
   const awaitingSend = useRef(false);
 
+  const { addPendingOffline } = useWalletData();
+
   const finish = useCallback(
     (signed: string) => {
       // The voucher's fifth field is its nonce, unique to this payment, so it serves as the reference.
-      navigation.navigate('SendReceipt', {
-        ...draft,
-        method: 'sms',
-        reference: signed.split(':')[4] ?? signed,
-        issuedAt: Date.now(),
+      const nonce = signed.split(':')[4] ?? signed;
+      const issuedAt = Date.now();
+      const recipient = findRecipientById(draft.recipientId);
+      // The server lists this only after it has settled the text, which can be long after (the sender may have no
+      // data). Showing it as pending now means the sender's History is not blank about a payment they just made.
+      addPendingOffline({
+        id: `pending:${nonce}`,
+        timestamp: issuedAt,
+        source: 'offline',
+        direction: 'out',
+        amount: draft.amount,
+        assetCode: 'PHPC',
+        description: `Sent to ${recipient?.name ?? 'recipient'}`,
+        status: 'pending',
+        ref: nonce,
+        nonce,
       });
+      navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt });
     },
-    [navigation, draft],
+    [navigation, draft, addPendingOffline],
   );
 
   // The text app cannot say whether the message went out, so when the user comes back, ask.

@@ -23,7 +23,7 @@ import { colors, fonts } from '../theme';
 const TABS = ['Recent', 'Favorites'] as const;
 type Tab = (typeof TABS)[number];
 
-export function SendToScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'SendTo'>) {
+export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendTo'>) {
   const { activeAccount } = useAuth();
   const [shortId, setShortId] = useState('');
   const idFocus = useFieldFocus();
@@ -44,7 +44,7 @@ export function SendToScreen({ navigation }: NativeStackScreenProps<RootStackPar
 
   const goToAmount = (recipient: Recipient) => {
     Keyboard.dismiss();
-    navigation.navigate('SendAmount', { recipientId: recipient.id });
+    navigation.navigate('SendAmount', { recipientId: recipient.id, mode: route.params?.mode });
   };
 
   const lookupRecipient = async (id: string) => {

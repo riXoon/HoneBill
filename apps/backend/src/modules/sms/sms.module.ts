@@ -11,8 +11,14 @@ import { SmsService } from './sms.service.js';
 
 @Module({})
 export class SmsModule {
-  /** Registers HTTP SMS routes always and BullMQ queues/worker only when queue processing is enabled. */
-  static register(queueEnabled: boolean): DynamicModule {
+  /**
+   * Registers HTTP SMS routes always, BullMQ queues when queue processing is enabled, and the queue's worker only
+   * when this process is also meant to run workers (see QUEUE_WORKER_ENABLED in engine.module.ts).
+   */
+  static register(
+    queueEnabled: boolean,
+    workerEnabled: boolean = queueEnabled && process.env.QUEUE_WORKER_ENABLED !== 'false',
+  ): DynamicModule {
     return {
       module: SmsModule,
       imports: [
@@ -27,7 +33,7 @@ export class SmsModule {
         SmsService,
         TextbeeSignatureGuard,
         SmsDispatchSecretGuard,
-        ...(queueEnabled ? [SmsDispatchProcessor] : []),
+        ...(workerEnabled ? [SmsDispatchProcessor] : []),
       ],
       exports: [SmsService],
     };

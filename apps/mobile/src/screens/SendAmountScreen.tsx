@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { AmountField, amountProblem } from '../components/send/AmountField';
+import { AmountField, amountProblem, parseAmount } from '../components/send/AmountField';
 import { Avatar } from '../components/send/Avatar';
 import { BalanceBar } from '../components/send/BalanceBar';
 import { GlassCard } from '../components/send/GlassCard';
@@ -15,7 +15,7 @@ import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
 import { useWalletData } from '../context/WalletDataContext';
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
-import { useIsOnline } from '../hooks/useIsOnline';
+import { useSendMode } from '../hooks/useSendMode';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatWhole } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
@@ -27,7 +27,7 @@ const FADE_MS = 250;
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
   const { balances } = useWalletData();
-  const online = useIsOnline();
+  const online = useSendMode(route.params.mode) === 'online';
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
   const noteFocus = useFieldFocus();
@@ -38,8 +38,8 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   }, [recipient, navigation]);
   if (!recipient) return null;
 
-  const amount = Number(amountText) || 0;
-  // Online, the money comes from the online wallet and goes straight through; offline, it comes from the vault.
+  const amount = parseAmount(amountText);
+  // The view this was started from decides: Online spends the online wallet and settles now; Offline spends the vault.
   const available = balances ? (online ? balances.online : balances.offline) : null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
   const fee = online ? 0 : OFFLINE_TOLL_PESOS;
@@ -60,7 +60,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           label="SWIPE TO  PROCEED"
           accessibilityLabel={valid ? `Swipe to proceed with ${formatPeso(amount)}` : 'Swipe to proceed, enter a valid amount first'}
           disabled={!valid}
-          onComplete={() => navigation.navigate('SendVerification', { recipientId: recipient.id, amount, note: note.trim() })}
+          onComplete={() => navigation.navigate('SendVerification', { recipientId: recipient.id, amount, note: note.trim(), mode: route.params.mode })}
         />
       }
     >

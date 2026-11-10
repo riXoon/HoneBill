@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot } from '../components/mascot/Mascot';
-import { AmountField, amountProblem } from '../components/send/AmountField';
+import { AmountField, amountProblem, parseAmount } from '../components/send/AmountField';
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { AddBoxIcon, InfoIcon } from '../components/ui/smallIcons';
@@ -31,7 +31,7 @@ export function TopUpScreen({ navigation }: NativeStackScreenProps<RootStackPara
   const { busy, step, submit } = useTopUp(navigation.goBack);
   const [amountText, setAmountText] = useState('');
 
-  const amount = Number(amountText) || 0;
+  const amount = parseAmount(amountText);
   // Only "enter an amount": the anchor sets the limits and says so if one is exceeded.
   const problem = amountProblem(amount);
   const valid = problem === null;
@@ -54,6 +54,7 @@ export function TopUpScreen({ navigation }: NativeStackScreenProps<RootStackPara
                   : 'Swipe to top up, enter a valid amount first'
             }
             disabled={!valid || busy}
+            busy={busy}
             onComplete={() => void submit(amount)}
           />
         </View>

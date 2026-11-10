@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import { usePreventScreenCapture } from 'expo-screen-capture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,58 +23,20 @@ import { colors, fonts, radius } from '../theme';
 // Sign-in on a phone that does not hold the account's wallet: the 12 words saved at sign-up bring it back.
 const WORD_COUNT = 12;
 
-const EMPTY = Array.from({ length: WORD_COUNT }, () => '');
-
-const WordField = memo(function WordField({
-  index,
-  value,
-  disabled,
-  onChange,
-  onSubmit,
-  inputRef,
-}: {
-  index: number;
-  value: string;
-  disabled: boolean;
-  onChange: (index: number, text: string) => void;
-  onSubmit: (index: number) => void;
-  inputRef: (index: number, node: TextInput | null) => void;
-}) {
-  const { focused, onFocus, onBlur } = useFieldFocus();
-  return (
-    <View style={[styles.field, fieldStateStyle(focused, value.length > 0)]}>
-      <Text style={styles.index}>{index + 1}</Text>
-      <TextInput
-        ref={(node) => inputRef(index, node)}
-        value={value}
-        onChangeText={(text) => onChange(index, text)}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        onSubmitEditing={() => onSubmit(index)}
-        accessibilityLabel={`Word number ${index + 1}`}
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="off"
-        spellCheck={false}
-        textContentType="none"
-        importantForAutofill="no"
-        editable={!disabled}
-        blurOnSubmit={false}
-        returnKeyType={index === WORD_COUNT - 1 ? 'done' : 'next'}
-        style={styles.input}
-      />
-    </View>
-  );
-});
+/** Whatever was pasted or typed -> the lowercase words, separated by single spaces. */
+function normalize(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+}
 
 export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'VerifySeedPhrase'>) {
   const { phone } = route.params;
   const insets = useSafeAreaInsets();
-  const [words, setWords] = useState<string[]>(EMPTY);
+  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputs = useRef<(TextInput | null)[]>([]);
   const request = useRef<AbortController | null>(null);
+  const { focused, onFocus, onBlur } = useFieldFocus();
+  const words = useMemo(() => normalize(text), [text]);
 
   // What is typed here is the wallet's private key: keep it out of screenshots and the recent-apps preview.
   usePreventScreenCapture('verify-seed-phrase');
@@ -85,41 +48,24 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
     [],
   );
 
-  const setInput = useCallback((index: number, node: TextInput | null) => {
-    inputs.current[index] = node;
-  }, []);
-
-  const onChange = useCallback((index: number, text: string) => {
+  const onChangeText = (value: string) => {
     setError(null);
-    const pasted = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    // Pasting the whole phrase (or several words) fills the boxes from this one onward.
-    if (pasted.length > 1) {
-      setWords((prev) => {
-        const next = [...prev];
-        pasted.slice(0, WORD_COUNT - index).forEach((word, offset) => {
-          next[index + offset] = word;
-        });
-        return next;
-      });
-      Keyboard.dismiss();
-      return;
-    }
-    setWords((prev) => {
-      const next = [...prev];
-      next[index] = text.trim().toLowerCase();
-      return next;
-    });
-  }, []);
+    setText(value);
+  };
 
-  const onSubmitWord = useCallback((index: number) => {
-    if (index < WORD_COUNT - 1) inputs.current[index + 1]?.focus();
-    else Keyboard.dismiss();
-  }, []);
+  const paste = async () => {
+    try {
+      const copied = await Clipboard.getStringAsync();
+      if (copied) onChangeText(copied);
+    } catch {
+      setError('Could not read the clipboard. Paste into the box manually.');
+    }
+  };
 
   const verify = async () => {
     if (busy) return;
-    if (words.some((w) => !w)) {
-      setError('Enter all 12 words.');
+    if (words.length !== WORD_COUNT) {
+      setError(`Enter all ${WORD_COUNT} words. You have ${words.length}.`);
       return;
     }
     const mnemonic = words.join(' ');
@@ -145,7 +91,7 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
       }
       await restoreDeviceWallet(mnemonic);
       await setAccountPhone(phone);
-      setWords(EMPTY);
+      setText('');
       // The wallet is back on this phone; the MPIN is the last step.
       navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] });
     } catch (e) {
@@ -172,24 +118,36 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
           <GradientTitle>Verify Seed Phrase</GradientTitle>
           <Text style={styles.subtitle}>
             This phone does not have your wallet yet. Enter the 12-word recovery phrase you saved when you created your
-            account. You can paste all of it into the first box. Never share these words with anyone.
+            account. Paste all 12 words in one go. Never share these words with anyone.
           </Text>
         </View>
 
-        <View style={styles.grid}>
-          {words.map((word, index) => (
-            <View key={index} style={styles.cell}>
-              <WordField
-                index={index}
-                value={word}
-                disabled={busy}
-                onChange={onChange}
-                onSubmit={onSubmitWord}
-                inputRef={setInput}
-              />
-            </View>
-          ))}
+        <View style={[styles.box, fieldStateStyle(focused, text.length > 0)]}>
+          <TextInput
+            value={text}
+            onChangeText={onChangeText}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            accessibilityLabel="Recovery phrase"
+            placeholder="Paste your 12 words here"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            spellCheck={false}
+            textContentType="none"
+            importantForAutofill="no"
+            keyboardType="visible-password"
+            editable={!busy}
+            textAlignVertical="top"
+            style={styles.input}
+          />
         </View>
+        <Text style={styles.count}>
+          {words.length} / {WORD_COUNT} words
+        </Text>
+        <Button label="Paste from clipboard" variant="outline" onPress={() => void paste()} disabled={busy} />
 
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -214,19 +172,9 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 40, gap: 20 },
   header: { gap: 10 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  cell: { width: '48%' },
-  field: {
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    borderRadius: radius.field,
-    borderWidth: 1,
-  },
-  index: { width: 16, fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  input: { flex: 1, height: '100%', padding: 0, fontFamily: fonts.light, fontSize: 12, color: colors.text },
+  box: { minHeight: 130, padding: 14, borderRadius: radius.field, borderWidth: 1 },
+  input: { minHeight: 100, padding: 0, fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.text },
+  count: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted, textAlign: 'right' },
   error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
   // The mascot image is larger than its slot (soft glow bleed), so it overflows evenly.
   mascot: { height: 230, alignItems: 'center', justifyContent: 'center' },

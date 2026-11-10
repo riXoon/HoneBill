@@ -16,11 +16,13 @@ import { useAuth, type AccountProfile } from '../context/AuthContext';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay, getAccountPhone } from '../services/accountPhone';
-import { getStoredAccount } from '../services/accountStorage';
+import { clearStoredAccount, getStoredAccount } from '../services/accountStorage';
 import { verifyPin } from '../services/api/auth';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import { sendOtp } from '../services/api/otp';
 import { lookupUserByPhone } from '../services/api/users';
 import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
+import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { colors, fonts, radius } from '../theme';
 
 // Figma: Login Page (870:3055), 402x874.
@@ -38,6 +40,15 @@ function SwapIcon() {
       />
     </Svg>
   );
+}
+
+/** Whether this phone's keystore holds the wallet whose address is `publicKey`. */
+async function holdsWalletFor(publicKey: string): Promise<boolean> {
+  try {
+    return (await getDevicePublicKey()) === publicKey;
+  } catch {
+    return false;
+  }
 }
 
 function pinErrorMessage(error: unknown): string {
@@ -97,6 +108,17 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
   // the account was set, so it is usually ready by the time the animation ends.
   const { entering, progress, start: enterHive } = useHiveEntrance(goHome, SIGN_IN_HIVE_MS);
 
+  /** Proves the number by OTP, then the recovery-phrase screen puts the wallet on this phone. */
+  const startRecovery = useCallback(
+    async (recoverPhone: string, signal: AbortSignal) => {
+      await clearStoredAccount();
+      setStored(null);
+      await sendOtp(recoverPhone, signal);
+      navigation.navigate('Otp', { phone: recoverPhone, purpose: 'recover' });
+    },
+    [navigation],
+  );
+
   const submitPin = useCallback(
     async (value: string) => {
       if (!phone) return;
@@ -109,6 +131,12 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
         // The PIN route returns no profile, so fetch the account it unlocked.
         const account = await lookupUserByPhone(phone, controller.signal);
         if (!account) throw new ApiError('http', 404, 'No account found for this number.');
+        // The MPIN proves the account, not that this phone holds its wallet (a new device, or a re-created account).
+        // Without the key nothing can be signed, so restore it from the recovery phrase before opening Home.
+        if (!(await holdsWalletFor(account.stellarPublicKey))) {
+          await startRecovery(phone, controller.signal);
+          return;
+        }
         await login({
           shortId: account.shortId,
           stellarPublicKey: account.stellarPublicKey,
@@ -125,7 +153,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
         setBusy(false);
       }
     },
-    [login, phone, enterHive],
+    [login, phone, enterHive, startRecovery],
   );
 
   useEffect(() => {
@@ -144,11 +172,24 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
 
   const signInWithBiometrics = useCallback(async () => {
     if (!stored || entering) return;
-    if (await authenticateWithBiometrics()) {
+    if (!(await authenticateWithBiometrics())) return;
+    // The saved profile can outlive its wallet (or its account), so it only opens Home on a phone that holds the key.
+    if (await holdsWalletFor(stored.stellarPublicKey)) {
       await login(stored);
       void enterHive();
+      return;
     }
-  }, [stored, login, enterHive, entering]);
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true);
+    try {
+      await startRecovery(stored.phone ?? phone ?? '', controller.signal);
+    } catch (e) {
+      if (!isAborted(e)) setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [stored, phone, login, enterHive, entering, startRecovery]);
 
   // Prompt once on arrival. Cancelling falls back to the MPIN.
   useEffect(() => {

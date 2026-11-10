@@ -8,9 +8,19 @@ import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME, type SettlementJobData } fr
 export const ENGINE_SETTLEMENT_QUEUE = SETTLEMENT_QUEUE_NAME;
 export const ENGINE_SETTLEMENT_JOB = SETTLEMENT_JOB_NAME;
 
+let afterEnqueue: (() => void) | undefined;
+
 @Injectable()
 export class SettlementQueueService {
   constructor(@InjectQueue(ENGINE_SETTLEMENT_QUEUE) private readonly queue: Queue) {}
+
+  /**
+   * Registers what to do right after a voucher is queued (e.g. start a serverless drain). Replaces any earlier one.
+   * Held at module level, not per instance, so it applies to whichever copy of this service the webhook was given.
+   */
+  onEnqueued(callback: () => void): void {
+    afterEnqueue = callback;
+  }
 
   async enqueue(smsBody: string, metadata: Pick<SettlementJobData, 'senderPhone' | 'traceId'> = {}): Promise<{ jobId: string }> {
     // Validate and canonicalize the idempotency key before storing an untrusted job.
@@ -27,6 +37,11 @@ export class SettlementQueueService {
         removeOnFail: false,
       },
     );
+    try {
+      afterEnqueue?.();
+    } catch {
+      // Starting a drain is best effort: the job is queued either way, and the next drain picks it up.
+    }
     return { jobId: job.id ?? jobId };
   }
 }
