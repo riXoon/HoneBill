@@ -15,6 +15,7 @@ import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { EMPTY_TRANSACTIONS_MESSAGE } from '../components/ui/EmptyState';
 import { SpeechBubble } from '../components/ui/SpeechBubble';
 import { useLoadingMessage } from '../hooks/useLoadingMessage';
+import { useOfflineSetup } from '../hooks/useOfflineSetup';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
@@ -31,6 +32,7 @@ const FADE_MS = 250;
 const QUICK_ACTION_ROUTE = {
   send: 'SendTo',
   receive: 'ReceiveAmount',
+  topup: 'TopUp',
   online: 'TransferOnline',
   offline: 'TransferOffline',
 } as const satisfies Partial<Record<QuickActionKey, keyof RootStackParamList>>;
@@ -40,6 +42,7 @@ export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeAccount } = useAuth();
   const { balances, transactions, status, error, refresh } = useWalletData();
+  useOfflineSetup();
   // Tapping the cards switches the view. It is not tied to connectivity yet (that needs a NetInfo hookup).
   const [mode, setMode] = useState<BalanceMode>('online');
   const online = mode === 'online';
@@ -114,11 +117,7 @@ export function HomeScreen() {
           </Text>
         ) : null}
 
-        <QuickActions online={online} onPress={(key) => {
-            // Top-up has no screen yet.
-            if (key !== 'topup') navigation.navigate(QUICK_ACTION_ROUTE[key]);
-          }}
-        />
+        <QuickActions online={online} onPress={(key) => navigation.navigate(QUICK_ACTION_ROUTE[key])} />
 
         <View style={styles.activity}>
           {online ? (

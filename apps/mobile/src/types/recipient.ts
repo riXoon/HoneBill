@@ -9,5 +9,7 @@ export type Recipient = {
   provider: string;
   account: string;
   shortId: string;
+  /** The recipient's wallet address, which an online transfer pays. Absent for entries not resolved from the server. */
+  stellarPublicKey?: string;
   favorite: boolean;
 };

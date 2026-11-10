@@ -14,6 +14,8 @@ import { MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
 import { useWalletData } from '../context/WalletDataContext';
+import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { useIsOnline } from '../hooks/useIsOnline';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatWhole } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
@@ -25,6 +27,7 @@ const FADE_MS = 250;
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
   const { balances } = useWalletData();
+  const online = useIsOnline();
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
   const noteFocus = useFieldFocus();
@@ -36,12 +39,14 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   if (!recipient) return null;
 
   const amount = Number(amountText) || 0;
-  // This flow sends offline funds (the vault), so the vault balance is what can be spent.
-  const available = balances?.offline ?? null;
-  const balanceAfter = available === null ? null : available - (amount > 0 ? amount : 0);
+  // Online, the money comes from the online wallet and goes straight through; offline, it comes from the vault.
+  const available = balances ? (online ? balances.online : balances.offline) : null;
+  // An offline payment also costs the toll, which the vault pays on top of the amount.
+  const fee = online ? 0 : OFFLINE_TOLL_PESOS;
+  const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
 
   // Without a balance read from the server there is nothing to check an amount against.
-  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
+  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, Math.max(0, available - fee));
   const valid = problem === null;
 
   return (

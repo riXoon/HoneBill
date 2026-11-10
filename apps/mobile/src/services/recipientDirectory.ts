@@ -29,6 +29,7 @@ function toRecipient(user: UserLookup): Recipient {
     provider: 'HoneBill',
     account: user.shortId,
     shortId: user.shortId,
+    stellarPublicKey: user.stellarPublicKey,
     favorite: false,
   };
 }
