@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +19,7 @@ import { useOfflineSetup } from '../hooks/useOfflineSetup';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
+import { useIsOnline } from '../hooks/useIsOnline';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { SOURCE_LABEL } from '../types/transaction';
@@ -43,8 +44,13 @@ export function HomeScreen() {
   const { activeAccount } = useAuth();
   const { balances, transactions, status, error, refresh } = useWalletData();
   useOfflineSetup();
-  // Tapping the cards switches the view. It is not tied to connectivity yet (that needs a NetInfo hookup).
+  const connected = useIsOnline();
+  // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
+  // Offline (the only view that can pay); getting it back leaves the choice to the user.
   const [mode, setMode] = useState<BalanceMode>('online');
+  useEffect(() => {
+    if (!connected) setMode('offline');
+  }, [connected]);
   const online = mode === 'online';
   const toggle = () => setMode((m) => (m === 'online' ? 'offline' : 'online'));
 
@@ -55,10 +61,15 @@ export function HomeScreen() {
     }, [refresh]),
   );
 
-  const recent = transactions.slice(0, RECENT_COUNT);
-  // Honi rests above the nav bar when there is nothing to list (offline, or no activity yet) and keeps the user
+  // Each view lists its own money: Online shows the wallet's activity, Offline shows the offline funds' (payments,
+  // including ones sent from this phone that are not settled yet, and moves to and from the online balance).
+  const recent = useMemo(
+    () => transactions.filter((tx) => tx.source === (online ? 'wallet' : 'offline')).slice(0, RECENT_COUNT),
+    [online, transactions],
+  );
+  // Honi rests above the nav bar when there is nothing to list in the current view and keeps the user
   // company during the first load, with a speech bubble that chats instead of a plain "Loading…".
-  const showRestHoni = !online || recent.length === 0;
+  const showRestHoni = recent.length === 0;
   const loadingFirst = recent.length === 0 && (status === 'loading' || status === 'idle');
   const chatter = useLoadingMessage(loadingFirst);
 
@@ -117,42 +128,39 @@ export function HomeScreen() {
           </Text>
         ) : null}
 
-        <QuickActions online={online} onPress={(key) => navigation.navigate(QUICK_ACTION_ROUTE[key])} />
+        <QuickActions online={online} onPress={(key) => (key === 'send' ? navigation.navigate('SendTo', { mode }) : navigation.navigate(QUICK_ACTION_ROUTE[key]))} />
 
         <View style={styles.activity}>
-          {online ? (
-            <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
-              <View style={styles.activityTitle}>
-                <Text style={styles.activityHeading}>Recent Activity</Text>
-                {/* Nothing to see yet, and the bubble above Honi needs that corner. */}
-                {recent.length === 0 ? null : (
-                  <Text style={styles.seeAll} accessibilityRole="button">
-                    See All
-                  </Text>
-                )}
-              </View>
-              {recent.length === 0 ? (
-                // The message (loading chatter or "nothing here") is Honi's speech bubble, in his layer below.
-                null
-              ) : (
-                <View style={styles.activityList}>
-                  {recent.map((tx) => (
-                    <ActivityRow
-                      key={tx.id}
-                      kind={tx.direction === 'in' ? 'received' : 'sent'}
-                      title={tx.description}
-                      body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}`}
-                      time={formatRelative(new Date(tx.timestamp))}
-                    />
-                  ))}
-                </View>
-              )}
-            </Animated.View>
-          ) : (
-            <Animated.View entering={FadeIn.duration(FADE_MS)} exiting={FadeOut.duration(FADE_MS)} style={styles.activityBlock}>
+          <Animated.View
+            key={mode}
+            entering={FadeIn.duration(FADE_MS)}
+            exiting={FadeOut.duration(FADE_MS)}
+            style={styles.activityBlock}
+          >
+            <View style={styles.activityTitle}>
               <Text style={styles.activityHeading}>Recent Activity</Text>
-            </Animated.View>
-          )}
+              {/* Nothing to see yet, and the bubble above Honi needs that corner. */}
+              {recent.length === 0 ? null : (
+                <Text style={styles.seeAll} accessibilityRole="button">
+                  See All
+                </Text>
+              )}
+            </View>
+            {recent.length === 0 ? null : (
+              // With nothing to list, the message (loading chatter or "nothing here") is Honi's speech bubble, below.
+              <View style={styles.activityList}>
+                {recent.map((tx) => (
+                  <ActivityRow
+                    key={tx.id}
+                    kind={tx.direction === 'in' ? 'received' : 'sent'}
+                    title={tx.description}
+                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${tx.status === 'pending' ? ' · Pending' : ''}`}
+                    time={formatRelative(new Date(tx.timestamp))}
+                  />
+                ))}
+              </View>
+            )}
+          </Animated.View>
         </View>
       </ScrollView>
 

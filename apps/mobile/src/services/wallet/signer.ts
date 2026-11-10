@@ -33,9 +33,14 @@ export type WalletSigner = {
 
 let stellar: Promise<typeof StellarBase> | null = null;
 
-/** The SDK is large; it is evaluated on the first signature, not at app start. */
+/**
+ * The SDK is large; it is evaluated on the first signature, not at app start. This is a `require` inside a function,
+ * not `import()`: Metro evaluates it on first call but keeps it in the main bundle, whereas `import()` makes a dev
+ * build fetch a separate bundle from Metro at that moment, which fails ("Cannot read property 'reload' of
+ * undefined") whenever the phone's live connection to Metro has dropped.
+ */
 export function loadStellar(): Promise<typeof StellarBase> {
-  stellar ??= import('@stellar/stellar-base');
+  stellar ??= Promise.resolve().then(() => require('@stellar/stellar-base') as typeof StellarBase);
   return stellar;
 }
 

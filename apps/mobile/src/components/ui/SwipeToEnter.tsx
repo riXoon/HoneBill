@@ -1,14 +1,18 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
+  cancelAnimation,
   Extrapolation,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -22,6 +26,11 @@ type SwipeToEnterProps = {
   accessibilityLabel?: string;
   /** Dims the track and ignores drags (e.g. until a form is valid). */
   disabled?: boolean;
+  /**
+   * The swipe was confirmed and the work is running. The knob goes back to the start and spins, the label stays
+   * readable and the track pulses, so the screen does not look frozen. Ignores drags; callers can also set `disabled`.
+   */
+  busy?: boolean;
 };
 
 const WIDTH = 325;
@@ -45,15 +54,39 @@ function Knob() {
   );
 }
 
+/** The knob while work runs: the same white disc with a spinner instead of the chevrons. */
+function BusyKnob() {
+  return (
+    <View style={styles.busyKnob}>
+      <ActivityIndicator size="small" color={colors.primary} />
+    </View>
+  );
+}
+
 /** Figma Swipe (870:2964): a 325x80 gradient track with a draggable knob. Only `transform` animates. */
 export function SwipeToEnter({
   onComplete,
   label = 'SWIPE TO  ENTER',
   accessibilityLabel = 'Swipe to enter',
   disabled = false,
+  busy = false,
 }: SwipeToEnterProps) {
   const x = useSharedValue(0);
   const startX = useSharedValue(0);
+  const pulse = useSharedValue(1);
+  const busyShared = useSharedValue(0);
+
+  // While busy: knob back to the start, label fully visible, track breathing between 1 and 0.75 opacity.
+  useEffect(() => {
+    busyShared.value = busy ? 1 : 0;
+    if (busy) {
+      x.value = withSpring(0);
+      pulse.value = withRepeat(withSequence(withTiming(0.75, { duration: 700 }), withTiming(1, { duration: 700 })), -1);
+    } else {
+      cancelAnimation(pulse);
+      pulse.value = withTiming(1, { duration: 150 });
+    }
+  }, [busy, busyShared, pulse, x]);
 
   // Coming back to a screen (e.g. Back from the next step of a flow) puts the knob at the start again.
   const focused = useIsFocused();
@@ -63,11 +96,11 @@ export function SwipeToEnter({
 
   // Re-enabled after work that followed a swipe (e.g. a failed transfer): put the knob back so it can be retried.
   useEffect(() => {
-    if (!disabled) x.value = withSpring(0);
-  }, [disabled, x]);
+    if (!disabled && !busy) x.value = withSpring(0);
+  }, [disabled, busy, x]);
 
   const pan = Gesture.Pan()
-    .enabled(!disabled)
+    .enabled(!disabled && !busy)
     .onBegin(() => {
       startX.value = x.value;
     })
@@ -94,19 +127,23 @@ export function SwipeToEnter({
 
   // The hint text fades out as the knob covers it.
   const labelStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(x.value, [0, MAX_X * 0.5], [1, 0], Extrapolation.CLAMP),
+    opacity: busyShared.value === 1 ? 1 : interpolate(x.value, [0, MAX_X * 0.5], [1, 0], Extrapolation.CLAMP),
   }));
+
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   return (
     <View
-      style={[styles.shadow, disabled && styles.disabled]}
+      style={[styles.shadow, disabled && !busy && styles.disabled]}
       accessible
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled: disabled || busy, busy }}
+      accessibilityLiveRegion={busy ? 'polite' : 'none'}
       accessibilityActions={[{ name: 'activate' }]}
-      onAccessibilityAction={disabled ? undefined : onComplete}
+      onAccessibilityAction={disabled || busy ? undefined : onComplete}
     >
+      <Animated.View style={[styles.fill, pulseStyle]}>
       <LinearGradient
         colors={[colors.primarySoft, colors.coral]}
         start={{ x: 0, y: 0.5 }}
@@ -118,10 +155,11 @@ export function SwipeToEnter({
         <Animated.Text style={[styles.label, labelStyle]}>{label}</Animated.Text>
         <GestureDetector gesture={pan}>
           <Animated.View style={knobStyle}>
-            <Knob />
+            {busy ? <BusyKnob /> : <Knob />}
           </Animated.View>
         </GestureDetector>
       </LinearGradient>
+      </Animated.View>
     </View>
   );
 }
@@ -138,6 +176,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   disabled: { opacity: 0.5 },
+  fill: { flex: 1 },
+  busyKnob: { width: KNOB, height: KNOB, borderRadius: KNOB / 2, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   track: {
     flex: 1,
     borderRadius: 100,

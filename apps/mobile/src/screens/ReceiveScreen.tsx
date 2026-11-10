@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { AmountField, amountProblem } from '../components/send/AmountField';
+import { AmountField, amountProblem, parseAmount } from '../components/send/AmountField';
 import { GlassCard } from '../components/send/GlassCard';
 import { ModePill } from '../components/send/ModePill';
 import { SendLayout } from '../components/send/SendLayout';
@@ -29,7 +29,7 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
     [],
   );
 
-  const amount = Number(amountText) || 0;
+  const amount = parseAmount(amountText);
   const problem = amountProblem(amount);
   const valid = problem === null;
 

@@ -19,6 +19,11 @@ export function sanitizeAmount(text: string): string {
   return `${cleaned.slice(0, dot).slice(0, MAX_WHOLE_DIGITS)}.${cleaned.slice(dot + 1).replace(/\./g, '').slice(0, 2)}`;
 }
 
+/** The number in the field's text. The field shows "1,000.00" after blur, which `Number()` alone reads as NaN. */
+export function parseAmount(text: string): number {
+  return Number(text.replace(/,/g, '')) || 0;
+}
+
 /**
  * Why `amount` cannot be used yet, or null when it can. `available` is the most the wallet can spend; leave it
  * out when nothing caps the amount (a payment request). There is no transfer limit: the backend sets none.
@@ -47,7 +52,7 @@ export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFie
   const { focused, onFocus, onBlur } = useFieldFocus();
   const formatOnBlur = () => {
     onBlur();
-    const amount = Number(value) || 0;
+    const amount = parseAmount(value);
     if (amount <= 0) return;
     const { whole, cents } = splitPesos(amount);
     onChangeText(`${whole}.${cents}`);

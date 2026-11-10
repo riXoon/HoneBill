@@ -1,6 +1,6 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
-import type { DispatchMethod } from '../types/send';
+import type { DispatchMethod, SendMode } from '../types/send';
 
 /** The four tabs behind the bottom navigation bar. */
 export type TabParamList = {
@@ -30,8 +30,8 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   QrScan: undefined;
   /** Send flow: To -> Amount -> Verification -> Method -> Receipt. */
-  SendTo: undefined;
-  SendAmount: { recipientId: string };
+  SendTo: { mode?: SendMode } | undefined;
+  SendAmount: { recipientId: string; mode?: SendMode };
   SendVerification: SendDraft;
   SendMethod: SendDraft;
   /**
@@ -51,4 +51,4 @@ export type RootStackParamList = {
 };
 
 /** What the Send steps carry forward. Ids and numbers only, so the params stay serializable. */
-export type SendDraft = { recipientId: string; amount: number; note: string };
+export type SendDraft = { recipientId: string; amount: number; note: string; mode?: SendMode };

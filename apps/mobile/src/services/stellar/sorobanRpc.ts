@@ -10,7 +10,8 @@ import { loadStellar } from '../wallet/signer';
  */
 
 const REQUEST_TIMEOUT_MS = 15_000;
-const POLL_INTERVAL_MS = 1_500;
+/** A ledger closes every ~5 s, so a tighter poll only trims the wait between the close and the app noticing it. */
+const POLL_INTERVAL_MS = 1_000;
 /** Soroban transactions close in ~5 s; past this the result is unknown, not failed. */
 const CONFIRM_TIMEOUT_MS = 45_000;
 

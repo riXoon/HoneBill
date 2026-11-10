@@ -8,7 +8,7 @@ import { formatPeso, formatWhole } from '../../utils/format';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
 import { InfoIcon } from '../ui/smallIcons';
 import { SwipeToEnter } from '../ui/SwipeToEnter';
-import { AmountField, amountProblem } from './AmountField';
+import { AmountField, amountProblem, parseAmount } from './AmountField';
 import { BalanceBar } from './BalanceBar';
 import { GlassCard } from './GlassCard';
 import { SendLayout } from './SendLayout';
@@ -40,7 +40,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
 
   const { balances } = useWalletData();
 
-  const amount = Number(amountText) || 0;
+  const amount = parseAmount(amountText);
   const available = balances ? balances[from] : null;
   // Without balances read from the server there is nothing to check an amount against.
   const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
@@ -67,6 +67,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
                   : 'Swipe to proceed, enter a valid amount first'
             }
             disabled={!valid || busy}
+            busy={busy}
             onComplete={() => onConfirm(amount)}
           />
         </View>
