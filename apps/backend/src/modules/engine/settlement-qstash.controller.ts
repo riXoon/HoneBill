@@ -23,6 +23,7 @@ import { SettlementsService } from '../settlements/settlements.util.js';
 import type { SettlementJobData } from '../settlements/settlement-queue.constants.js';
 import { SmsService } from '../sms/sms.service.js';
 import { SettlementJobRunner } from './settlement-job.runner.js';
+import { configValue } from './env-value.js';
 import { ENGINE_SETTLEMENT_JOB } from './settlement-queue.service.js';
 
 type RawBodyRequest = Request & { rawBody?: Buffer };
@@ -39,8 +40,8 @@ export class QStashSignatureGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RawBodyRequest>();
     const signature = request.header('upstash-signature');
     const body = request.rawBody?.toString('utf8');
-    const currentSigningKey = this.config.get<string>('QSTASH_CURRENT_SIGNING_KEY')?.trim();
-    const nextSigningKey = this.config.get<string>('QSTASH_NEXT_SIGNING_KEY')?.trim();
+    const currentSigningKey = configValue(this.config, 'QSTASH_CURRENT_SIGNING_KEY');
+    const nextSigningKey = configValue(this.config, 'QSTASH_NEXT_SIGNING_KEY');
     if (!signature || body === undefined || !currentSigningKey || !nextSigningKey) throw new UnauthorizedException();
 
     let valid = false;

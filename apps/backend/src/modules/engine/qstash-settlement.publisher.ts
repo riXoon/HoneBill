@@ -4,6 +4,7 @@ import { Client } from '@upstash/qstash';
 import { API_BASE_PATH } from '../../common/api-prefix.js';
 import type { SettlementJobData } from '../settlements/settlement-queue.constants.js';
 import { SettlementPublisher, settlementJobIdFor } from './settlement-publisher.js';
+import { configValue } from './env-value.js';
 
 /** The route QStash delivers each voucher to (settlement-qstash.controller.ts). */
 export const QSTASH_SETTLEMENT_PATH = `${API_BASE_PATH}/settlements/qstash`;
@@ -49,23 +50,24 @@ export class QStashSettlementPublisher extends SettlementPublisher {
   }
 
   private getClient(): Client {
-    const token = this.config.get<string>('QSTASH_TOKEN')?.trim();
+    const token = configValue(this.config, 'QSTASH_TOKEN');
     if (!token) throw new Error('QSTASH_TOKEN is not configured');
-    const baseUrl = this.config.get<string>('QSTASH_URL')?.trim();
+    const baseUrl = configValue(this.config, 'QSTASH_URL').replace(/\/+$/, '');
     this.client ??= new Client({ token, ...(baseUrl ? { baseUrl } : {}) });
     return this.client;
   }
 
   /** QSTASH_SETTLEMENT_URL when set, otherwise this backend's public URL plus the settlement route. */
   private callbackUrl(): string | null {
-    const explicit = this.config.get<string>('QSTASH_SETTLEMENT_URL')?.trim();
+    const explicit = configValue(this.config, 'QSTASH_SETTLEMENT_URL');
     if (explicit) return explicit;
-    const origin = this.config.get<string>('NEXT_PUBLIC_APP_URL')?.trim().replace(/\/+$/, '');
+    const origin = configValue(this.config, 'NEXT_PUBLIC_APP_URL').replace(/\/+$/, '');
     return origin ? `${origin}${QSTASH_SETTLEMENT_PATH}` : null;
   }
 
   private retries(): number {
-    const value = Number(this.config.get<string | number>('QSTASH_SETTLEMENT_RETRIES') ?? DEFAULT_RETRIES);
+    const raw = this.config.get<string | number>('QSTASH_SETTLEMENT_RETRIES');
+    const value = raw === undefined || raw === '' ? DEFAULT_RETRIES : Number(typeof raw === 'string' ? configValue(this.config, 'QSTASH_SETTLEMENT_RETRIES') : raw);
     return Number.isInteger(value) && value >= 0 ? value : DEFAULT_RETRIES;
   }
 }
