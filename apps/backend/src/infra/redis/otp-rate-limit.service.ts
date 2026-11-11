@@ -43,11 +43,17 @@ export class OtpRateLimitService {
     }
   }
 
+  /** Reads a positive integer limit from config, falling back when unset or invalid. */
+  private limit(key: string, fallback: number): number {
+    const parsed = Number(this.config.get(key));
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   async enforceSendLimits(ip: string, phone: string) {
-    const globalLimit = Number(this.config.get('OTP_GLOBAL_LIMIT_PER_HOUR') ?? 300);
+    const globalLimit = this.limit('OTP_GLOBAL_LIMIT_PER_HOUR', 300);
     const checks: Array<[string, number, number]> = [
-      [`honebill:api:otp:ratelimit:${ip}_${phone}`, 3, 5 * 60_000],
-      [`honebill:api:otp:phone:${phone}`, 5, 60 * 60_000],
+      [`honebill:api:otp:ratelimit:${ip}_${phone}`, this.limit('OTP_IP_PHONE_LIMIT_PER_5_MIN', 3), 5 * 60_000],
+      [`honebill:api:otp:phone:${phone}`, this.limit('OTP_PHONE_LIMIT_PER_HOUR', 5), 60 * 60_000],
       [`honebill:api:otp:global:all`, globalLimit, 60 * 60_000],
     ];
     for (const [key, limit, windowMs] of checks) {
