@@ -3,7 +3,7 @@ import { SettlementReconciliationService, buildNonceLedgerKey } from './reconcil
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { StellarService } from '../../infra/stellar/stellar.service.js';
 
-const CONTRACT_ID = 'CBYRV2FDGXHMKQILP3EWYI4ILKKQ2HW4NW4NJCFYQY6NEE7463ARLNUD';
+const CONTRACT_ID = 'CCLCYVBYAKKPDXZ3BSQHWO5FQE7IZIV4RYABDFVJQQIXV27FNOLTGOAW';
 
 function makeService() {
   const prisma = { settlement: { update: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({}) } };
