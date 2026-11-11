@@ -16,8 +16,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { WalletDataProvider } from './src/context/WalletDataContext';
+import { ConnectionRestoredNotice } from './src/components/ConnectionRestoredNotice';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
+import { syncService } from './src/services/sync/syncService';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
 import { LandingScreen } from './src/screens/LandingScreen';
@@ -95,6 +97,9 @@ export default function App() {
   });
   const ready = fontsLoaded || fontError != null;
 
+  // Syncs on reconnect, return to the foreground, an interval and pull-to-refresh, for the app's lifetime.
+  useEffect(() => syncService.start(), []);
+
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
@@ -108,6 +113,7 @@ export default function App() {
           <AuthProvider>
             <WalletDataProvider>
               <RootNavigator />
+              <ConnectionRestoredNotice />
             </WalletDataProvider>
             <StatusBar style="dark" />
           </AuthProvider>

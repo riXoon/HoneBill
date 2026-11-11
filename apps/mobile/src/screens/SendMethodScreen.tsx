@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Mascot, type MascotMood } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
 import { SMS_GATEWAY_NUMBER } from '../config/env';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,8 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   // second one: the contract settles a nonce once, so a repeat can never pay twice.
   const voucher = useRef<string | null>(null);
   const awaitingSend = useRef(false);
+  /** Shows the "Did you send the text?" dialog. */
+  const [confirmingSend, setConfirmingSend] = useState(false);
 
   const { addPendingOffline } = useWalletData();
 
@@ -61,18 +64,22 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       const recipient = findRecipientById(draft.recipientId);
       // The server lists this only after it has settled the text, which can be long after (the sender may have no
       // data). Showing it as pending now means the sender's History is not blank about a payment they just made.
-      addPendingOffline({
-        id: `pending:${nonce}`,
-        timestamp: issuedAt,
-        source: 'offline',
-        direction: 'out',
-        amount: draft.amount,
-        assetCode: 'PHPC',
-        description: `Sent to ${recipient?.name ?? 'recipient'}`,
-        status: 'pending',
-        ref: nonce,
-        nonce,
-      });
+      // The voucher is also queued, so the phone settles it over the internet once it is online.
+      addPendingOffline(
+        {
+          id: `pending:${nonce}`,
+          timestamp: issuedAt,
+          source: 'offline',
+          direction: 'out',
+          amount: draft.amount,
+          assetCode: 'PHPC',
+          description: `Sent to ${recipient?.name ?? 'recipient'}`,
+          status: 'pending',
+          ref: nonce,
+          nonce,
+        },
+        signed,
+      );
       navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt });
     },
     [navigation, draft, addPendingOffline],
@@ -83,14 +90,10 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || !awaitingSend.current || !voucher.current) return;
       awaitingSend.current = false;
-      const signed = voucher.current;
-      Alert.alert('Did you send the text?', 'Your payment is only made once the message has been sent.', [
-        { text: 'Not yet', style: 'cancel' },
-        { text: 'Yes, I sent it', onPress: () => finish(signed) },
-      ]);
+      setConfirmingSend(true);
     });
     return () => sub.remove();
-  }, [finish]);
+  }, []);
 
   const sendBySms = async () => {
     if (!activeAccount || building) return;
@@ -169,6 +172,19 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
           </Pressable>
         ))}
       </View>
+      <ConfirmDialog
+        visible={confirmingSend}
+        mood="phone"
+        title="Did you send the text?"
+        message="Your payment is only made once the message has been sent."
+        confirmLabel="Yes, I sent it"
+        cancelLabel="Not yet"
+        onConfirm={() => {
+          setConfirmingSend(false);
+          if (voucher.current) finish(voucher.current);
+        }}
+        onCancel={() => setConfirmingSend(false)}
+      />
     </SendLayout>
   );
 }

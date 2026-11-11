@@ -12,6 +12,7 @@ import { QuickActions, type QuickActionKey } from '../components/home/QuickActio
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
+import { ConnectivityNoticeDialog } from '../components/ui/ConnectivityNoticeDialog';
 import { EMPTY_TRANSACTIONS_MESSAGE } from '../components/ui/EmptyState';
 import { SpeechBubble } from '../components/ui/SpeechBubble';
 import { useLoadingMessage } from '../hooks/useLoadingMessage';
@@ -38,22 +39,42 @@ const QUICK_ACTION_ROUTE = {
   online: 'TransferOnline',
   offline: 'TransferOffline',
 } as const satisfies Partial<Record<QuickActionKey, keyof RootStackParamList>>;
+/** Actions that talk to the server or the chain. Offline Send (SMS voucher) and Receive (showing a QR) work without it. */
+const NEEDS_INTERNET: ReadonlySet<QuickActionKey> = new Set(['topup', 'online', 'offline']);
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeAccount } = useAuth();
-  const { balances, transactions, status, error, refresh } = useWalletData();
+  const { balances, transactions, status, error, refresh, syncNow } = useWalletData();
   useOfflineSetup();
   const connected = useIsOnline();
   // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
-  // Offline (the only view that can pay); getting it back leaves the choice to the user.
+  // Offline (the only view that can pay); getting it back leaves the choice to the user. While offline, the Online view
+  // and anything else that needs the internet is refused with a notice instead.
   const [mode, setMode] = useState<BalanceMode>('online');
+  const [offlineNotice, setOfflineNotice] = useState(false);
   useEffect(() => {
     if (!connected) setMode('offline');
+    // The notice is about the connection being gone; once it is back there is nothing left to explain.
+    else setOfflineNotice(false);
   }, [connected]);
   const online = mode === 'online';
-  const toggle = () => setMode((m) => (m === 'online' ? 'offline' : 'online'));
+  const toggle = () => {
+    if (mode === 'offline' && !connected) {
+      setOfflineNotice(true);
+      return;
+    }
+    setMode((m) => (m === 'online' ? 'offline' : 'online'));
+  };
+  const onQuickAction = (key: QuickActionKey) => {
+    if (NEEDS_INTERNET.has(key) && !connected) {
+      setOfflineNotice(true);
+      return;
+    }
+    if (key === 'send') navigation.navigate('SendTo', { mode });
+    else navigation.navigate(QUICK_ACTION_ROUTE[key]);
+  };
 
   // Pick up changes made since the last visit (a settled transfer, a top-up); skipped while the data is fresh.
   useFocusEffect(
@@ -87,7 +108,7 @@ export function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={status === 'loading'}
-            onRefresh={() => void refresh({ force: true })}
+            onRefresh={syncNow}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
@@ -110,9 +131,12 @@ export function HomeScreen() {
           <View style={styles.topText}>
             <Text style={styles.hello}>Hello, {fullName(activeAccount) || greetingName(activeAccount)}</Text>
             {activeAccount?.shortId ? <ShortIdBadge compact shortId={activeAccount.shortId} /> : null}
+            {/* The connection, not the selected card: viewing the Offline Balance while connected is still online. */}
             <View style={styles.statusRow}>
-              <View style={[styles.dot, { backgroundColor: online ? colors.statusOnline : colors.statusOffline }]} />
-              <Text style={styles.status}>{online ? 'You are online' : 'You are offline'}</Text>
+              <View style={[styles.dot, { backgroundColor: connected ? colors.statusOnline : colors.statusOffline }]} />
+              <Text style={styles.status} accessibilityLiveRegion="polite">
+                {connected ? 'You are online' : 'You are offline'}
+              </Text>
             </View>
           </View>
         </View>
@@ -130,7 +154,7 @@ export function HomeScreen() {
           </Text>
         ) : null}
 
-        <QuickActions online={online} onPress={(key) => (key === 'send' ? navigation.navigate('SendTo', { mode }) : navigation.navigate(QUICK_ACTION_ROUTE[key]))} />
+        <QuickActions online={online} onPress={onQuickAction} />
 
         <View style={styles.activity}>
           <Animated.View
@@ -181,6 +205,8 @@ export function HomeScreen() {
           </View>
         </Animated.View>
       ) : null}
+
+      <ConnectivityNoticeDialog notice={offlineNotice ? 'offline' : null} onDismiss={() => setOfflineNotice(false)} />
     </View>
   );
 }

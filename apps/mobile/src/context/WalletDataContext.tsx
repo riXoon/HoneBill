@@ -1,7 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useIsOnline } from '../hooks/useIsOnline';
 import { errorMessage, isAborted } from '../services/api/client';
+import { getConnectivity } from '../services/connectivity';
+import { reportError } from '../services/errorReporting';
+import { syncService } from '../services/sync/syncService';
+import { drainVouchers, enqueueVoucher } from '../services/sync/voucherOutbox';
 import { getHistory, getVaultBalance } from '../services/api/wallet';
 import { toTransactions } from '../services/transactionMapper';
 import {
@@ -39,10 +42,15 @@ type WalletData = {
   error: string | null;
   /** Unix ms of the last read from the server, or of the saved copy being shown. `null` when there is neither. */
   syncedAt: number | null;
-  /** Skips the request when the data is fresh, unless `force` is set (pull-to-refresh). */
+  /** Skips the request when the data is fresh, unless `force` is set. */
   refresh: (options?: { force?: boolean }) => Promise<void>;
-  /** Lists an offline payment sent from this phone right away, before the server has settled it. */
-  addPendingOffline: (payment: PendingOffline) => void;
+  /** Pull-to-refresh: a full sync (queued work first, then fresh data). */
+  syncNow: () => void;
+  /**
+   * Records an offline payment the user says they texted: lists it as pending right away, and queues its voucher so
+   * it also settles over the internet whenever the phone is online.
+   */
+  addPendingOffline: (payment: PendingOffline, voucher: string) => void;
   /** Lists a move between the user's own wallets right away, until the server's history has it. */
   addMoves: (entries: Transaction[]) => void;
 };
@@ -53,11 +61,14 @@ const FRESH_MS = 15_000;
 const HISTORY_LIMIT = 50;
 /** Enough for months of use, and small enough to keep the saved copy tiny. */
 const MAX_MOVES = 100;
+/** The wallet read runs last in a sync, after steps that change what it returns (e.g. sending queued payments). */
+const SYNC_ORDER_WALLET = 100;
+const SYNC_ORDER_VOUCHERS = 10;
+const syncNow = () => syncService.requestSync();
 const OFFLINE_MESSAGE = "You're offline. Connect to the internet to load your transactions.";
 
 export function WalletDataProvider({ children }: { children: React.ReactNode }) {
   const { activeAccount } = useAuth();
-  const online = useIsOnline();
   const [balances, setBalances] = useState<Balances | null>(null);
   const [serverTransactions, setServerTransactions] = useState<Transaction[]>([]);
   const [pending, setPending] = useState<PendingOffline[]>([]);
@@ -73,8 +84,6 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const pendingRef = useRef<PendingOffline[]>([]);
   const movesRef = useRef<Transaction[]>([]);
   const hasData = useRef(false);
-  const onlineRef = useRef(online);
-  const wasOnline = useRef(online);
 
   const shortId = activeAccount?.shortId ?? null;
   const publicKey = activeAccount?.stellarPublicKey ?? null;
@@ -86,7 +95,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
       // No connection: do not start a request that can only fail. A saved copy stays on screen as it is; with
       // nothing saved, say why the list is empty.
-      if (!onlineRef.current) {
+      if (!getConnectivity().online) {
         if (!hasData.current) {
           setError(OFFLINE_MESSAGE);
           setStatus('error');
@@ -210,14 +219,42 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     };
   }, [shortId, publicKey, refresh]);
 
-  // Coming back online reads fresh data without the user pulling to refresh.
+  // The sync service decides when to read fresh data (reconnect, back on screen, interval, pull-to-refresh). After a
+  // reconnect or a pull the data is re-read even if recent; the others skip it while it is still fresh.
   useEffect(() => {
-    onlineRef.current = online;
-    if (online && !wasOnline.current && shortId && publicKey) void refresh({ force: true });
-    wasOnline.current = online;
-  }, [online, shortId, publicKey, refresh]);
+    if (!shortId || !publicKey) return;
+    return syncService.registerStep(
+      'wallet',
+      ({ trigger }) => refresh({ force: trigger === 'reconnect' || trigger === 'manual' }),
+      SYNC_ORDER_WALLET,
+    );
+  }, [shortId, publicKey, refresh]);
 
-  // Signing out (or switching accounts) removes what this phone kept for the account that was there.
+  // Each sync first settles this wallet's queued offline vouchers over the internet, so the history read after it
+  // already lists them. A voucher the server says can never settle is marked failed here; everything else (settled,
+  // failed on-chain) is shown from the server's history, which reflects the chain.
+  useEffect(() => {
+    if (!publicKey) return;
+    return syncService.registerStep(
+      'vouchers',
+      async ({ signal }) => {
+        if (!getConnectivity().online) return;
+        const { rejectedNonces } = await drainVouchers(publicKey, signal);
+        if (rejectedNonces.length === 0) return;
+        const rejected = new Set(rejectedNonces.map(normalizeNonce));
+        const next = pendingRef.current.map((p) =>
+          rejected.has(normalizeNonce(p.nonce)) ? { ...p, status: 'failed' as const } : p,
+        );
+        pendingRef.current = next;
+        setPending(next);
+        void savePending(publicKey, next);
+      },
+      SYNC_ORDER_VOUCHERS,
+    );
+  }, [publicKey]);
+
+  // Signing out (or switching accounts) removes what this phone kept for the account that was there. Queued vouchers
+  // are kept: that money is committed, and they settle the next time this wallet signs in here.
   const previousKey = useRef<string | null>(null);
   useEffect(() => {
     if (previousKey.current && previousKey.current !== publicKey) void clearWalletCache(previousKey.current);
@@ -225,9 +262,17 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   }, [publicKey]);
 
   const addPendingOffline = useCallback(
-    (payment: PendingOffline) => {
+    (payment: PendingOffline, voucher: string) => {
       if (!publicKey) return;
       const nonce = normalizeNonce(payment.nonce);
+      try {
+        enqueueVoucher(publicKey, voucher, payment.nonce);
+        // Settle now if there is a connection; the text to the gateway is still on its way as the other path.
+        syncService.requestSync();
+      } catch (error) {
+        // The text to the gateway still settles it; only the internet path is lost.
+        reportError(error, { step: 'enqueueVoucher' });
+      }
       if (pendingRef.current.some((p) => normalizeNonce(p.nonce) === nonce)) return;
       const next = [payment, ...pendingRef.current];
       pendingRef.current = next;
@@ -263,7 +308,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   }, [serverTransactions, pending, moves]);
 
   const value = useMemo<WalletData>(
-    () => ({ balances, transactions, status, error, syncedAt, refresh, addPendingOffline, addMoves }),
+    () => ({ balances, transactions, status, error, syncedAt, refresh, syncNow, addPendingOffline, addMoves }),
     [balances, transactions, status, error, syncedAt, refresh, addPendingOffline, addMoves],
   );
 

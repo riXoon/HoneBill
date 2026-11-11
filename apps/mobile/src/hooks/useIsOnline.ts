@@ -1,11 +1,13 @@
-import { useNetInfo } from '@react-native-community/netinfo';
+import { useSyncExternalStore } from 'react';
+
+import { getConnectivity, subscribeConnectivity } from '../services/connectivity';
+
+const getOnline = () => getConnectivity().online;
 
 /**
- * Whether the phone can reach the internet right now. `isInternetReachable` is `null` while NetInfo is still
- * probing; that counts as online so a brief unknown does not push a connected user into the offline flow, and a
- * request that then fails reports its own error. An explicit `false` from either field means offline.
+ * Whether the phone can reach the internet right now, read from the app-wide connectivity observable
+ * (`services/connectivity.ts`). Unknown (NetInfo still probing) counts as online.
  */
 export function useIsOnline(): boolean {
-  const { isConnected, isInternetReachable } = useNetInfo();
-  return isConnected !== false && isInternetReachable !== false;
+  return useSyncExternalStore(subscribeConnectivity, getOnline);
 }

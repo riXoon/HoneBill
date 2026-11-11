@@ -40,7 +40,7 @@ export function TransactionsScreen() {
   const [filter, setFilter] = useState<TransactionFilter>('All');
   const slide = useFilterSlide(TRANSACTION_FILTERS.indexOf(filter));
   const { activeAccount } = useAuth();
-  const { transactions, status, error, syncedAt, refresh } = useWalletData();
+  const { transactions, status, error, syncedAt, refresh, syncNow } = useWalletData();
   const online = useIsOnline();
   // The list is a saved copy when there is no connection (or the last refresh failed): say how old it is.
   const showingSaved = syncedAt !== null && (!online || status === 'error');
@@ -91,7 +91,7 @@ export function TransactionsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={status === 'loading'}
-            onRefresh={() => void refresh({ force: true })}
+            onRefresh={syncNow}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
