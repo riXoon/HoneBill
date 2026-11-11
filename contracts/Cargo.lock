@@ -689,6 +689,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "honebill-contract"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rand",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -887,15 +896,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pijin-contract"
-version = "0.1.0"
-dependencies = [
- "ed25519-dalek",
- "rand",
- "soroban-sdk",
-]
 
 [[package]]
 name = "pin-project-lite"
