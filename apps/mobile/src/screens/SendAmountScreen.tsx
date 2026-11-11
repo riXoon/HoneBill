@@ -15,6 +15,7 @@ import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
 import { useWalletData } from '../context/WalletDataContext';
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { useRecentRecipients } from '../hooks/useRecentRecipients';
 import { useSendMode } from '../hooks/useSendMode';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatWhole } from '../utils/format';
@@ -28,10 +29,11 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   const recipient = findRecipientById(route.params.recipientId);
   const { balances } = useWalletData();
   const online = useSendMode(route.params.mode) === 'online';
-  const [amountText, setAmountText] = useState('');
+  const [amountText, setAmountText] = useState(route.params.amount ? route.params.amount.toFixed(2) : '');
   const [note, setNote] = useState('');
   const noteFocus = useFieldFocus();
-  const [favorite, setFavorite] = useState(recipient?.favorite ?? false);
+  const { isFavorite, toggleFavorite } = useRecentRecipients();
+  const favorite = recipient ? isFavorite(recipient.id) : false;
 
   useEffect(() => {
     if (!recipient) navigation.goBack();
@@ -86,7 +88,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
             accessibilityLabel={favorite ? `Remove ${recipient.name} from favorites` : `Add ${recipient.name} to favorites`}
             accessibilityState={{ selected: favorite }}
             hitSlop={6}
-            onPress={() => setFavorite((f) => !f)}
+            onPress={() => void toggleFavorite(recipient)}
             style={styles.star}
           >
             <StarIcon filled={favorite} />

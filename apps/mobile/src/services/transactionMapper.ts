@@ -27,6 +27,7 @@ export function toTransaction(item: HistoryItem): Transaction | null {
     status: statusOf(item.status),
     ref: item.txHash ?? item.nonce ?? item.id,
     ...(item.nonce ? { nonce: item.nonce } : {}),
+    ...(item.counterpartyShortId ? { counterpartyShortId: item.counterpartyShortId } : {}),
     ...(item.mirror ? { mirror: true } : {}),
   };
 }

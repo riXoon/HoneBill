@@ -149,7 +149,7 @@ export function ProfileScreen() {
               <Text style={styles.phone}>{activeAccount?.phone ? formatPhoneDisplay(activeAccount.phone) : ''}</Text>
               <View style={styles.walletIdBox}>
                 <Text style={styles.walletId}>
-                  <Text style={styles.walletIdLabel}>Wallet ID</Text>: {activeAccount?.shortId ?? ''}
+                  <Text style={styles.walletIdLabel}>Short ID</Text>: {activeAccount?.shortId ?? ''}
                 </Text>
               </View>
             </View>

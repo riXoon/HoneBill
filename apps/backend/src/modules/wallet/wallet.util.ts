@@ -157,6 +157,7 @@ export class WalletService {
         : [];
 
       const byShortId = new Map(accounts.map((item: any) => [item.shortId, item.firstName || item.shortId]));
+      const shortIdByPublicKey = new Map(accounts.map((item: any) => [item.stellarPublicKey, item.shortId as string]));
       const byPublicKey = new Map(accounts.map((item: any) => [item.stellarPublicKey, item.firstName || `${item.stellarPublicKey.slice(0, 6)}...${item.stellarPublicKey.slice(-4)}`]));
 
       const settlementItems = settlements.map((item: any) => {
@@ -167,6 +168,8 @@ export class WalletService {
           type: sender ? 'SEND' : 'RECEIVE',
           tag: 'OFFLINE',
           title: sender ? `Sent to ${byShortId.get(item.receiverShortId) ?? item.receiverShortId}` : `Received from ${byShortId.get(item.senderShortId) ?? item.senderShortId}`,
+          // The other party's short ID, so the app can offer a past recipient again under "Recent".
+          counterpartyShortId: sender ? item.receiverShortId : item.senderShortId,
           amount: sender ? `-${amount}` : amount,
           assetCode: item.token?.symbol ?? 'PHPC',
           status: item.status,
@@ -201,6 +204,10 @@ export class WalletService {
           title: sender
             ? `Sent to ${byPublicKey.get(item.recipientPublicKey) ?? (item.recipientPublicKey ? `${item.recipientPublicKey.slice(0, 6)}...${item.recipientPublicKey.slice(-4)}` : '')}`
             : `Received from ${byPublicKey.get(item.senderPublicKey) ?? (item.senderPublicKey ? `${item.senderPublicKey.slice(0, 6)}...${item.senderPublicKey.slice(-4)}` : '')}`,
+          // Only when the other wallet belongs to a HoneBill account; a bare wallet address has no short ID.
+          ...(shortIdByPublicKey.get(sender ? item.recipientPublicKey : item.senderPublicKey)
+            ? { counterpartyShortId: shortIdByPublicKey.get(sender ? item.recipientPublicKey : item.senderPublicKey) }
+            : {}),
           amount: sender ? `-${amount}` : amount,
           assetCode: item.token?.symbol ?? 'UNKNOWN',
           status: item.status,

@@ -20,6 +20,8 @@ export type Transaction = {
   ref: string;
   /** The offline voucher's nonce when the server sent one; it matches a payment sent from this phone to its record. */
   nonce?: string;
+  /** The other party's short ID on a payment between HoneBill accounts. */
+  counterpartyShortId?: string;
   /** The credit side of a move between the user's own wallets. History's "All" list shows the move once, by its debit side. */
   mirror?: boolean;
 };

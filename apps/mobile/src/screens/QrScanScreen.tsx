@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,16 +19,24 @@ import {
 import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { errorMessage, isAborted } from '../services/api/client';
-import { parseRecipientQr, resolveRecipient } from '../services/recipientDirectory';
+import { parseRecipientQr, parseRecipientQrAmount, resolveRecipient } from '../services/recipientDirectory';
+import { useSendMode } from '../hooks/useSendMode';
+import type { SendMode } from '../types/send';
 import { colors, fonts } from '../theme';
 
 // Figma: QR Scan (870:3349), 402x874.
-export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'QrScan'>) {
+export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'QrScan'>) {
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const { activeAccount } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const handled = useRef(false);
+  // Online spends the online wallet and settles now; Offline spends the vault and makes a voucher. Opened from Send it
+  // is fixed by that choice; from the tab bar it follows the connection, and the pill lets the user switch.
+  const initialMode = useSendMode(route.params?.mode);
+  const [chosenMode, setChosenMode] = useState<SendMode | null>(null);
+  const mode: SendMode = chosenMode ?? initialMode;
+  const [uploading, setUploading] = useState(false);
 
   const granted = permission?.granted === true;
   const blocked = permission != null && !permission.granted && !permission.canAskAgain;
@@ -42,8 +51,9 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
   const [checking, setChecking] = useState(false);
   useEffect(() => () => lookup.current?.abort(), []);
 
-  const onScanned = useCallback(
-    async ({ data }: { data: string }) => {
+  /** Handles the text of a QR code, whether it came from the camera or from an uploaded image. */
+  const handleCode = useCallback(
+    async (data: string) => {
       if (handled.current) return;
       handled.current = true;
       const release = () => (handled.current = false);
@@ -68,7 +78,8 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
       try {
         const recipient = await resolveRecipient(shortId, controller.signal);
         if (recipient) {
-          navigation.navigate('SendAmount', { recipientId: recipient.id });
+          const amount = parseRecipientQrAmount(data);
+          navigation.navigate('SendAmount', amount ? { recipientId: recipient.id, mode, amount } : { recipientId: recipient.id, mode });
           // Stay locked so the camera cannot re-fire; coming back to this screen is a fresh scan.
           setTimeout(release, 1500);
           return;
@@ -83,8 +94,31 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
         setChecking(false);
       }
     },
-    [activeAccount?.shortId, navigation],
+    [activeAccount?.shortId, navigation, mode],
   );
+
+  const onScanned = useCallback(({ data }: { data: string }) => void handleCode(data), [handleCode]);
+
+  // A saved QR card (from a gallery) for someone who is not in front of the sender.
+  const uploadFromGallery = async () => {
+    if (uploading || handled.current) return;
+    setUploading(true);
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (picked.canceled || !picked.assets[0]) return;
+      const results = await Camera.scanFromURLAsync(picked.assets[0].uri, ['qr']);
+      const code = results.find((r) => parseRecipientQr(r.data))?.data ?? results[0]?.data;
+      if (!code) {
+        Alert.alert('No QR code found', 'We could not find a QR code in that image. Pick a clear, uncropped QR card.');
+        return;
+      }
+      await handleCode(code);
+    } catch {
+      Alert.alert('Could not read the image', 'Something went wrong while reading the QR code. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -116,10 +150,15 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
         </View>
 
         <View style={styles.modeRow}>
-          <View style={styles.modePill}>
-            <View style={styles.modeDot} />
-            <Text style={styles.modeText}>Send via offline</Text>
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sending ${mode}. Tap to switch to ${mode === 'online' ? 'offline' : 'online'}`}
+            onPress={() => setChosenMode(mode === 'online' ? 'offline' : 'online')}
+            style={styles.modePill}
+          >
+            <View style={[styles.modeDot, { backgroundColor: mode === 'online' ? colors.statusOnline : colors.statusOffline }]} />
+            <Text style={styles.modeText}>{mode === 'online' ? 'Send via online' : 'Send via offline'}</Text>
+          </Pressable>
         </View>
 
         <View style={styles.details}>
@@ -151,23 +190,29 @@ export function QrScanScreen({ navigation }: NativeStackScreenProps<RootStackPar
           >
             <InfoIcon />
             <Text style={styles.hintText}>
-              {checking
+              {checking || uploading
                 ? 'Checking the code…'
                 : blocked
                   ? 'Camera access is off. Tap to open Settings.'
-                  : 'Point your camera at the QR code to scan.'}
+                  : 'Point your camera at the QR code, or upload a saved one.'}
             </Text>
           </Pressable>
 
           <View style={styles.actions}>
-            {/* A code needs an amount first, so this opens Receive 1, which leads on to Receive 2 - My QR. */}
-            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('ReceiveAmount')} style={styles.generate}>
+            {/* Opens My QR with the Short ID straight away; an amount can be added from there. */}
+            <Pressable accessibilityRole="button" onPress={() => navigation.navigate('ReceiveQr')} style={styles.generate}>
               <GenerateQrIcon />
               <Text style={styles.generateText}>Generate QR</Text>
             </Pressable>
-            {/* Picking a QR from the gallery needs an image picker plus a decoder; not wired yet. */}
-            <Pressable accessibilityRole="button" accessibilityLabel="Upload QR from gallery" style={styles.gallery}>
-              <GalleryIcon />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Upload QR from gallery"
+              accessibilityState={{ disabled: uploading, busy: uploading }}
+              onPress={() => void uploadFromGallery()}
+              style={[styles.generate, uploading && { opacity: 0.5 }]}
+            >
+              <GalleryIcon color={colors.primary} size={24} />
+              <Text style={styles.generateText}>{uploading ? 'Reading…' : 'Upload QR'}</Text>
             </Pressable>
           </View>
         </View>
@@ -228,7 +273,7 @@ const styles = StyleSheet.create({
   orb: { position: 'absolute', top: -SCAN_ORB_SIZE / 2, left: 0, right: 0, alignItems: 'center' },
   hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 10 },
   hintText: { fontFamily: fonts.medium, fontSize: 10, color: 'rgba(34, 32, 33, 0.2)' },
-  actions: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', gap: 20 },
+  actions: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', gap: 12 },
   generate: {
     flex: 1,
     flexDirection: 'row',
@@ -246,5 +291,4 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   generateText: { fontFamily: fonts.regular, fontSize: 15, color: colors.primary, textAlign: 'center' },
-  gallery: { width: 65, alignItems: 'center', justifyContent: 'center' },
 });

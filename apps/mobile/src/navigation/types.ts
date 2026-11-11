@@ -28,10 +28,12 @@ export type RootStackParamList = {
   RecoveryQuiz: undefined;
   AccountConfirmation: undefined;
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
-  QrScan: undefined;
+  /** `mode` is the wallet the payment will spend (set when opened from Send); without it the scan screen starts from the connection. */
+  QrScan: { mode?: SendMode } | undefined;
   /** Send flow: To -> Amount -> Verification -> Method -> Receipt. */
   SendTo: { mode?: SendMode } | undefined;
-  SendAmount: { recipientId: string; mode?: SendMode };
+  /** `amount` pre-fills the field when a scanned payment-request QR carried one. */
+  SendAmount: { recipientId: string; mode?: SendMode; amount?: number };
   SendVerification: SendDraft;
   SendMethod: SendDraft;
   /**
@@ -39,9 +41,10 @@ export type RootStackParamList = {
    * `online` is a transfer already settled on the ledger; `sms` and `relay` are offline vouchers still to dispatch.
    */
   SendReceipt: SendDraft & { method: DispatchMethod | 'online'; reference: string; issuedAt: number };
-  /** Receive flow: amount -> offline relay voucher QR. */
+  /** Receive flow: My QR (Short ID only) -> optionally enter an amount -> My QR with that amount. */
   ReceiveAmount: undefined;
-  ReceiveQr: { amount: number };
+  /** No `amount` = a QR with only the short ID, which fills the ID in for the sender. */
+  ReceiveQr: { amount?: number } | undefined;
   TransactionDetail: { id: string };
   /** Adds PHPC to the online wallet through the anchor's deposit. */
   TopUp: undefined;
