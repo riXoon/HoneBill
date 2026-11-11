@@ -43,14 +43,26 @@ export async function resolveRecipient(shortId: string, signal?: AbortSignal): P
   return recipient;
 }
 
+/** Makes a recipient loaded from the device's saved lists findable by the Send steps. */
+export function rememberRecipient(recipient: Recipient): void {
+  resolved.set(recipient.id, recipient);
+}
+
 /** A recipient resolved this session. */
 export function findRecipientById(id: string): Recipient | undefined {
   return resolved.get(id);
 }
 
-/** Pulls the short ID out of a scanned HoneBill QR (`honebill://relay-voucher?id=XXXXXX&amount=...`). */
+/** Pulls the short ID out of a scanned HoneBill QR (`honebill://pay?id=XXXXXX[&amount=...]`). */
 export function parseRecipientQr(data: string): string | null {
   if (!data.startsWith('honebill://')) return null;
   const match = /[?&]id=([0-9A-Za-z]{6})(?:&|$)/.exec(data);
   return match ? match[1] : null;
+}
+
+/** The amount a scanned HoneBill QR asks for, or null when it carries none (or a nonsensical one). */
+export function parseRecipientQrAmount(data: string): number | null {
+  const match = /[?&]amount=(\d{1,9}(?:\.\d{1,2})?)(?:&|$)/.exec(data);
+  const amount = match ? Number(match[1]) : 0;
+  return amount > 0 ? amount : null;
 }

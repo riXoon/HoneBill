@@ -54,6 +54,12 @@
           ]
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to your photos to read a saved HoneBill QR code."
+        }
+      ],
       "expo-secure-store",
       "expo-sqlite",
       "expo-image",

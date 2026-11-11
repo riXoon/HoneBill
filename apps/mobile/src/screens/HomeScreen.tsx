@@ -17,6 +17,7 @@ import { SpeechBubble } from '../components/ui/SpeechBubble';
 import { useLoadingMessage } from '../hooks/useLoadingMessage';
 import { useOfflineSetup } from '../hooks/useOfflineSetup';
 import { ProfileIcon } from '../components/ui/navIcons';
+import { ShortIdBadge } from '../components/send/ShortIdBadge';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
@@ -32,7 +33,7 @@ const RECENT_COUNT = 3;
 const FADE_MS = 250;
 const QUICK_ACTION_ROUTE = {
   send: 'SendTo',
-  receive: 'ReceiveAmount',
+  receive: 'ReceiveQr',
   topup: 'TopUp',
   online: 'TransferOnline',
   offline: 'TransferOffline',
@@ -108,6 +109,7 @@ export function HomeScreen() {
           <ProfileIcon color={colors.coral} size={48} />
           <View style={styles.topText}>
             <Text style={styles.hello}>Hello, {fullName(activeAccount) || greetingName(activeAccount)}</Text>
+            {activeAccount?.shortId ? <ShortIdBadge compact shortId={activeAccount.shortId} /> : null}
             <View style={styles.statusRow}>
               <View style={[styles.dot, { backgroundColor: online ? colors.statusOnline : colors.statusOffline }]} />
               <Text style={styles.status}>{online ? 'You are online' : 'You are offline'}</Text>

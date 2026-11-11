@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { BackHandler, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,7 +11,9 @@ import { DownloadIcon, ReceiptIcon } from '../components/ui/smallIcons';
 import { Button } from '../components/ui/Button';
 import { formatPeso, formatReceiptDate, shortRef } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
+import { useAuth } from '../context/AuthContext';
 import { findRecipientById } from '../services/recipientDirectory';
+import { addRecentRecipient } from '../services/recipientStore';
 import { colors, fonts } from '../theme';
 
 // Figma: Reciept (870:2835), 402x874.
@@ -30,6 +32,12 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendReceipt'>) {
   const { recipientId, amount, reference, issuedAt, method } = route.params;
   const recipient = findRecipientById(recipientId);
+  const { activeAccount } = useAuth();
+
+  // A finished payment makes the recipient "Recent" on the Send screen.
+  useEffect(() => {
+    if (recipient && activeAccount?.shortId) void addRecentRecipient(activeAccount.shortId, recipient);
+  }, [recipient, activeAccount?.shortId]);
 
   // The receipt ends the flow: Back (button or hardware) goes home instead of back into the finished steps.
   const goHome = useCallback(() => navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }), [navigation]);

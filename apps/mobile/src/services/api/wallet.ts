@@ -21,6 +21,8 @@ export type HistoryItem = {
   timestamp: string;
   txHash?: string;
   nonce?: string;
+  /** The other party's short ID on a payment between HoneBill accounts: who was paid, or who paid. */
+  counterpartyShortId?: string;
   /** The credit side of a move between the user's own wallets (the combined list leaves it out). */
   mirror?: boolean;
 };

@@ -101,6 +101,17 @@ describe('WalletService', () => {
     });
   });
 
+  it('names the other party short ID on offline payments', async () => {
+    const { service, prisma } = makeService();
+    prisma.settlement.findMany.mockResolvedValue([
+      { id: 's1', senderShortId: 'abc123', receiverShortId: 'zzz999', amountStroops: 10_000_000n, status: 'SETTLED', createdAt: new Date('2026-11-10T03:00:00.000Z'), token: { symbol: 'PHPC', decimals: 7 } },
+      { id: 's2', senderShortId: 'qqq111', receiverShortId: 'abc123', amountStroops: 20_000_000n, status: 'SETTLED', createdAt: new Date('2026-11-10T04:00:00.000Z'), token: { symbol: 'PHPC', decimals: 7 } },
+    ]);
+    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    expect(transactions.find((t) => t.id === 's1')).toMatchObject({ type: 'SEND', counterpartyShortId: 'zzz999' });
+    expect(transactions.find((t) => t.id === 's2')).toMatchObject({ type: 'RECEIVE', counterpartyShortId: 'qqq111' });
+  });
+
   it('swaps the wallets for a move from offline to online', async () => {
     const { service, prisma } = makeService();
     prisma.walletMove.findMany.mockResolvedValue([

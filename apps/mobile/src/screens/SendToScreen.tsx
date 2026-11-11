@@ -6,6 +6,7 @@ import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { RecipientCard } from '../components/send/RecipientCard';
 import { SendLayout } from '../components/send/SendLayout';
+import { ComingSoonDialog } from '../components/ui/ComingSoonDialog';
 import { useFieldFocus } from '../components/ui/fieldState';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
 import { AddBoxIcon, BankIcon, ContactCardIcon, MoneyOutIcon, QrTitleIcon } from '../components/ui/smallIcons';
@@ -34,13 +35,14 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
   const lookup = useRef<AbortController | null>(null);
 
   useEffect(() => () => lookup.current?.abort(), []);
-  const [method, setMethod] = useState<SendMethodKey>('gcash');
+  const [method, setMethod] = useState<SendMethodKey>('honebill');
+  /** The rail the user tapped that is not open yet, shown in the notice dialog. */
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('Recent');
-  const { recents, favoriteIds } = useRecentRecipients();
-  const [favorites, setFavorites] = useState<Set<string>>(() => new Set(favoriteIds));
+  const { recents, favorites, isFavorite, toggleFavorite } = useRecentRecipients();
   const slide = useFilterSlide(TABS.indexOf(tab));
 
-  const recipients = tab === 'Recent' ? recents : recents.filter((r) => favorites.has(r.id));
+  const recipients = tab === 'Recent' ? recents : favorites;
 
   const goToAmount = (recipient: Recipient) => {
     Keyboard.dismiss();
@@ -82,13 +84,6 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
     // The short ID has a fixed length, so resolve it as soon as it is complete.
     if (next.length === SHORT_ID_LENGTH) void lookupRecipient(next);
   };
-
-  const toggleFavorite = (recipient: Recipient) =>
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(recipient.id)) next.add(recipient.id);
-      return next;
-    });
 
   return (
     <SendLayout title="Send" icon={<MoneyOutIcon />} onBack={navigation.goBack}>
@@ -141,7 +136,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
                 key={m.key}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
-                onPress={() => setMethod(m.key)}
+                onPress={() => (m.available ? setMethod(m.key) : setUnavailable(m.label))}
                 style={[styles.methodRow, selected && styles.methodRowSelected]}
               >
                 <View style={[styles.methodDot, { backgroundColor: m.color }]}>
@@ -157,7 +152,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
             );
           })}
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Scan QR" onPress={() => navigation.navigate('QrScan')} style={styles.methodRow}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Scan QR" onPress={() => navigation.navigate('QrScan', { mode: route.params?.mode })} style={styles.methodRow}>
             <View style={styles.scanIcon}>
               <QrTitleIcon color={colors.textMuted} />
             </View>
@@ -204,9 +199,9 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
                 <SlideRow key={r.id}>
                   <RecipientCard
                     recipient={r}
-                    favorite={favorites.has(r.id)}
+                    favorite={isFavorite(r.id)}
                     onPress={goToAmount}
-                    onToggleFavorite={toggleFavorite}
+                    onToggleFavorite={(r) => void toggleFavorite(r)}
                   />
                 </SlideRow>
               ))
@@ -214,6 +209,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
           </FilterSlideProvider>
         </ScrollView>
       </View>
+      <ComingSoonDialog feature={unavailable} onDismiss={() => setUnavailable(null)} />
     </SendLayout>
   );
 }
