@@ -1,8 +1,13 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
+
+/** The design's key rows are 80 dp on an 874 dp screen; a shorter phone gets shorter rows (never under 52 dp, a comfortable tap). */
+export function keypadRowHeight(windowHeight: number): number {
+  return Math.round(Math.max(52, Math.min(80, (80 * windowHeight) / 874)));
+}
 
 type KeypadProps = {
   onDigit: (digit: string) => void;
@@ -67,16 +72,17 @@ function Key({ label, onPress, children }: KeyProps) {
 
 /** Numeric MPIN keypad (Figma Numbers, 870:3073): 4 rows of 80 dp, three equal columns, full width. */
 export const Keypad = memo(function Keypad({ onDigit, onDelete, onBiometric }: KeypadProps) {
+  const rowStyle = { height: keypadRowHeight(useWindowDimensions().height) };
   return (
     <View style={styles.pad}>
       {ROWS.map((row) => (
-        <View key={row[0]} style={styles.row}>
+        <View key={row[0]} style={[styles.row, rowStyle]}>
           {row.map((d) => (
             <Key key={d} label={d} onPress={() => onDigit(d)} />
           ))}
         </View>
       ))}
-      <View style={styles.row}>
+      <View style={[styles.row, rowStyle]}>
         {onBiometric ? (
           <Key label="Sign in with fingerprint" onPress={onBiometric}>
             <FingerprintIcon />
@@ -95,7 +101,7 @@ export const Keypad = memo(function Keypad({ onDigit, onDelete, onBiometric }: K
 
 const styles = StyleSheet.create({
   pad: { width: '100%' },
-  row: { height: 80, flexDirection: 'row' },
+  row: { flexDirection: 'row' },
   cell: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.4 },
   digit: { fontFamily: fonts.light, fontSize: 22, color: colors.text },

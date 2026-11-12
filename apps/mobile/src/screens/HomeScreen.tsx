@@ -24,6 +24,7 @@ import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
+import { useScale } from '../theme/responsive';
 import { SOURCE_LABEL } from '../types/transaction';
 import { formatAmount, formatRelative } from '../utils/format';
 
@@ -106,7 +107,10 @@ export function HomeScreen() {
   const { height: windowHeight } = useWindowDimensions();
   const [activityY, setActivityY] = useState(0);
   const contentPaddingBottom = NAV_BAR_HEIGHT + Math.max(24, insets.bottom) + 20;
-  const restTop = windowHeight - (98.5 + Math.max(0, insets.bottom - 24)) - HONI_BOX_HEIGHT;
+  // Honi (and so his box and the bubble's anchor) shrinks on a smaller phone.
+  const scale = useScale();
+  const honiBoxHeight = HONI_BOX_HEIGHT * scale;
+  const restTop = windowHeight - (98.5 + Math.max(0, insets.bottom - 24)) - honiBoxHeight;
   const honiTop = Math.max(restTop, activityY + ACTIVITY_TITLE_HEIGHT + BUBBLE_CLEARANCE);
 
   return (
@@ -119,7 +123,7 @@ export function HomeScreen() {
           {
             paddingTop: Math.max(70, insets.top + 24),
             paddingBottom: contentPaddingBottom,
-            minHeight: showRestHoni ? honiTop + HONI_BOX_HEIGHT + contentPaddingBottom : undefined,
+            minHeight: showRestHoni ? honiTop + honiBoxHeight + contentPaddingBottom : undefined,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -132,8 +136,8 @@ export function HomeScreen() {
           />
         }
       >
-        {/* Online: Honi peeks in from the top right, tilted -20.87 degrees, behind the cards. */}
-        {online && !showRestHoni ? (
+        {/* Once the current view has activity (Online or Offline), Honi peeks in from the top right, tilted -20.87 degrees, behind the cards. */}
+        {!showRestHoni ? (
           <Animated.View
             entering={FadeIn.duration(FADE_MS)}
             exiting={FadeOut.duration(FADE_MS)}
@@ -218,7 +222,7 @@ export function HomeScreen() {
           >
             <Mascot mood="idlePlain" />
             {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
-            <View style={styles.honiBubble}>
+            <View style={[styles.honiBubble, { bottom: 193 * scale }]}>
               <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
             </View>
           </Animated.View>
@@ -238,18 +242,18 @@ const styles = StyleSheet.create({
   honiRest: { position: 'absolute', alignSelf: 'center' },
   // Anchored by its bottom edge (the tail) 31 dp below the top of Honi's 224 dp box, so a longer message grows
   // upward, away from his head. Nudged right to keep clear of the "Recent Activity" heading.
-  honiBubble: { position: 'absolute', bottom: 193, left: 0, right: 0, paddingLeft: 80, alignItems: 'center' },
-  topBar: { width: 342, height: 68, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  honiBubble: { position: 'absolute', left: 0, right: 0, paddingLeft: 80, alignItems: 'center' },
+  topBar: { width: '100%', maxWidth: 342, height: 68, flexDirection: 'row', alignItems: 'center', gap: 10 },
   topText: { flex: 1, gap: 4, padding: 10 },
   hello: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   status: { fontFamily: fonts.light, fontSize: 14, color: colors.text },
-  activity: { width: 342, minHeight: 200 },
+  activity: { width: '100%', maxWidth: 342, minHeight: 200 },
   activityBlock: { width: '100%', gap: 10 },
   activityTitle: { minHeight: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   activityHeading: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
-  error: { width: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
+  error: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
 });

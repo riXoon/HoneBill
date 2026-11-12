@@ -54,7 +54,7 @@ export function TextField({ label, value, onChangeText, error, ...inputProps }: 
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: 302, gap: 8 },
+  wrap: { width: '100%', maxWidth: 302, gap: 8 },
   label: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
   field: {
     height: 50,

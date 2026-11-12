@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
+import { AuthScroll } from '../components/ui/AuthScroll';
 import { Button } from '../components/ui/Button';
 import { fieldStateStyle, useFieldFocus } from '../components/ui/fieldState';
 import { GradientTitle } from '../components/ui/GradientTitle';
@@ -16,12 +17,14 @@ import { errorMessage, isAborted } from '../services/api/client';
 import { sendOtp } from '../services/api/otp';
 import { checkUser } from '../services/api/users';
 import { colors, fonts, radius } from '../theme';
+import { useScale } from '../theme/responsive';
 
 // Figma: Input Number (870:3025), 402x874.
 const COUNTRY_CODE = '+63';
 const PHONE_LENGTH = 10;
 
 export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'InputNumber'>) {
+  const scale = useScale();
   // `signin` reuses this screen to find an existing account: no OTP on a phone that already holds its wallet, OTP + recovery phrase otherwise.
   const signin = route.params?.mode === 'signin';
   // Sign-up only: the Terms screen sends the user back here with `termsAccepted` once they have read to the end and agreed.
@@ -86,9 +89,8 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome step={signin ? undefined : 1} onBack={navigation.goBack} />
 
-      <View style={styles.content}>
+      <AuthScroll style={styles.content}>
         <View style={styles.titleBlock}>
           <GradientTitle size={30}>Enter your phone number</GradientTitle>
           <Text style={styles.subtitle}>
@@ -164,19 +166,21 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
           />
         </View>
 
-        <View style={styles.mascotSlot}>
+        <View style={[styles.mascotSlot, { height: 292 * scale }]}>
           <Mascot mood="phone" />
         </View>
-      </View>
+      </AuthScroll>
+      {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}
+      <AuthChrome step={signin ? undefined : 1} onBack={navigation.goBack} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, justifyContent: 'center', padding: 40, gap: 40 },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 40, gap: 40 },
   titleBlock: { gap: 8 },
-  subtitle: { width: 300, fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { width: '100%', maxWidth: 300, fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
   formBlock: { gap: 10 },
   row: { flexDirection: 'row', gap: 8 },
   box: {
@@ -199,5 +203,5 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: colors.primary },
   consentText: { flex: 1, fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.text },
   consentLink: { fontFamily: fonts.semibold, color: colors.primary, textDecorationLine: 'underline' },
-  mascotSlot: { height: 292, alignItems: 'center', justifyContent: 'center' },
+  mascotSlot: { alignItems: 'center', justifyContent: 'center' },
 });

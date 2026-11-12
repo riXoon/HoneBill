@@ -1,5 +1,5 @@
-import { useLayoutEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useLayoutEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, {
   Easing,
@@ -35,14 +35,20 @@ const FILL = {
   online: require('../../../assets/home/card-online.png'),
   offline: require('../../../assets/home/card-offline.png'),
 } as const;
-const FILL_SCALE = CARD_W / 1025;
-const FILL_STYLE = {
-  position: 'absolute',
-  left: -51 * FILL_SCALE,
-  top: -45 * FILL_SCALE,
-  width: 1128 * FILL_SCALE,
-  height: 641 * FILL_SCALE,
-} as const;
+/** Side room the stack keeps: the 30 dp screen gutter less the card's 10 dp overhang, plus the back card's offset. */
+const SIDE_ROOM = 2 * 20 + BACK_OFFSET.x;
+
+/** Positions the fill image for a card `width` wide (the art is drawn for CARD_W and scaled with the card). */
+function fillStyle(width: number) {
+  const scale = width / 1025;
+  return {
+    position: 'absolute',
+    left: -51 * scale,
+    top: -45 * scale,
+    width: 1128 * scale,
+    height: 641 * scale,
+  } as const;
+}
 
 /** Sprite icons are centred on (11.86, 144.83) in the Figma icon sheet. */
 const SPRITE_BOX = '-0.14 132.83 24 24';
@@ -92,6 +98,22 @@ function EyeIcon() {
   );
 }
 
+/** Crossed-out eye (Lucide eye-off geometry, drawn in a plain 24x24 box) shown while the balance is hidden. */
+function EyeOffIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Path
+        d="M10.733 5.076A10.744 10.744 0 0 1 12 5c4.5 0 8.3 2.9 10 7a11.8 11.8 0 0 1-1.6 2.7M6.6 6.6A11.7 11.7 0 0 0 2 12c1.7 4.1 5.5 7 10 7a10.7 10.7 0 0 0 5.4-1.5M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"
+        stroke={colors.surface}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
 /** Hexagon badge shown on the offline card (Figma `offline`, 50x50). */
 function OfflineBadge() {
   return (
@@ -124,15 +146,22 @@ const CHIP_LABEL: Record<LoadStatus, string> = {
 type BalanceCardProps = { mode: BalanceMode; amount: number | null; status: LoadStatus };
 
 /** One card face: fill image, header (icon, label, status chip) and amount row. */
-function BalanceCard({ mode, amount, status }: BalanceCardProps) {
+function BalanceCard({
+  mode,
+  amount,
+  status,
+  width,
+  hidden,
+  onToggleHidden,
+}: BalanceCardProps & { width: number; hidden: boolean; onToggleHidden: () => void }) {
   const online = mode === 'online';
   // Until the first balance arrives a placeholder shows; dashes are only for a read that failed.
   const loadingFirst = amount === null && (status === 'idle' || status === 'loading');
   const { whole, cents } = amount === null ? { whole: '--', cents: '--' } : splitPesos(amount);
   const amountText = `₱${whole}.`;
   return (
-    <View style={styles.card}>
-      <Image source={FILL[mode]} style={FILL_STYLE} contentFit="fill" />
+    <View style={[styles.card, { width }]}>
+      <Image source={FILL[mode]} style={fillStyle(width)} contentFit="fill" />
 
       <View style={styles.header}>
         <View style={styles.label}>
@@ -145,9 +174,21 @@ function BalanceCard({ mode, amount, status }: BalanceCardProps) {
       </View>
 
       <View style={styles.amountRow}>
-        <EyeIcon />
+        {/* Its own Pressable, so tapping the eye hides the figure instead of flipping the cards. */}
+        <Pressable
+          onPress={onToggleHidden}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={hidden ? 'Show balance' : 'Hide balance'}
+        >
+          {hidden ? <EyeOffIcon /> : <EyeIcon />}
+        </Pressable>
         <View style={styles.amountWrap}>
-          {loadingFirst ? (
+          {hidden ? (
+            <Text style={styles.amount} numberOfLines={1} accessibilityLabel="Balance hidden">
+              ₱••••••
+            </Text>
+          ) : loadingFirst ? (
             <View accessible accessibilityLabel="Loading balance" style={styles.skeletonWrap}>
               <SkeletonBar style={styles.skeleton} />
             </View>
@@ -175,6 +216,12 @@ type BalanceCardsProps = {
 
 /** Stacked online/offline cards. Only transform is animated; z-order swaps while the leaving card is at its peak. */
 export function BalanceCards({ mode, onlineBalance, offlineBalance, status, onToggle }: BalanceCardsProps) {
+  // Narrower phones get a narrower card (same height), so the stack never runs off the screen.
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth = Math.min(CARD_W, windowWidth - SIDE_ROOM);
+  // One switch for both cards, so hiding on one hides on the other.
+  const [hidden, setHidden] = useState(false);
+  const toggleHidden = useCallback(() => setHidden((h) => !h), []);
   // t runs 0 -> 1 on every switch. frontIsOnline says which card is arriving at the front.
   const t = useSharedValue(1);
   const frontIsOnline = useSharedValue(mode === 'online' ? 1 : 0);
@@ -219,20 +266,20 @@ export function BalanceCards({ mode, onlineBalance, offlineBalance, status, onTo
       onPress={onToggle}
       accessibilityRole="button"
       accessibilityLabel={`Showing ${mode} balance. Tap to switch to ${mode === 'online' ? 'offline' : 'online'} balance`}
-      style={styles.stack}
+      style={[styles.stack, { width: cardWidth + BACK_OFFSET.x }]}
     >
-      <Animated.View style={[styles.face, onlineStyle]}>
-        <BalanceCard mode="online" amount={onlineBalance} status={status} />
+      <Animated.View style={[styles.face, { width: cardWidth }, onlineStyle]}>
+        <BalanceCard mode="online" amount={onlineBalance} status={status} width={cardWidth} hidden={hidden} onToggleHidden={toggleHidden} />
       </Animated.View>
-      <Animated.View style={[styles.face, offlineStyle]}>
-        <BalanceCard mode="offline" amount={offlineBalance} status={status} />
+      <Animated.View style={[styles.face, { width: cardWidth }, offlineStyle]}>
+        <BalanceCard mode="offline" amount={offlineBalance} status={status} width={cardWidth} hidden={hidden} onToggleHidden={toggleHidden} />
       </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: { width: 359, height: 199.67 },
+  stack: { height: 199.67 },
   face: {
     position: 'absolute',
     left: 0,

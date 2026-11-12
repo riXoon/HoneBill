@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-import { clearStoredAccount, saveStoredAccount } from '../services/accountStorage';
+import { saveStoredAccount } from '../services/accountStorage';
 import { clearSession } from '../services/session';
 
 /**
@@ -50,7 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     clearSession();
     setActiveAccount(null);
-    await clearStoredAccount();
+    // The saved profile is kept (it holds no secret), so the fingerprint on the Login screen still works after signing
+    // out. It is removed only when this phone no longer holds the account's wallet (see LoginScreen's recovery).
   }, []);
 
   const updateAccount = useCallback(

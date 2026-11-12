@@ -5,7 +5,8 @@ import type { AccountProfile } from '../context/AuthContext';
 /**
  * The signed-in account's public profile (names, phone, short ID, wallet address), kept so a fingerprint
  * can reopen the app without retyping the MPIN. No secret is in it: the keys stay in the wallet store.
- * It is deleted on sign-out, so a biometric unlock only ever applies to an account the user did not leave.
+ * It survives sign-out, so the fingerprint keeps working for the account last used on this phone. It is deleted when
+ * the phone no longer holds that account's wallet, so a biometric unlock never opens an account it cannot sign for.
  */
 const KEY = 'honebill.account';
 

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppBackground } from '../components/ui/AppBackground';
-import { Keypad } from '../components/ui/Keypad';
+import { Keypad, keypadRowHeight } from '../components/ui/Keypad';
 import { HiveEntrance } from '../components/transition/HiveEntrance';
 import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { PinDots } from '../components/ui/PinDots';
@@ -24,10 +24,13 @@ import { lookupUserByPhone } from '../services/api/users';
 import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
 import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { colors, fonts, radius } from '../theme';
+import { afterNextPaint } from '../utils/async';
 
 // Figma: Login Page (870:3055), 402x874.
 /** Sign-in is something people do often, so its hive entrance runs a little shorter than the one after sign-up. */
 const SIGN_IN_HIVE_MS = 900;
+/** Logo (30 + 17), then the number pill, prompt and PIN dots (about 190 dp): what sits above and below Honi. */
+const LOGIN_FIXED_BLOCKS = 47 + 190;
 const logoHorizontal = require('../../assets/brand/logo-horizontal.png');
 
 /** Swap arrows from the Figma icon sprite (870:3065), cropped to the visible glyph. */
@@ -68,6 +71,12 @@ function pinErrorMessage(error: unknown): string {
 
 export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
   const insets = useSafeAreaInsets();
+  // The keypad (shorter rows on a shorter phone) and the fixed blocks above it come first; Honi takes what is left,
+  // between 90 and 200 dp, so the PIN dots never end up on the keys.
+  const { height: windowHeight } = useWindowDimensions();
+  const topPad = Math.max(24, insets.top) + 60;
+  const keypadHeight = 4 * keypadRowHeight(windowHeight) + Math.max(24, insets.bottom);
+  const mascotSlot = Math.max(90, Math.min(200, windowHeight - keypadHeight - topPad - LOGIN_FIXED_BLOCKS));
   const { login } = useAuth();
   const [pin, setPin] = useState('');
   /** undefined while the saved number loads, null when this phone has none yet. */
@@ -171,25 +180,28 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
   const unlockable = biometricSupported && stored !== null && phone != null && stored.phone === phone;
 
   const signInWithBiometrics = useCallback(async () => {
-    if (!stored || entering) return;
+    if (!stored || entering || busy) return;
     if (!(await authenticateWithBiometrics())) return;
-    // The saved profile can outlive its wallet (or its account), so it only opens Home on a phone that holds the key.
-    if (await holdsWalletFor(stored.stellarPublicKey)) {
-      await login(stored);
-      void enterHive();
-      return;
-    }
+    // Checking the wallet key takes a moment (it is derived from the stored phrase), so show "Signing in…" first.
     const controller = new AbortController();
     request.current = controller;
     setBusy(true);
+    setError(null);
     try {
+      await afterNextPaint();
+      // The saved profile can outlive its wallet (or its account), so it only opens Home on a phone that holds the key.
+      if (await holdsWalletFor(stored.stellarPublicKey)) {
+        await login(stored);
+        void enterHive();
+        return;
+      }
       await startRecovery(stored.phone ?? phone ?? '', controller.signal);
     } catch (e) {
       if (!isAborted(e)) setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
-  }, [stored, phone, login, enterHive, entering, startRecovery]);
+  }, [stored, phone, login, enterHive, entering, busy, startRecovery]);
 
   // Prompt once on arrival. Cancelling falls back to the MPIN.
   useEffect(() => {
@@ -217,12 +229,12 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
     <View style={styles.root}>
       <AppBackground />
 
-      <View style={[styles.main, { paddingTop: Math.max(24, insets.top) + 60 }]}>
+      <View style={[styles.main, { paddingTop: topPad }]}>
         <Image source={logoHorizontal} style={styles.logo} contentFit="contain" accessibilityLabel="HoneBill" />
 
         {/* The mascot image is larger than its 260x200 slot (soft glow bleed); it overflows evenly. */}
-        <View style={styles.mascotArea}>
-          <Mascot mood="idle" animated={!entering} style={styles.mascot} />
+        <View style={[styles.mascotArea, { height: mascotSlot }]}>
+          <Mascot mood="idle" scale={mascotSlot / 200} animated={!entering} style={styles.mascot} />
         </View>
 
         <View style={styles.inputSection}>
@@ -263,11 +275,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   main: { flex: 1, alignItems: 'center' },
   logo: { width: 133, height: 30, marginBottom: 17 },
-  mascotArea: { width: 260, height: 200, alignItems: 'center' },
+  mascotArea: { width: '100%', maxWidth: 260, alignItems: 'center' },
   mascot: { marginTop: -20 },
   inputSection: { width: '100%', alignItems: 'center', paddingTop: 20, gap: 16 },
   phonePill: {
-    width: 302,
+    width: '100%',
+    maxWidth: 302,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: radius.pill,
@@ -279,7 +292,7 @@ const styles = StyleSheet.create({
   },
   phone: { fontFamily: fonts.regular, fontSize: 18, color: colors.coral, textAlign: 'center' },
   swap: { position: 'absolute', right: 26, top: 0, bottom: 0, justifyContent: 'center' },
-  prompt: { width: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 14, color: colors.primary },
-  error: { width: 280, fontFamily: fonts.regular, fontSize: 13, color: colors.coral },
+  prompt: { width: '100%', maxWidth: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 14, color: colors.primary },
+  error: { width: '100%', maxWidth: 280, textAlign: 'center', fontFamily: fonts.regular, fontSize: 13, color: colors.coral },
   keypad: { width: '100%' },
 });
