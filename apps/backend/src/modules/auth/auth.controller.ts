@@ -10,6 +10,7 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { VerifyPinDto } from '../accounts/dto/verify-pin.dto.js';
+import { ChangePinDto } from '../accounts/dto/change-pin.dto.js';
 
 type QueryStringValue = string | string[] | Record<string, string>;
 
@@ -68,5 +69,10 @@ export class AuthController {
     return this.accountsService.verifyPin(body.phoneNumber, body.pin.trim());
   }
 
-
+  @Post('pin/change')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  changePin(@Body() body: ChangePinDto) {
+    return this.accountsService.changePin(body.phoneNumber, body.currentPin.trim(), body.newPin.trim());
+  }
 }
