@@ -4,6 +4,7 @@ import { errorMessage, isAborted } from '../services/api/client';
 import { getConnectivity } from '../services/connectivity';
 import { reportError } from '../services/errorReporting';
 import { syncService } from '../services/sync/syncService';
+import { drainConfirms } from '../services/sync/confirmOutbox';
 import { drainVouchers, enqueueVoucher } from '../services/sync/voucherOutbox';
 import { getHistory, getVaultBalance } from '../services/api/wallet';
 import { toTransactions } from '../services/transactionMapper';
@@ -64,6 +65,7 @@ const MAX_MOVES = 100;
 /** The wallet read runs last in a sync, after steps that change what it returns (e.g. sending queued payments). */
 const SYNC_ORDER_WALLET = 100;
 const SYNC_ORDER_VOUCHERS = 10;
+const SYNC_ORDER_CONFIRMS = 20;
 const syncNow = () => syncService.requestSync();
 const OFFLINE_MESSAGE = "You're offline. Connect to the internet to load your transactions.";
 
@@ -250,6 +252,20 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         void savePending(publicKey, next);
       },
       SYNC_ORDER_VOUCHERS,
+    );
+  }, [publicKey]);
+
+  // Settlement confirms queued by moves and transfers (e.g. the app was killed before they went out) are sent after
+  // the vouchers and before the history read, so History already lists those transactions.
+  useEffect(() => {
+    if (!publicKey) return;
+    return syncService.registerStep(
+      'confirms',
+      async ({ signal }) => {
+        if (!getConnectivity().online) return;
+        await drainConfirms(publicKey, signal);
+      },
+      SYNC_ORDER_CONFIRMS,
     );
   }, [publicKey]);
 

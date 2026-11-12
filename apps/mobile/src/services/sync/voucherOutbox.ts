@@ -1,10 +1,8 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
-
-import { getDb } from '../../db/client';
-import { outbox, type OutboxRow } from '../../db/schema';
+import type { OutboxRow } from '../../db/schema';
 import { ApiError } from '../api/client';
 import { settleVoucher, type SettlementResult } from '../api/settlements';
 import { normalizeNonce } from '../walletCache';
+import { dueRows, enqueue, finishRow, retryRow } from './outboxStore';
 
 /**
  * Offline vouchers waiting to be settled over the internet (ported from `_legacy/services/syncService.ts` and
@@ -31,38 +29,13 @@ type VoucherPayload = { voucher: string; nonce: string };
 
 /** Queues a voucher for settlement. Queuing the same nonce again does nothing. */
 export function enqueueVoucher(publicKey: string, voucher: string, nonce: string): void {
-  const now = Date.now();
   const payload: VoucherPayload = { voucher, nonce };
-  getDb()
-    .insert(outbox)
-    .values({ publicKey, kind: KIND, dedupeKey: normalizeNonce(nonce), payload: JSON.stringify(payload), createdAt: now, updatedAt: now })
-    .onConflictDoNothing()
-    .run();
+  enqueue(publicKey, KIND, normalizeNonce(nonce), payload);
 }
 
-function due(publicKey: string, now: number): OutboxRow[] {
-  return getDb()
-    .select()
-    .from(outbox)
-    .where(and(eq(outbox.publicKey, publicKey), eq(outbox.kind, KIND), eq(outbox.status, 'pending'), lte(outbox.nextAttemptAt, now)))
-    .orderBy(asc(outbox.createdAt))
-    .all();
-}
-
-function finish(row: OutboxRow, status: 'done' | 'failed', lastError: string | null = null): void {
-  getDb().update(outbox).set({ status, lastError, updatedAt: Date.now() }).where(eq(outbox.id, row.id)).run();
-}
-
-function retryLater(row: OutboxRow, reason: string): void {
-  const attempts = row.attempts + 1;
-  const now = Date.now();
-  const delay = Math.min(BASE_BACKOFF_MS * 2 ** (attempts - 1), MAX_BACKOFF_MS);
-  getDb()
-    .update(outbox)
-    .set({ attempts, lastError: reason, updatedAt: now, nextAttemptAt: now + delay })
-    .where(eq(outbox.id, row.id))
-    .run();
-}
+const due = (publicKey: string, now: number) => dueRows(publicKey, KIND, now);
+const finish = finishRow;
+const retryLater = (row: OutboxRow, reason: string) => retryRow(row, reason, BASE_BACKOFF_MS, MAX_BACKOFF_MS);
 
 /**
  * What to do with a voucher after one post:
