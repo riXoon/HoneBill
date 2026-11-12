@@ -20,3 +20,8 @@ export function getAuthChallenge(
 export function exchangeAuthChallenge(transaction: string, signal?: AbortSignal): Promise<{ token: string }> {
   return apiRequest('POST', '/auth', { body: { transaction }, signal });
 }
+
+/** Replaces the MPIN. The server checks the current one first (the same 5-tries lockout as sign-in). */
+export function changePin(phone: string, currentPin: string, newPin: string, signal?: AbortSignal): Promise<{ success: true }> {
+  return apiRequest('POST', '/auth/pin/change', { body: { phoneNumber: phone, currentPin, newPin }, signal });
+}

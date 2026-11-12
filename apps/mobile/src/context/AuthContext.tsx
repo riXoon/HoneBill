@@ -29,6 +29,8 @@ type AuthContextType = {
   isAppReady: boolean;
   login: (profile: AccountProfile) => Promise<void>;
   logout: () => Promise<void>;
+  /** Applies edits the server has accepted to the signed-in account (and the copy kept for fingerprint unlock). */
+  updateAccount: (changes: Partial<Pick<AccountProfile, 'firstName' | 'lastName'>>) => Promise<void>;
   setUserMode: (mode: UserMode) => void;
 };
 
@@ -51,6 +53,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearStoredAccount();
   }, []);
 
+  const updateAccount = useCallback(
+    async (changes: Partial<Pick<AccountProfile, 'firstName' | 'lastName'>>) => {
+      if (!activeAccount) return;
+      const next = { ...activeAccount, ...changes };
+      setActiveAccount(next);
+      await saveStoredAccount(next);
+    },
+    [activeAccount],
+  );
+
   const value = useMemo<AuthContextType>(
     () => ({
       activeAccount,
@@ -59,9 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAppReady: true,
       login,
       logout,
+      updateAccount,
       setUserMode,
     }),
-    [activeAccount, userMode, login, logout],
+    [activeAccount, userMode, login, logout, updateAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

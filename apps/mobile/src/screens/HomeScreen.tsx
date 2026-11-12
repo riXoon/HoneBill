@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -41,6 +41,11 @@ const QUICK_ACTION_ROUTE = {
 } as const satisfies Partial<Record<QuickActionKey, keyof RootStackParamList>>;
 /** Actions that talk to the server or the chain. Offline Send (SMS voucher) and Receive (showing a QR) work without it. */
 const NEEDS_INTERNET: ReadonlySet<QuickActionKey> = new Set(['topup', 'online', 'offline']);
+/** Honi's resting box, the height of the "Recent Activity" heading row, and how far above his box the bubble can reach
+ *  (3 lines + tail, less the 31 dp it overlaps him) plus a gap. */
+const HONI_BOX_HEIGHT = 224;
+const ACTIVITY_TITLE_HEIGHT = 30;
+const BUBBLE_CLEARANCE = 62;
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -95,6 +100,15 @@ export function HomeScreen() {
   const loadingFirst = recent.length === 0 && (status === 'loading' || status === 'idle');
   const chatter = useLoadingMessage(loadingFirst);
 
+  // Where Honi's box starts, in scroll-content coordinates. Ideally he rests just above the nav bar, but his bubble
+  // grows upward (up to ~3 lines), so he never rises above the point where the bubble would touch the buttons or the
+  // "Recent Activity" heading; on a short screen the page grows and scrolls instead.
+  const { height: windowHeight } = useWindowDimensions();
+  const [activityY, setActivityY] = useState(0);
+  const contentPaddingBottom = NAV_BAR_HEIGHT + Math.max(24, insets.bottom) + 20;
+  const restTop = windowHeight - (98.5 + Math.max(0, insets.bottom - 24)) - HONI_BOX_HEIGHT;
+  const honiTop = Math.max(restTop, activityY + ACTIVITY_TITLE_HEIGHT + BUBBLE_CLEARANCE);
+
   return (
     <View style={styles.root}>
       <AppBackground />
@@ -102,7 +116,11 @@ export function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: Math.max(70, insets.top + 24), paddingBottom: NAV_BAR_HEIGHT + Math.max(24, insets.bottom) + 20 },
+          {
+            paddingTop: Math.max(70, insets.top + 24),
+            paddingBottom: contentPaddingBottom,
+            minHeight: showRestHoni ? honiTop + HONI_BOX_HEIGHT + contentPaddingBottom : undefined,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -156,7 +174,7 @@ export function HomeScreen() {
 
         <QuickActions online={online} onPress={onQuickAction} />
 
-        <View style={styles.activity}>
+        <View style={styles.activity} onLayout={(e) => setActivityY(e.nativeEvent.layout.y)}>
           <Animated.View
             key={mode}
             entering={FadeIn.duration(FADE_MS)}
@@ -188,23 +206,24 @@ export function HomeScreen() {
             )}
           </Animated.View>
         </View>
-      </ScrollView>
 
-      {/* Empty activity (offline, or online with nothing yet): Honi sits above the nav bar, centred. */}
-      {showRestHoni ? (
-        <Animated.View
-          entering={FadeIn.duration(FADE_MS)}
-          exiting={FadeOut.duration(FADE_MS)}
-          pointerEvents="none"
-          style={[styles.honiRest, { bottom: 98.5 + Math.max(0, insets.bottom - 24) }]}
-        >
-          <Mascot mood="idlePlain" />
-          {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
-          <View style={styles.honiBubble}>
-            <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
-          </View>
-        </Animated.View>
-      ) : null}
+        {/* Empty activity (offline, or online with nothing yet): Honi rests above the nav bar, centred. He lives in the
+            scroll content so that on a short screen the page scrolls instead of his bubble covering the buttons. */}
+        {showRestHoni ? (
+          <Animated.View
+            entering={FadeIn.duration(FADE_MS)}
+            exiting={FadeOut.duration(FADE_MS)}
+            pointerEvents="none"
+            style={[styles.honiRest, { top: honiTop }]}
+          >
+            <Mascot mood="idlePlain" />
+            {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
+            <View style={styles.honiBubble}>
+              <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
+            </View>
+          </Animated.View>
+        ) : null}
+      </ScrollView>
 
       <ConnectivityNoticeDialog notice={offlineNotice ? 'offline' : null} onDismiss={() => setOfflineNotice(false)} />
     </View>

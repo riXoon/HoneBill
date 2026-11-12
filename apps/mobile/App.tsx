@@ -20,6 +20,9 @@ import { ConnectionRestoredNotice } from './src/components/ConnectionRestoredNot
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
 import { syncService } from './src/services/sync/syncService';
+import { AccountSettingsScreen } from './src/screens/AccountSettingsScreen';
+import { ChangeMpinScreen } from './src/screens/ChangeMpinScreen';
+import { VaultSettingsScreen } from './src/screens/VaultSettingsScreen';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
 import { LandingScreen } from './src/screens/LandingScreen';
@@ -77,6 +80,9 @@ function RootNavigator() {
         <Stack.Screen name="SendMethod" component={SendMethodScreen} />
         <Stack.Screen name="ReceiveAmount" component={ReceiveScreen} />
         <Stack.Screen name="ReceiveQr" component={ReceiveQrScreen} />
+        <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+        <Stack.Screen name="VaultSettings" component={VaultSettingsScreen} />
+        <Stack.Screen name="ChangeMpin" component={ChangeMpinScreen} />
         <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
         <Stack.Screen name="TopUp" component={TopUpScreen} />
         <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />

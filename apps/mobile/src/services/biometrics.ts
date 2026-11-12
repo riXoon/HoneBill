@@ -17,10 +17,10 @@ export async function isBiometricAvailable(): Promise<boolean> {
  * Asks the OS for a fingerprint/face check. The device passcode fallback is off so the only other
  * way in stays the MPIN. Resolves false on cancel, lockout or any error, never throws.
  */
-export async function authenticateWithBiometrics(): Promise<boolean> {
+export async function authenticateWithBiometrics(promptMessage = 'Sign in to HoneBill'): Promise<boolean> {
   try {
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Sign in to HoneBill',
+      promptMessage,
       cancelLabel: 'Use MPIN',
       disableDeviceFallback: true,
     });

@@ -299,6 +299,75 @@ export class AccountsService {
     return { success: true };
   }
 
+  /** Replaces the PIN after checking the current one (which shares verifyPin's wrong-try lockout). */
+  async changePin(phoneNumber: string, currentPin: string, newPin: string) {
+    if (!isValidPinFormat(newPin)) {
+      throw new ApiResponseException(400, {
+        error: 'Validation failed',
+        fieldErrors: { newPin: 'PIN must be 4 to 6 digits.' },
+      });
+    }
+    if (newPin === currentPin) {
+      throw new ApiResponseException(400, {
+        error: 'Validation failed',
+        fieldErrors: { newPin: 'Choose a PIN different from the current one.' },
+      });
+    }
+
+    await this.verifyPin(phoneNumber, currentPin);
+
+    const account = await this.prisma.account.findFirst({
+      where: { phoneNumber: toDbPhone(phoneNumber) },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!account) throw new NotFoundException('Account not found.');
+
+    await this.prisma.account.update({ where: { id: account.id }, data: { pin: await hashPin(newPin) } });
+    return { success: true };
+  }
+
+  /** Updates the name and/or email after checking the PIN. Fields left out are unchanged. */
+  async updateProfile(
+    phoneNumber: string,
+    pin: string,
+    changes: { firstName?: string; lastName?: string; email?: string },
+  ) {
+    const firstName = changes.firstName?.trim();
+    const lastName = changes.lastName?.trim();
+    const email = changes.email?.trim().toLowerCase();
+
+    const fieldErrors: Record<string, string> = {};
+    if (firstName !== undefined && !firstName) fieldErrors.firstName = 'First name is required.';
+    if (lastName !== undefined && !lastName) fieldErrors.lastName = 'Last name is required.';
+    if (email !== undefined && (email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email))) {
+      fieldErrors.email = 'Invalid email address.';
+    }
+    if (Object.keys(fieldErrors).length > 0) {
+      throw new ApiResponseException(400, { error: 'Validation failed', fieldErrors });
+    }
+
+    await this.verifyPin(phoneNumber, pin);
+
+    const account = await this.prisma.account.findFirst({
+      where: { phoneNumber: toDbPhone(phoneNumber) },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!account) throw new NotFoundException('Account not found.');
+
+    const updated = await this.prisma.account.update({
+      where: { id: account.id },
+      data: {
+        ...(firstName !== undefined ? { firstName } : {}),
+        ...(lastName !== undefined ? { lastName } : {}),
+        ...(email !== undefined ? { email } : {}),
+      },
+      select: { firstName: true, lastName: true, email: true },
+    });
+    return { success: true, data: updated };
+  }
+
   private isOtpTokenRequired(): boolean {
     const required = this.configService.get<boolean | string>('REQUIRE_OTP_TOKEN');
     return required === true || required === 'true';

@@ -81,6 +81,9 @@ export function ProfileScreen() {
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
 
+  // The tabs live inside the root stack, so screens outside the tabs are opened from the parent navigator.
+  const rootNavigation = () => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
+
   const signOut = async () => {
     await logout();
     // The tabs live inside the root stack, so reset from the parent navigator.
@@ -160,14 +163,25 @@ export function ProfileScreen() {
               icon={<View style={styles.gear}><GearIcon /></View>}
               label="Account Settings"
               trailing={<ChevronRightIcon />}
+              onPress={() => rootNavigation()?.navigate('AccountSettings')}
             />
-            <MenuRow icon={<View style={styles.glyph}><WalletIcon /></View>} label="Vault Settings" trailing={<ChevronRightIcon />} />
-            <MenuRow icon={<View style={styles.glyph}><LockIcon /></View>} label="Change MPIN" trailing={<ChevronRightIcon />} />
+            <MenuRow
+              icon={<View style={styles.glyph}><WalletIcon /></View>}
+              label="Vault Settings"
+              trailing={<ChevronRightIcon />}
+              onPress={() => rootNavigation()?.navigate('VaultSettings')}
+            />
+            <MenuRow
+              icon={<View style={styles.glyph}><LockIcon /></View>}
+              label="Change MPIN"
+              trailing={<ChevronRightIcon />}
+              onPress={() => rootNavigation()?.navigate('ChangeMpin')}
+            />
             <MenuRow
               icon={<View style={styles.glyph}><ReceiptIcon /></View>}
               label="Terms & Conditions"
               trailing={<ChevronRightIcon />}
-              onPress={() => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('Terms')}
+              onPress={() => rootNavigation()?.navigate('Terms')}
             />
             <MenuRow
               tinted

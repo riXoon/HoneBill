@@ -13,7 +13,7 @@ import { formatPhoneDisplay } from '../services/accountPhone';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { sendOtp, verifyOtp } from '../services/api/otp';
 import { setSignupSession } from '../services/signupSession';
-import { colors, fonts } from '../theme';
+import { colors, fonts, radius } from '../theme';
 
 // Figma: OTP (870:2988), 402x874. The backend sends 6-digit codes (the design drew 4 boxes).
 const OTP_LENGTH = 6;
@@ -101,6 +101,8 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
     }
   };
 
+  const canResend = !busy && cooldown <= 0;
+
   return (
     <View style={styles.root}>
       <AppBackground />
@@ -134,10 +136,17 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
             disabled={busy || cooldown > 0}
             onPress={() => void resend()}
             hitSlop={8}
+            style={({ pressed }) => [styles.resendPill, canResend && styles.resendPillActive, pressed && canResend && styles.resendPillPressed]}
           >
-            <Text style={styles.resend}>
-              {resending ? 'Sending a new code…' : cooldown > 0 ? `Resend code in ${cooldown}s` : "Didn't get an OTP? Resend"}
-            </Text>
+            {canResend ? (
+              <Text style={styles.resendHint}>
+                Didn't get an OTP? <Text style={styles.resendAction}>Resend</Text>
+              </Text>
+            ) : (
+              <Text style={styles.resendWaiting}>
+                {resending ? 'Sending a new code…' : `Resend code in ${cooldown}s`}
+              </Text>
+            )}
           </Pressable>
           <Button label={busy ? 'Please wait…' : 'Verify'} size="large" onPress={() => void verify()} disabled={busy} />
         </View>
@@ -155,5 +164,12 @@ const styles = StyleSheet.create({
   error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
   mascotSlot: { height: 196, alignItems: 'center', justifyContent: 'center' },
   footer: { gap: 16, alignItems: 'center' },
-  resend: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted, textAlign: 'center' },
+  resendPill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
+  // Ready to tap: tinted pill with a visible border so it reads as an action, not a caption.
+  resendPillActive: { backgroundColor: colors.yellow, borderColor: colors.primarySoft },
+  resendPillPressed: { opacity: 0.7 },
+  resendWaiting: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  resendHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.text, textAlign: 'center' },
+  // borderRed (not primary) for the link text: orange on this background is too low-contrast to read comfortably.
+  resendAction: { fontFamily: fonts.bold, fontSize: 14, color: colors.borderRed, textDecorationLine: 'underline' },
 });

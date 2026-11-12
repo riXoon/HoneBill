@@ -5,6 +5,7 @@ import {
   Controller,
   Get,
   HttpStatus,
+  Patch,
   Post,
   Query,
   Req,
@@ -17,6 +18,7 @@ import { Throttle } from '@nestjs/throttler';
 import { queryString } from '../../common/utils/query-string.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { RegisterAccountDto } from './dto/register-account.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 type QueryStringValue = string | string[] | Record<string, string>;
 
@@ -62,6 +64,16 @@ export class AccountsController {
       queryString(shortId)?.trim(),
       queryString(phone)?.trim(),
     );
+  }
+
+  @Patch('users/profile')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  updateProfile(@Body() body: UpdateProfileDto) {
+    return this.accountsService.updateProfile(body.phoneNumber, body.pin.trim(), {
+      firstName: body.firstName,
+      lastName: body.lastName,
+      email: body.email,
+    });
   }
 
   @All('users/lookup')
