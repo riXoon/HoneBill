@@ -12,7 +12,7 @@ import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, VaultIcon, WalletIcon } from '../components/ui/smallIcons';
+import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, ReceiptIcon, VaultIcon, WalletIcon } from '../components/ui/smallIcons';
 import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
@@ -164,6 +164,12 @@ export function ProfileScreen() {
             <MenuRow icon={<View style={styles.glyph}><WalletIcon /></View>} label="Vault Settings" trailing={<ChevronRightIcon />} />
             <MenuRow icon={<View style={styles.glyph}><LockIcon /></View>} label="Change MPIN" trailing={<ChevronRightIcon />} />
             <MenuRow
+              icon={<View style={styles.glyph}><ReceiptIcon /></View>}
+              label="Terms & Conditions"
+              trailing={<ChevronRightIcon />}
+              onPress={() => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('Terms')}
+            />
+            <MenuRow
               tinted
               icon={<View style={styles.glyph}><VaultIcon /></View>}
               label={copied ? 'Address copied!' : addressShort}
@@ -183,10 +189,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 30, gap: 20 },
   logout: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
   // 342 x 397 column; the arch, Honi and logo overflow it and the ScrollView clips them at the screen edge.
-  block: { width: '100%', height: 397 },
+  block: { width: '100%', height: 443 },
   arch: { position: 'absolute', top: 41, left: '50%', marginLeft: -ARCH_WIDTH / 2, width: ARCH_WIDTH, height: ARCH_HEIGHT },
-  logo: { position: 'absolute', top: 446, left: '50%', marginLeft: -48 },
-  honiFrame: { position: 'absolute', left: -84.36, top: 428.32, width: 233.956, height: 197.686, alignItems: 'center', justifyContent: 'center' },
+  logo: { position: 'absolute', top: 492, left: '50%', marginLeft: -48 },
+  honiFrame: { position: 'absolute', left: -84.36, top: 474.32, width: 233.956, height: 197.686, alignItems: 'center', justifyContent: 'center' },
   // Figma flips the picture vertically and rotates it -164.26 degrees.
   honiTilt: { width: 201.167, height: 148.701, transform: [{ rotate: '-164.26deg' }, { scaleY: -1 }] },
   honiImage: { position: 'absolute', left: -3, top: 4.22, width: 207.17, height: 140.25 },

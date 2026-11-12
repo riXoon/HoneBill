@@ -15,7 +15,9 @@ export type RootStackParamList = {
   Landing: undefined;
   Login: undefined;
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
-  InputNumber: { mode?: 'signin' } | undefined;
+  InputNumber: { mode?: 'signin'; termsAccepted?: boolean } | undefined;
+  /** `accept` is the sign-up gate (read to the end, tick, "I Agree"); without it the terms are read-only. */
+  Terms: { mode?: 'accept' } | undefined;
   /** `recover` is a sign-in from a phone that does not hold this account's wallet: OTP, then the recovery phrase. */
   Otp: { phone: string; purpose?: 'recover' };
   /** Restores an existing account's wallet on this phone from its 12 words. */

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot } from '../components/mascot/Mascot';
@@ -8,6 +8,7 @@ import { AuthChrome } from '../components/ui/AuthChrome';
 import { Button } from '../components/ui/Button';
 import { fieldStateStyle, useFieldFocus } from '../components/ui/fieldState';
 import { GradientTitle } from '../components/ui/GradientTitle';
+import { CheckIcon } from '../components/ui/smallIcons';
 import type { RootStackParamList } from '../navigation/types';
 import { setAccountPhone } from '../services/accountPhone';
 import { getDevicePublicKey } from '../services/wallet/deviceWallet';
@@ -23,6 +24,8 @@ const PHONE_LENGTH = 10;
 export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'InputNumber'>) {
   // `signin` reuses this screen to find an existing account: no OTP on a phone that already holds its wallet, OTP + recovery phrase otherwise.
   const signin = route.params?.mode === 'signin';
+  // Sign-up only: the Terms screen sends the user back here with `termsAccepted` once they have read to the end and agreed.
+  const termsAccepted = route.params?.termsAccepted === true;
   const [phone, setPhone] = useState('');
   const [invalid, setInvalid] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,6 +37,10 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
 
   const submit = async () => {
     if (busy) return;
+    if (!signin && !termsAccepted) {
+      navigation.navigate('Terms', { mode: 'accept' });
+      return;
+    }
     if (phone.length !== PHONE_LENGTH) {
       setInvalid(true);
       return;
@@ -122,12 +129,40 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
           ) : null}
         </View>
 
-        <Button
-          label={busy ? 'Please wait…' : signin ? 'Continue' : 'Send OTP'}
-          size="large"
-          onPress={() => void submit()}
-          disabled={busy}
-        />
+        <View style={styles.actions}>
+          {signin ? null : (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: termsAccepted }}
+              accessibilityLabel="Terms and Conditions. Opens the terms to read."
+              onPress={() =>
+                termsAccepted
+                  ? navigation.setParams({ termsAccepted: false })
+                  : navigation.navigate('Terms', { mode: 'accept' })
+              }
+              style={styles.consent}
+            >
+              <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                {termsAccepted ? <CheckIcon /> : null}
+              </View>
+              <Text style={styles.consentText}>
+                {termsAccepted ? 'You agreed to the ' : 'Read and agree to the '}
+                <Text
+                  style={styles.consentLink}
+                  onPress={() => navigation.navigate('Terms', { mode: termsAccepted ? undefined : 'accept' })}
+                >
+                  Terms & Conditions
+                </Text>
+              </Text>
+            </Pressable>
+          )}
+          <Button
+            label={busy ? 'Please wait…' : signin ? 'Continue' : termsAccepted ? 'Send OTP' : 'Read Terms to Continue'}
+            size="large"
+            onPress={() => void submit()}
+            disabled={busy}
+          />
+        </View>
 
         <View style={styles.mascotSlot}>
           <Mascot mood="phone" />
@@ -158,5 +193,11 @@ const styles = StyleSheet.create({
   field: { flex: 1, paddingHorizontal: 16, color: colors.text },
   invalid: { borderColor: colors.coral },
   error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
+  actions: { gap: 14 },
+  consent: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 },
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: colors.primary },
+  consentText: { flex: 1, fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.text },
+  consentLink: { fontFamily: fonts.semibold, color: colors.primary, textDecorationLine: 'underline' },
   mascotSlot: { height: 292, alignItems: 'center', justifyContent: 'center' },
 });

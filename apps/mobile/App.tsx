@@ -37,6 +37,7 @@ import { SendMethodScreen } from './src/screens/SendMethodScreen';
 import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
 import { SendToScreen } from './src/screens/SendToScreen';
 import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
+import { TermsScreen } from './src/screens/TermsScreen';
 import { TopUpScreen } from './src/screens/TopUpScreen';
 import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
 import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
@@ -59,6 +60,7 @@ function RootNavigator() {
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
         <Stack.Screen name="VerifySeedPhrase" component={VerifySeedPhraseScreen} />
         <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
