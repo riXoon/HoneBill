@@ -16,8 +16,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { WalletDataProvider } from './src/context/WalletDataContext';
+import { ConnectionRestoredNotice } from './src/components/ConnectionRestoredNotice';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
+import { syncService } from './src/services/sync/syncService';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
 import { LandingScreen } from './src/screens/LandingScreen';
@@ -35,6 +37,7 @@ import { SendMethodScreen } from './src/screens/SendMethodScreen';
 import { SendReceiptScreen } from './src/screens/SendReceiptScreen';
 import { SendToScreen } from './src/screens/SendToScreen';
 import { SendVerificationScreen } from './src/screens/SendVerificationScreen';
+import { TermsScreen } from './src/screens/TermsScreen';
 import { TopUpScreen } from './src/screens/TopUpScreen';
 import { TransferToOfflineScreen } from './src/screens/TransferToOfflineScreen';
 import { TransferToOnlineScreen } from './src/screens/TransferToOnlineScreen';
@@ -57,6 +60,7 @@ function RootNavigator() {
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
         <Stack.Screen name="VerifySeedPhrase" component={VerifySeedPhraseScreen} />
         <Stack.Screen name="UserDetails" component={UserDetailsScreen} />
@@ -95,6 +99,9 @@ export default function App() {
   });
   const ready = fontsLoaded || fontError != null;
 
+  // Syncs on reconnect, return to the foreground, an interval and pull-to-refresh, for the app's lifetime.
+  useEffect(() => syncService.start(), []);
+
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
@@ -108,6 +115,7 @@ export default function App() {
           <AuthProvider>
             <WalletDataProvider>
               <RootNavigator />
+              <ConnectionRestoredNotice />
             </WalletDataProvider>
             <StatusBar style="dark" />
           </AuthProvider>

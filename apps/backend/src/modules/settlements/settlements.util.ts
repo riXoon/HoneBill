@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
@@ -60,6 +60,8 @@ export function parseSettlementSmsBody(smsBody: string): {
 @Injectable()
 /** Validates an offline voucher, submits it to Soroban, and records the resulting settlement. */
 export class SettlementsService {
+  private readonly logger = new Logger(SettlementsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
@@ -97,7 +99,26 @@ export class SettlementsService {
       const legacyBytes = buildOfflineSignatureXdr({ amountStroops: amount, protocolToll: toll, nonce, receiverShortId: payload.receiverShortId, gatewayPublicKey: gateway, tokenContractId: token.contractId });
       try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, legacyBytes, signature); } catch { valid = false; }
     }
-    if (!valid) throw new UnauthorizedException('Unauthorized');
+    if (!valid) {
+      // Everything logged is public. Compare with the phone's dev-build "[voucher] signed" log to see which field differs.
+      this.logger.warn(
+        `Offline voucher signature rejected: ${JSON.stringify({
+          senderShortId: payload.senderShortId,
+          receiverShortId: payload.receiverShortId,
+          amountStroops: amount.toString(),
+          tollStroops: toll.toString(),
+          nonceHex: nonce.toString('hex'),
+          gatewayPublicKey: gateway,
+          tokenContractId: token.contractId,
+          tokenSymbol: token.symbol,
+          contractId,
+          enrolledDeviceKey: sender.offlineDeviceKey,
+          signedXdrHex: signedBytes.toString('hex'),
+          signatureHex: signature.toString('hex'),
+        })}`,
+      );
+      throw new UnauthorizedException('Unauthorized');
+    }
     let settlement = existing;
     if (!settlement) {
       try {
