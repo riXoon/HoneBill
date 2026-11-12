@@ -47,6 +47,12 @@ export type RootStackParamList = {
   ReceiveAmount: undefined;
   /** No `amount` = a QR with only the short ID, which fills the ID in for the sender. */
   ReceiveQr: { amount?: number } | undefined;
+  /** Profile menu: edit name and email (confirmed with the MPIN). */
+  AccountSettings: undefined;
+  /** Profile menu: vault address, recovery phrase and offline payment setup. */
+  VaultSettings: undefined;
+  /** Profile menu: current MPIN, then a new one twice. */
+  ChangeMpin: undefined;
   TransactionDetail: { id: string };
   /** Adds PHPC to the online wallet through the anchor's deposit. */
   TopUp: undefined;

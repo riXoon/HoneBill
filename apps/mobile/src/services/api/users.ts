@@ -33,3 +33,10 @@ export function lookupUserByShortId(shortId: string, signal?: AbortSignal): Prom
 export function lookupUserByPhone(phone: string, signal?: AbortSignal): Promise<UserLookup | null> {
   return lookup({ phone }, signal);
 }
+
+export type ProfileChanges = { firstName?: string; lastName?: string; email?: string };
+
+/** Edits the account's name and/or email. The PIN proves the caller owns the account. */
+export function updateProfile(phone: string, pin: string, changes: ProfileChanges, signal?: AbortSignal): Promise<{ success: true }> {
+  return apiRequest('PATCH', '/users/profile', { body: { phoneNumber: phone, pin, ...changes }, signal });
+}
