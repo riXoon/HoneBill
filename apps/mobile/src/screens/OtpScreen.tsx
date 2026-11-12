@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
+import { AuthScroll } from '../components/ui/AuthScroll';
 import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
@@ -14,6 +15,7 @@ import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { sendOtp, verifyOtp } from '../services/api/otp';
 import { setSignupSession } from '../services/signupSession';
 import { colors, fonts, radius } from '../theme';
+import { useScale } from '../theme/responsive';
 
 // Figma: OTP (870:2988), 402x874. The backend sends 6-digit codes (the design drew 4 boxes).
 const OTP_LENGTH = 6;
@@ -29,6 +31,7 @@ function verifyErrorMessage(error: unknown): string {
 }
 
 export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Otp'>) {
+  const scale = useScale();
   const { phone } = route.params;
   const recover = route.params.purpose === 'recover';
   const [code, setCode] = useState('');
@@ -106,9 +109,8 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome step={recover ? undefined : 2} onBack={navigation.goBack} />
 
-      <View style={styles.content}>
+      <AuthScroll style={styles.content}>
         <View style={styles.header}>
           <GradientTitle>Verify OTP</GradientTitle>
           <Text style={styles.subtitle}>
@@ -125,15 +127,15 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
           ) : null}
         </View>
 
-        <View style={styles.mascotSlot}>
+        <View style={[styles.mascotSlot, { height: 196 * scale }]}>
           <Mascot mood="success" />
         </View>
 
         <View style={styles.footer}>
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: busy || cooldown > 0 }}
-            disabled={busy || cooldown > 0}
+            accessibilityState={{ disabled: !canResend }}
+            disabled={!canResend}
             onPress={() => void resend()}
             hitSlop={8}
             style={({ pressed }) => [styles.resendPill, canResend && styles.resendPillActive, pressed && canResend && styles.resendPillPressed]}
@@ -150,19 +152,21 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
           </Pressable>
           <Button label={busy ? 'Please wait…' : 'Verify'} size="large" onPress={() => void verify()} disabled={busy} />
         </View>
-      </View>
+      </AuthScroll>
+      {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}
+      <AuthChrome step={recover ? undefined : 2} onBack={navigation.goBack} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, justifyContent: 'center', padding: 40, gap: 40 },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 40, gap: 40 },
   header: { gap: 11 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
   codeBlock: { gap: 12, alignItems: 'center' },
   error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
-  mascotSlot: { height: 196, alignItems: 'center', justifyContent: 'center' },
+  mascotSlot: { alignItems: 'center', justifyContent: 'center' },
   footer: { gap: 16, alignItems: 'center' },
   resendPill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
   // Ready to tap: tinted pill with a visible border so it reads as an action, not a caption.

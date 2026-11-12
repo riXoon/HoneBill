@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { DownloadIcon, GenerateQrIcon, QrTitleIcon } from '../components/ui/smallIcons';
 import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
+import { reportError } from '../services/errorReporting';
 import { colors, fonts } from '../theme';
 
 export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'ReceiveQr'>) {
@@ -49,13 +50,15 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
           return;
         }
         const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
-        await MediaLibrary.saveToLibraryAsync(uri);
+        // SDK 57: the old top-level saveToLibraryAsync now always throws; Asset.create is its replacement.
+        await MediaLibrary.Asset.create(uri);
         Alert.alert('Saved', 'The QR card is in your gallery.');
       } else {
         const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
         await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save QR card' });
       }
-    } catch {
+    } catch (e) {
+      reportError(e, { step: 'saveQrCard' });
       Alert.alert('Could not save', 'Something went wrong while saving the QR card. Please try again.');
     } finally {
       setSaving(false);
@@ -100,5 +103,5 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   withAmount: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 8 },
   withAmountText: { fontFamily: fonts.regular, fontSize: 15, color: colors.primary, textAlign: 'center' },
-  caption: { width: 302, alignSelf: 'center', fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  caption: { width: '100%', maxWidth: 302, alignSelf: 'center', fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
 });

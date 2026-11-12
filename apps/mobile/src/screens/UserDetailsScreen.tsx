@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
+import { AuthScroll } from '../components/ui/AuthScroll';
 import { Button } from '../components/ui/Button';
 import { GradientTitle } from '../components/ui/GradientTitle';
 import { TextField } from '../components/ui/TextField';
@@ -52,9 +53,8 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome step={3} onBack={navigation.goBack} />
 
-      <View style={styles.content}>
+      <AuthScroll style={styles.content}>
         <View style={styles.header}>
           <GradientTitle>User Details</GradientTitle>
           <Text style={styles.subtitle}>Enter details to complete registration</Text>
@@ -91,7 +91,9 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
 
         <View style={styles.spacer} />
         <Button label="Continue" size="large" onPress={submit} />
-      </View>
+      </AuthScroll>
+      {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}
+      <AuthChrome step={3} onBack={navigation.goBack} />
     </View>
   );
 }
@@ -99,7 +101,7 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   // 60 dp spacer under the back button, then the header, as in the design.
-  content: { flex: 1, paddingHorizontal: 40, paddingTop: 100, paddingBottom: 40, gap: 40 },
+  content: { flexGrow: 1, paddingHorizontal: 40, paddingTop: 100, paddingBottom: 40, gap: 40 },
   header: { gap: 10 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
   fields: { alignItems: 'center', gap: 12 },

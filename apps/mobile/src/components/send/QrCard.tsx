@@ -61,7 +61,9 @@ export function QrCard({ value, name, amount, cardRef }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    width: QR_CARD_WIDTH,
+    width: '100%',
+    maxWidth: QR_CARD_WIDTH,
+    alignSelf: 'center',
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: colors.surface,

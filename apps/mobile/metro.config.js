@@ -35,6 +35,11 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(projectRoot);
 
+// dotLottie animations (e.g. assets/mascot/honi-profile.lottie) are bundled as assets.
+if (!config.resolver.assetExts.includes('lottie')) {
+  config.resolver.assetExts.push('lottie');
+}
+
 // Expo SDK 54 configures npm workspaces automatically. Keep only the custom
 // package aliases below so Metro can still resolve transitive dependencies.
 

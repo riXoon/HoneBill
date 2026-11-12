@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { ImageSource } from 'expo-image';
+import LottieView, { type LottieViewProps } from 'lottie-react-native';
 
 import { colors, fonts } from '../../theme';
 
@@ -10,7 +11,9 @@ const W = 342;
 const H = 120;
 
 type HoniPlacement = {
-  source: ImageSource | number;
+  /** Static picture. Use `lottie` instead for an animated Honi. */
+  source?: ImageSource | number;
+  lottie?: LottieViewProps['source'];
   /** Frame Figma rotates the picture inside (absolute, relative to the banner). */
   frame: { left: number; top: number; width: number; height: number };
   /** The picture itself, centred in the frame. */
@@ -25,7 +28,7 @@ export const BANNER_HONI = {
     image: { width: 169, height: 120.053 },
   },
   transactions: {
-    source: require('../../../assets/mascot/honi-bill.png'),
+    lottie: require('../../../assets/mascot/honi-bill.json'),
     frame: { left: 175, top: -15, width: 193.579, height: 154.247 },
     image: { width: 168.996, height: 110.31 },
   },
@@ -53,13 +56,27 @@ export function PromoBanner({ title, subtitle, honi }: PromoBannerProps) {
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
       </View>
-      <View pointerEvents="none" style={[styles.honiFrame, frame]}>
-        <Image
-          source={honi.source}
-          style={{ width: image.width, height: image.height, transform: [{ rotate: '-16.71deg' }] }}
-          contentFit="cover"
-          accessibilityLabel="Honi, the HoneBill mascot"
-        />
+      {/* Anchored to the right edge (the design's 342 dp card), so a narrower card keeps Honi in the corner. */}
+      <View
+        pointerEvents="none"
+        style={[styles.honiFrame, { right: W - frame.left - frame.width, top: frame.top, width: frame.width, height: frame.height }]}
+      >
+        {honi.lottie ? (
+          <LottieView
+            source={honi.lottie}
+            autoPlay
+            loop
+            resizeMode="cover"
+            style={{ width: image.width, height: image.height, transform: [{ rotate: '-16.71deg' }] }}
+          />
+        ) : (
+          <Image
+            source={honi.source}
+            style={{ width: image.width, height: image.height, transform: [{ rotate: '-16.71deg' }] }}
+            contentFit="cover"
+            accessibilityLabel="Honi, the HoneBill mascot"
+          />
+        )}
       </View>
     </View>
   );
@@ -78,7 +95,7 @@ const styles = StyleSheet.create({
   },
   clip: { ...StyleSheet.absoluteFill, borderRadius: 12, overflow: 'hidden' },
   // Greeting at the top, subtext pinned to the bottom edge so the two read as separate lines with room between.
-  text: { position: 'absolute', left: 19, top: 16, bottom: 16, width: 208, justifyContent: 'space-between' },
+  text: { position: 'absolute', left: 19, top: 16, bottom: 16, width: '61%', justifyContent: 'space-between' },
   title: { fontFamily: fonts.medium, fontSize: 18, color: colors.surface },
   subtitle: { fontFamily: fonts.light, fontSize: 12, color: colors.surface },
   honiFrame: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },

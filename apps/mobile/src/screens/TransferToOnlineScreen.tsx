@@ -8,7 +8,7 @@ import type { RootStackParamList } from '../navigation/types';
 // Figma: Transfer to Online (870:3328), 402x874.
 export function TransferToOnlineScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'TransferOnline'>) {
   // Withdraws from the offline vault: `/engine/withdraw`, signed with the wallet key and submitted from the phone.
-  const { busy, transfer } = useWalletTransfer('online', navigation.goBack);
+  const { busy, transfer, dialog } = useWalletTransfer('online', navigation.goBack);
   return (
     <TransferForm
       to="online"
@@ -18,6 +18,7 @@ export function TransferToOnlineScreen({ navigation }: NativeStackScreenProps<Ro
       onBack={navigation.goBack}
       onConfirm={transfer}
       busy={busy}
+      dialog={dialog}
     />
   );
 }

@@ -6,6 +6,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
+import LottieView from 'lottie-react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { LogoWatermark } from '../components/brand/LogoWatermark';
 import { AppBackground } from '../components/ui/AppBackground';
@@ -21,7 +23,8 @@ import { colors, fonts } from '../theme';
 
 // Figma: Profile (942:5362), 402x874. Positions below are read off the frame, relative to the
 // 342 dp column that starts under the title row (frame y 130).
-const honiProfile = require('../../assets/mascot/honi-profile.png');
+const honiProfile = require('../../assets/mascot/honi-profile.png'); // static frame for reduce-motion
+const honiProfileLottie = require('../../assets/mascot/honi-profile.json');
 // Baked from the Figma gradient stack by scripts/generate-profile-arch.js (one bitmap, no live gradients).
 const archImage = require('../../assets/profile/arch.png');
 const ARCH_WIDTH = 575;
@@ -69,6 +72,7 @@ function MenuRow({ icon, label, trailing, onPress, tinted, accessibilityLabel }:
 
 export function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const navigation = useNavigation();
   const { activeAccount, logout } = useAuth();
   // Only a well-formed address (right length, alphabet, version and checksum) is shown or copied: anything else
@@ -135,7 +139,11 @@ export function ProfileScreen() {
           </View>
           <View pointerEvents="none" style={styles.honiFrame}>
             <View style={styles.honiTilt}>
-              <Image source={honiProfile} style={styles.honiImage} contentFit="cover" accessibilityLabel="Honi, the HoneBill mascot" />
+              {reduceMotion ? (
+                <Image source={honiProfile} style={styles.honiImage} contentFit="cover" accessibilityLabel="Honi, the HoneBill mascot" />
+              ) : (
+                <LottieView source={honiProfileLottie} autoPlay loop resizeMode="cover" style={styles.honiImage} />
+              )}
             </View>
           </View>
 
@@ -178,7 +186,7 @@ export function ProfileScreen() {
               onPress={() => rootNavigation()?.navigate('ChangeMpin')}
             />
             <MenuRow
-              icon={<View style={styles.glyph}><ReceiptIcon /></View>}
+              icon={<View style={styles.glyph}><ReceiptIcon color={colors.textMuted} /></View>}
               label="Terms & Conditions"
               trailing={<ChevronRightIcon />}
               onPress={() => rootNavigation()?.navigate('Terms')}
@@ -230,9 +238,9 @@ const styles = StyleSheet.create({
   menu: {
     position: 'absolute',
     top: 209,
-    left: '50%',
-    marginLeft: -151,
-    width: 302,
+    // 20 dp in from each side of the column (302 of 342 dp in the design), so it follows the screen's width.
+    left: 20,
+    right: 20,
     gap: 4,
     padding: 16,
     borderRadius: 12,

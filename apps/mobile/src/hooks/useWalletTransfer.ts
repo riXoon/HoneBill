@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { Alert } from 'react-native';
 
+import type { ResultDialogProps } from '../components/ui/ResultDialog';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { errorMessage, UserFacingError } from '../services/api/client';
@@ -8,6 +8,7 @@ import { reportError } from '../services/errorReporting';
 import { buildMoveEntries } from '../services/ownTransfers';
 import { PendingTransactionError } from '../services/stellar/sorobanRpc';
 import { moveToOffline, moveToOnline } from '../services/walletActions';
+import { errorHaptic, successHaptic } from '../services/haptics';
 import { afterNextPaint } from '../utils/async';
 import { formatPeso } from '../utils/format';
 
@@ -17,11 +18,14 @@ const LABEL = { online: 'online', offline: 'offline' } as const;
  * Moves funds between the user's own wallets (Transfer to Online / Offline). `busy` covers the whole
  * sign-prepare-submit-confirm run, which takes several seconds, so the screen can lock the form.
  */
+type Outcome = Pick<ResultDialogProps, 'mood' | 'title' | 'message' | 'buttonLabel'> & { done: boolean };
+
 export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) {
   const { activeAccount } = useAuth();
   const { refresh, addMoves } = useWalletData();
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const transfer = useCallback(
     async (amount: number) => {
@@ -36,14 +40,20 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         // replaces this one on the next refresh, which is also what shows it on other devices.
         addMoves(buildMoveEntries(to, amount, hash));
         void refresh({ force: true });
-        Alert.alert('Transfer complete', `${formatPeso(amount)} is now in your ${LABEL[to]} wallet.`, [
-          { text: 'OK', onPress: onDone },
-        ]);
+        successHaptic();
+        setOutcome({
+          mood: 'success',
+          title: 'Transfer complete',
+          message: `${formatPeso(amount)} is now in your ${LABEL[to]} wallet.`,
+          buttonLabel: 'Done',
+          done: true,
+        });
       } catch (error) {
         // Submitted but unconfirmed: the balances may already have changed.
         if (error instanceof PendingTransactionError) void refresh({ force: true });
         if (!(error instanceof UserFacingError)) reportError(error, { step: `transferTo${to}` });
-        Alert.alert('Transfer not completed', errorMessage(error));
+        errorHaptic();
+        setOutcome({ mood: 'fail', title: 'Transfer not completed', message: errorMessage(error), buttonLabel: 'Try again', done: false });
       } finally {
         running.current = false;
         setBusy(false);
@@ -52,5 +62,19 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
     [activeAccount, to, refresh, addMoves, onDone],
   );
 
-  return { busy, transfer };
+  /** Props for the result dialog: success leaves the screen once acknowledged, a failure stays for another try. */
+  const dialog: ResultDialogProps = {
+    visible: outcome !== null,
+    mood: outcome?.mood ?? 'success',
+    title: outcome?.title ?? '',
+    message: outcome?.message ?? '',
+    buttonLabel: outcome?.buttonLabel,
+    onDismiss: () => {
+      const finished = outcome?.done;
+      setOutcome(null);
+      if (finished) onDone();
+    },
+  };
+
+  return { busy, transfer, dialog };
 }

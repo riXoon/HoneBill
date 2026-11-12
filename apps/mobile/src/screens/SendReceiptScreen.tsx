@@ -1,7 +1,9 @@
-import { useCallback, useEffect } from 'react';
-import { BackHandler, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 import { Mascot } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
@@ -12,6 +14,7 @@ import { Button } from '../components/ui/Button';
 import { formatPeso, formatReceiptDate, shortRef } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
+import { reportError } from '../services/errorReporting';
 import { findRecipientById } from '../services/recipientDirectory';
 import { addRecentRecipient } from '../services/recipientStore';
 import { colors, fonts } from '../theme';
@@ -33,6 +36,9 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
   const { recipientId, amount, reference, issuedAt, method } = route.params;
   const recipient = findRecipientById(recipientId);
   const { activeAccount } = useAuth();
+  /** The receipt as it is shared: everything on the card except the share button itself. */
+  const receiptRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
 
   // A finished payment makes the recipient "Recent" on the Send screen.
   useEffect(() => {
@@ -51,6 +57,25 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
     }, [goHome]),
   );
 
+  // Shares the receipt as a PNG picture (not its text), through the phone's share sheet, which also offers "save to gallery".
+  const share = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Sharing unavailable', 'This phone cannot share files from the app.');
+        return;
+      }
+      const uri = await captureRef(receiptRef, { format: 'png', quality: 1 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share receipt', UTI: 'public.png' });
+    } catch (e) {
+      reportError(e, { step: 'shareReceipt' });
+      Alert.alert('Could not share', 'Something went wrong while preparing the receipt. Please try again.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   if (!recipient) return null;
 
   return (
@@ -62,50 +87,62 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
       centered
       footer={<Button label="Return to Home" size="large" onPress={goHome} />}
     >
-      <GlassCard style={styles.card}>
-        {/* Saving or sharing the receipt is not wired yet, so the icon is only the design's affordance. */}
-        <View style={styles.download} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <DownloadIcon />
-        </View>
+      <GlassCard>
+        {/* Captured as the shared picture. It has its own solid fill, so the image does not come out transparent. */}
+        <View ref={receiptRef} collapsable={false} style={styles.card}>
+          <Mascot mood="voucher" />
 
-        <Mascot mood="voucher" />
-
-        <View style={styles.message}>
-          <Text style={styles.heading} accessibilityRole="header">
-            Receipt Created
-          </Text>
-          <Text style={styles.copy}>Your transaction is successful.{'\n'}Sent via Honebill</Text>
-        </View>
-
-        <View style={styles.voucher}>
-          <View style={styles.details}>
-            <DetailRow label="Recipient" value={recipient.name} strong={false} />
-            <DetailRow label="Short ID" value={recipient.shortId} />
-            <DetailRow label="Amount sent" value={formatPeso(amount)} />
-            <DetailRow label="Ref. Number" value={shortRef(reference)} />
-            <DetailRow label="Stellar Ledger" value={method === 'online' ? SETTLED : PENDING} />
+          <View style={styles.message}>
+            <Text style={styles.heading} accessibilityRole="header">
+              Receipt Created
+            </Text>
+            <Text style={styles.copy}>Your transaction is successful.{'\n'}Sent via Honebill</Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.identifier}>
-            <ReceiptBarcode />
-            <View style={styles.identifierText}>
-              <Text style={styles.identifierLine}>Ref No. {shortRef(reference)}</Text>
-              <Text style={styles.identifierLine}>{formatReceiptDate(new Date(issuedAt))}</Text>
+
+          <View style={styles.voucher}>
+            <View style={styles.details}>
+              <DetailRow label="Recipient" value={recipient.name} strong={false} />
+              <DetailRow label="Short ID" value={recipient.shortId} />
+              <DetailRow label="Amount sent" value={formatPeso(amount)} />
+              <DetailRow label="Ref. Number" value={shortRef(reference)} />
+              <DetailRow label="Stellar Ledger" value={method === 'online' ? SETTLED : PENDING} />
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.identifier}>
+              <ReceiptBarcode />
+              <View style={styles.identifierText}>
+                <Text style={styles.identifierLine}>Ref No. {shortRef(reference)}</Text>
+                <Text style={styles.identifierLine}>{formatReceiptDate(new Date(issuedAt))}</Text>
+              </View>
+            </View>
+            {/* Scalloped tear-off edge, overhanging the 1 dp outline by 1 dp on each side. */}
+            <View style={styles.edge} pointerEvents="none">
+              <VoucherEdge />
             </View>
           </View>
-          {/* Scalloped tear-off edge, overhanging the 1 dp outline by 1 dp on each side. */}
-          <View style={styles.edge} pointerEvents="none">
-            <VoucherEdge />
-          </View>
         </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share receipt"
+          accessibilityState={{ disabled: sharing, busy: sharing }}
+          disabled={sharing}
+          hitSlop={8}
+          onPress={() => void share()}
+          style={({ pressed }) => [styles.download, pressed && styles.pressed, sharing && styles.sharing]}
+        >
+          <DownloadIcon />
+        </Pressable>
       </GlassCard>
     </SendLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 20, gap: 16, alignItems: 'center' },
-  download: { position: 'absolute', top: 16, right: 16 },
+  card: { padding: 20, gap: 16, alignItems: 'center', borderRadius: 12, backgroundColor: colors.card },
+  download: { position: 'absolute', top: 12, right: 12, padding: 4 },
+  pressed: { opacity: 0.6 },
+  sharing: { opacity: 0.4 },
   message: { width: '100%', gap: 8 },
   heading: { fontFamily: fonts.semibold, fontSize: 20, color: colors.text, textAlign: 'center' },
   copy: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 15, color: colors.textMuted, textAlign: 'center' },

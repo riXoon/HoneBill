@@ -17,6 +17,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets';
 import Svg, { Circle, Path } from 'react-native-svg';
 
+import { confirmHaptic } from '../../services/haptics';
 import { colors, fonts } from '../../theme';
 
 type SwipeToEnterProps = {
@@ -110,6 +111,7 @@ export function SwipeToEnter({
     .onEnd(() => {
       if (x.value >= MAX_X * COMPLETE_AT) {
         x.value = withSpring(MAX_X);
+        scheduleOnRN(confirmHaptic);
         scheduleOnRN(onComplete);
       } else {
         x.value = withSpring(0);

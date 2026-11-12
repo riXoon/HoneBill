@@ -6,6 +6,7 @@ import { useWalletData } from '../../context/WalletDataContext';
 import { colors, fonts } from '../../theme';
 import { formatPeso, formatWhole } from '../../utils/format';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
+import { ResultDialog, type ResultDialogProps } from '../ui/ResultDialog';
 import { InfoIcon } from '../ui/smallIcons';
 import { SwipeToEnter } from '../ui/SwipeToEnter';
 import { AmountField, amountProblem, parseAmount } from './AmountField';
@@ -28,13 +29,15 @@ type TransferFormProps = {
   onConfirm: (amount: number) => void;
   /** The transfer is being signed and submitted: the amount is locked and the swipe disabled. */
   busy?: boolean;
+  /** The success / failure dialog shown once the transfer finishes. */
+  dialog: ResultDialogProps;
 };
 
 /**
  * Shared body of "Transfer to Online" (870:3328) and "Transfer to Offline" (870:3307): move funds
  * between the user's own wallets. The amount card, the source-wallet note, Honi and the swipe.
  */
-export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = false }: TransferFormProps) {
+export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = false, dialog }: TransferFormProps) {
   const from: WalletKind = to === 'online' ? 'offline' : 'online';
   const [amountText, setAmountText] = useState('');
 
@@ -101,6 +104,8 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
         <InfoIcon color={colors.textMuted} />
         <Text style={styles.noteText}>You are transferring funds from your {NAMES[from].toLowerCase()} wallet</Text>
       </View>
+
+      <ResultDialog {...dialog} />
     </SendLayout>
   );
 }

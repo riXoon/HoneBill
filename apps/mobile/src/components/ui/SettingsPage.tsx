@@ -20,7 +20,6 @@ export function SettingsPage({ title, subtitle, onBack, children }: SettingsPage
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome onBack={onBack} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[
@@ -37,6 +36,8 @@ export function SettingsPage({ title, subtitle, onBack, children }: SettingsPage
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
+      {/* After the ScrollView, so it is drawn (and tapped) on top: the scroll area covers the whole screen. */}
+      <AuthChrome onBack={onBack} />
     </View>
   );
 }

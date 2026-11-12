@@ -9,7 +9,7 @@ import { colors } from '../theme';
 // Figma: Transfer to Offline (870:3307), 402x874.
 export function TransferToOfflineScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'TransferOffline'>) {
   // Deposits into the offline vault: `/engine/deposit`, signed with the wallet key and submitted from the phone.
-  const { busy, transfer } = useWalletTransfer('offline', navigation.goBack);
+  const { busy, transfer, dialog } = useWalletTransfer('offline', navigation.goBack);
   return (
     <TransferForm
       to="offline"
@@ -19,6 +19,7 @@ export function TransferToOfflineScreen({ navigation }: NativeStackScreenProps<R
       onBack={navigation.goBack}
       onConfirm={transfer}
       busy={busy}
+      dialog={dialog}
     />
   );
 }

@@ -6,6 +6,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { AuthChrome } from '../components/ui/AuthChrome';
+import { AuthScroll } from '../components/ui/AuthScroll';
 import { Button } from '../components/ui/Button';
 import { CodeBoxes } from '../components/ui/CodeBoxes';
 import { GradientTitle } from '../components/ui/GradientTitle';
@@ -17,6 +18,7 @@ import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
 import { clearSignupSession, getSignupSession, setSignupSecurity } from '../services/signupSession';
 import { createDeviceWallet, type NewWallet } from '../services/wallet/deviceWallet';
 import { colors, fonts } from '../theme';
+import { useScale } from '../theme/responsive';
 import { afterNextPaint } from '../utils/async';
 
 // Figma: MPIN Creation (870:2965), 402x874.
@@ -38,6 +40,7 @@ function LockIcon() {
 }
 
 export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'MpinCreation'>) {
+  const scale = useScale();
   const [pin, setPin] = useState('');
   const [weak, setWeak] = useState<WeakMpinReason | null>(null);
   // Remounting the boxes after the dialog brings the keyboard back (the Modal steals focus).
@@ -100,9 +103,8 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
   return (
     <View style={styles.root}>
       <AppBackground />
-      <AuthChrome step={4} onBack={navigation.goBack} />
 
-      <View style={styles.content}>
+      <AuthScroll style={styles.content}>
         <View style={styles.titleBlock}>
           <GradientTitle>Secure Your Account</GradientTitle>
           <Text style={styles.subtitle}>Create a 4-digit PIN to protect your device</Text>
@@ -126,10 +128,12 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
         />
 
         {/* Honi's image (shield and lock included) is taller than the 196 dp component; it hangs from the top. */}
-        <View style={styles.mascotSlot}>
+        <View style={[styles.mascotSlot, { height: 300 * scale }]}>
           <Mascot mood="secure" />
         </View>
-      </View>
+      </AuthScroll>
+      {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}
+      <AuthChrome step={4} onBack={navigation.goBack} />
 
       <WeakPinDialog reason={weak} onDismiss={dismissWeak} />
     </View>
@@ -138,10 +142,10 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, justifyContent: 'center', padding: 40, gap: 40 },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 40, gap: 40 },
   titleBlock: { gap: 8 },
   subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
   codeBlock: { gap: 12, alignItems: 'center' },
   error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
-  mascotSlot: { height: 300, alignItems: 'center' },
+  mascotSlot: { alignItems: 'center' },
 });
