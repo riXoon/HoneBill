@@ -124,7 +124,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
       {
         ref: '5.1',
         heading: 'Local Preparation & Storage',
-        body: 'HoneBill utilizes an offline-first architecture that allows you to prepare, cryptographically sign (via Ed25519), and store transaction records locally on your device (via Drizzle ORM) without an active internet connection.',
+        body: 'HoneBill utilizes an offline-first architecture that allows you to prepare, cryptographically sign (via Ed25519), and store transaction records locally on your device without an active internet connection.',
       },
       {
         ref: '5.2',
