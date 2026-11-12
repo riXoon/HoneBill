@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 import { colors, fonts } from '../../theme';
 
@@ -10,28 +12,58 @@ type Props = {
   compact?: boolean;
 };
 
-/** The short ID is what a sender types or scans to pay someone, so it is shown large, spaced and high-contrast. */
+/** The short ID is what a sender types or scans to pay someone, so it is shown large, spaced and high-contrast. Tap to copy. */
 export function ShortIdBadge({ shortId, label = 'SHORT ID', compact = false }: Props) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const copy = async () => {
+    try {
+      await Clipboard.setStringAsync(shortId);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1800);
+    AccessibilityInfo.announceForAccessibility('Short ID copied');
+  };
+
+  const spoken = shortId.split('').join(' ');
+
   if (compact) {
     return (
-      <View style={styles.pill} accessible accessibilityLabel={`Short ID: ${shortId.split('').join(' ')}`}>
-        <Text style={styles.pillLabel}>Short ID</Text>
-        <Text style={styles.pillValue} selectable numberOfLines={1}>
+      <Pressable
+        onPress={() => void copy()}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Short ID: ${spoken}`}
+        accessibilityHint="Copies the short ID"
+        style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+      >
+        <Text style={[styles.pillLabel, copied && styles.copied]}>{copied ? 'Copied!' : 'Short ID'}</Text>
+        <Text style={styles.pillValue} numberOfLines={1}>
           {shortId}
         </Text>
-      </View>
+      </Pressable>
     );
   }
   return (
-    <View style={styles.box} accessible accessibilityLabel={`${label}: ${shortId.split('').join(' ')}`}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value} selectable numberOfLines={1} adjustsFontSizeToFit>
+    <Pressable
+      onPress={() => void copy()}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${spoken}`}
+      accessibilityHint="Copies the short ID"
+      style={({ pressed }) => [styles.box, pressed && styles.pressed]}
+    >
+      <Text style={[styles.label, copied && styles.copied]}>{copied ? 'COPIED!' : label}</Text>
+      <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
         {shortId}
       </Text>
-    </View>
+    </Pressable>
   );
 }
-
 const styles = StyleSheet.create({
   box: {
     width: '100%',
@@ -56,6 +88,8 @@ const styles = StyleSheet.create({
     borderColor: colors.primarySoft,
     backgroundColor: colors.yellow,
   },
+  pressed: { opacity: 0.7 },
+  copied: { color: colors.borderRed },
   pillLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
   pillValue: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: 2, color: colors.text },
   label: { fontFamily: fonts.regular, fontSize: 10, letterSpacing: 1, color: colors.textMuted },
