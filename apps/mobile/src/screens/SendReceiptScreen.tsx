@@ -11,7 +11,7 @@ import { ReceiptBarcode, VoucherEdge } from '../components/send/ReceiptBarcode';
 import { SendLayout } from '../components/send/SendLayout';
 import { DownloadIcon, ReceiptIcon } from '../components/ui/smallIcons';
 import { Button } from '../components/ui/Button';
-import { formatPeso, formatReceiptDate, shortRef } from '../utils/format';
+import { formatPeso, formatReceiptDate, shortRef, voucherRef } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { reportError } from '../services/errorReporting';
@@ -36,13 +36,18 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
   const { recipientId, amount, reference, issuedAt, method } = route.params;
   const recipient = findRecipientById(recipientId);
   const { activeAccount } = useAuth();
+  // An online transfer is final here; an offline voucher only settles once the gateway (or the app online) submits it.
+  const byText = method !== 'online';
+  // A voucher's reference matches the texts the gateway sends about it.
+  const ref = byText ? voucherRef(reference) : shortRef(reference);
   /** The receipt as it is shared: everything on the card except the share button itself. */
   const receiptRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
 
   // A finished payment makes the recipient "Recent" on the Send screen.
   useEffect(() => {
-    if (recipient && activeAccount?.shortId) void addRecentRecipient(activeAccount.shortId, recipient);
+    // An unchecked ID stays out: once the voucher settles, History names it and Recents looks it up properly.
+    if (recipient && !recipient.unverified && activeAccount?.shortId) void addRecentRecipient(activeAccount.shortId, recipient);
   }, [recipient, activeAccount?.shortId]);
 
   // The receipt ends the flow: Back (button or hardware) goes home instead of back into the finished steps.
@@ -96,7 +101,11 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
             <Text style={styles.heading} accessibilityRole="header">
               Receipt Created
             </Text>
-            <Text style={styles.copy}>Your transaction is successful.{'\n'}Sent via Honebill</Text>
+            <Text style={styles.copy}>
+              {byText
+                ? `Your payment was sent by SMS.\nYou will get a text with Ref ${ref} when it goes through or fails.`
+                : 'Your transaction is successful.\nSent via Honebill'}
+            </Text>
           </View>
 
           <View style={styles.voucher}>
@@ -104,14 +113,14 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
               <DetailRow label="Recipient" value={recipient.name} strong={false} />
               <DetailRow label="Short ID" value={recipient.shortId} />
               <DetailRow label="Amount sent" value={formatPeso(amount)} />
-              <DetailRow label="Ref. Number" value={shortRef(reference)} />
+              <DetailRow label="Ref. Number" value={ref} />
               <DetailRow label="Stellar Ledger" value={method === 'online' ? SETTLED : PENDING} />
             </View>
             <View style={styles.divider} />
             <View style={styles.identifier}>
               <ReceiptBarcode />
               <View style={styles.identifierText}>
-                <Text style={styles.identifierLine}>Ref No. {shortRef(reference)}</Text>
+                <Text style={styles.identifierLine}>Ref No. {ref}</Text>
                 <Text style={styles.identifierLine}>{formatReceiptDate(new Date(issuedAt))}</Text>
               </View>
             </View>

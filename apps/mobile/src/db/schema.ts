@@ -43,6 +43,7 @@ export const walletTransactions = sqliteTable(
     nonce: text('nonce'),
     counterpartyShortId: text('counterparty_short_id'),
     mirror: integer('mirror', { mode: 'boolean' }).notNull().default(false),
+    failureReason: text('failure_reason'),
   },
   (t) => [primaryKey({ columns: [t.publicKey, t.origin, t.id] }), index('wallet_transactions_list').on(t.publicKey, t.origin, t.position)],
 );

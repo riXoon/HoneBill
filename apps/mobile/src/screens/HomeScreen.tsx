@@ -6,6 +6,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
+import { OutcomeNotice } from '../components/home/OutcomeNotice';
 import { BalanceCards } from '../components/home/BalanceCards';
 import type { BalanceMode } from '../components/home/BalanceCards';
 import { QuickActions, type QuickActionKey } from '../components/home/QuickActions';
@@ -25,11 +26,12 @@ import { useIsOnline } from '../hooks/useIsOnline';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { useScale } from '../theme/responsive';
-import { SOURCE_LABEL } from '../types/transaction';
-import { formatAmount, formatRelative } from '../utils/format';
+import { SOURCE_LABEL, type TransactionStatus } from '../types/transaction';
+import { formatAmount, formatPeso, formatRelative } from '../utils/format';
 
 /** How many entries "Recent Activity" shows; the full list is on the History tab. */
 const RECENT_COUNT = 3;
+const STATUS_SUFFIX: Record<TransactionStatus, string> = { completed: '', pending: ' · Pending', failed: ' · Failed' };
 
 // Figma: Home Page - Online (870:3102) and Home Page - Offline (870:3140), 402x874.
 const FADE_MS = 250;
@@ -52,7 +54,7 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeAccount } = useAuth();
-  const { balances, transactions, status, error, refresh, syncNow } = useWalletData();
+  const { balances, transactions, status, error, refresh, syncNow, pendingOffline, outcomes, dismissOutcomes } = useWalletData();
   useOfflineSetup();
   const connected = useIsOnline();
   // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
@@ -170,11 +172,25 @@ export function HomeScreen() {
           status={status}
           onToggle={toggle}
         />
+        {!online && pendingOffline > 0 && balances ? (
+          <Text style={styles.held} accessibilityLiveRegion="polite">
+            {formatPeso(pendingOffline)} is held for payments waiting to settle. You can still spend{' '}
+            {formatPeso(Math.max(0, balances.offline - pendingOffline))}.
+          </Text>
+        ) : null}
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
             {balances ? 'Could not refresh. Pull down to try again.' : error}
           </Text>
         ) : null}
+        <OutcomeNotice
+          outcomes={outcomes}
+          onView={() => {
+            dismissOutcomes();
+            navigation.navigate('Tabs', { screen: 'History' });
+          }}
+          onDismiss={dismissOutcomes}
+        />
 
         <QuickActions online={online} onPress={onQuickAction} />
 
@@ -202,7 +218,7 @@ export function HomeScreen() {
                     key={tx.id}
                     kind={tx.direction === 'in' ? 'received' : 'sent'}
                     title={tx.description}
-                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${tx.status === 'pending' ? ' · Pending' : ''}`}
+                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${STATUS_SUFFIX[tx.status]}`}
                     time={formatRelative(new Date(tx.timestamp))}
                   />
                 ))}
@@ -256,4 +272,5 @@ const styles = StyleSheet.create({
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
   error: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
+  held: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textMuted, textAlign: 'center' },
 });

@@ -29,6 +29,7 @@ export function toTransaction(item: HistoryItem): Transaction | null {
     ...(item.nonce ? { nonce: item.nonce } : {}),
     ...(item.counterpartyShortId ? { counterpartyShortId: item.counterpartyShortId } : {}),
     ...(item.mirror ? { mirror: true } : {}),
+    ...(item.failureReason ? { failureReason: item.failureReason } : {}),
   };
 }
 

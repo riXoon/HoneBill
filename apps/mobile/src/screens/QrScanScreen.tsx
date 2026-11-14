@@ -18,9 +18,16 @@ import {
 } from '../components/ui/smallIcons';
 import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
-import { errorMessage, isAborted } from '../services/api/client';
-import { parseRecipientQr, parseRecipientQrAmount, resolveRecipient } from '../services/recipientDirectory';
+import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import {
+  parseRecipientQr,
+  parseRecipientQrAmount,
+  resolveRecipient,
+  unverifiedRecipient,
+} from '../services/recipientDirectory';
+import { useIsOnline } from '../hooks/useIsOnline';
 import { useSendMode } from '../hooks/useSendMode';
+import type { Recipient } from '../types/recipient';
 import type { SendMode } from '../types/send';
 import { colors, fonts } from '../theme';
 
@@ -36,6 +43,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
   const initialMode = useSendMode(route.params?.mode);
   const [chosenMode, setChosenMode] = useState<SendMode | null>(null);
   const mode: SendMode = chosenMode ?? initialMode;
+  const connected = useIsOnline();
   const [uploading, setUploading] = useState(false);
 
   const granted = permission?.granted === true;
@@ -72,16 +80,40 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
         return;
       }
 
+      const goToAmount = (recipient: Recipient) => {
+        // An unchecked recipient can only be paid by voucher, whatever the pill says.
+        const payMode: SendMode = recipient.unverified ? 'offline' : mode;
+        const amount = parseRecipientQrAmount(data);
+        navigation.navigate(
+          'SendAmount',
+          amount ? { recipientId: recipient.id, mode: payMode, amount } : { recipientId: recipient.id, mode: payMode },
+        );
+        // Stay locked so the camera cannot re-fire; coming back to this screen is a fresh scan.
+        setTimeout(release, 1500);
+      };
+
+      // No connection: a scanned HoneBill code cannot carry a typo, so it is paid by voucher without a lookup (and
+      // without the typed-ID warning). Someone already known on this phone keeps their name.
+      if (!connected) {
+        if (mode === 'offline') goToAmount(unverifiedRecipient(shortId));
+        else {
+          Alert.alert(
+            "You're offline",
+            'Switch to "Send via offline" to pay this code by SMS.',
+            [{ text: 'OK', onPress: release }],
+            { onDismiss: release },
+          );
+        }
+        return;
+      }
+
       const controller = new AbortController();
       lookup.current = controller;
       setChecking(true);
       try {
         const recipient = await resolveRecipient(shortId, controller.signal);
         if (recipient) {
-          const amount = parseRecipientQrAmount(data);
-          navigation.navigate('SendAmount', amount ? { recipientId: recipient.id, mode, amount } : { recipientId: recipient.id, mode });
-          // Stay locked so the camera cannot re-fire; coming back to this screen is a fresh scan.
-          setTimeout(release, 1500);
+          goToAmount(recipient);
           return;
         }
         Alert.alert('No account found', 'We could not find an account for this QR code.', [{ text: 'OK', onPress: release }], {
@@ -89,12 +121,18 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
         });
       } catch (e) {
         if (isAborted(e)) return;
+        // The phone looked connected but the request never got through (weak signal): treat it as offline.
+        const unreachable = e instanceof ApiError && (e.kind === 'network' || e.kind === 'timeout');
+        if (unreachable && mode === 'offline') {
+          goToAmount(unverifiedRecipient(shortId));
+          return;
+        }
         Alert.alert('Could not check the code', errorMessage(e), [{ text: 'OK', onPress: release }], { onDismiss: release });
       } finally {
         setChecking(false);
       }
     },
-    [activeAccount?.shortId, navigation, mode],
+    [activeAccount?.shortId, navigation, mode, connected],
   );
 
   const onScanned = useCallback(({ data }: { data: string }) => void handleCode(data), [handleCode]);

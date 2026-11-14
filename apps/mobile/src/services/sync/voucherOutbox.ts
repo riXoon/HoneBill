@@ -1,7 +1,7 @@
 import type { OutboxRow } from '../../db/schema';
 import { ApiError } from '../api/client';
 import { settleVoucher, type SettlementResult } from '../api/settlements';
-import { normalizeNonce } from '../walletCache';
+import { EXPIRED_REASON, normalizeNonce } from '../walletCache';
 import { dueRows, enqueue, finishRow, retryRow } from './outboxStore';
 
 /**
@@ -61,12 +61,25 @@ export function classify(result: { ok: SettlementResult } | { error: unknown }):
   return 'stop';
 }
 
+/** A voucher this phone will not try again, with the reason to show on its pending entry. */
+export type VoucherGivenUp = { nonce: string; reason: string };
+
+/** The server's rejection in plain words. Never shows internals; the screens add "No money was taken." themselves. */
+export function rejectionReason(message: string): string {
+  if (/recipient.*not found/i.test(message)) return 'No account has this ID.';
+  if (/signature/i.test(message)) return 'The payment could not be verified.';
+  if (/offline device key/i.test(message)) return 'This phone was not set up for offline payments.';
+  if (/token/i.test(message)) return 'This currency is not accepted right now.';
+  if (/sender account/i.test(message)) return 'Your account was not found.';
+  return 'The payment was not accepted.';
+}
+
 /**
- * Posts this wallet's due vouchers, oldest first. Returns the nonces that can never settle, so the pending entries
- * for them can say so; settled and failed ones need nothing, the next history read lists them from the chain.
+ * Posts this wallet's due vouchers, oldest first. Returns the vouchers that can never settle (rejected, or too old to
+ * try), so their pending entries can say so; settled and failed ones need nothing, the next history read lists them.
  */
-export async function drainVouchers(publicKey: string, signal: AbortSignal): Promise<{ rejectedNonces: string[] }> {
-  const rejectedNonces: string[] = [];
+export async function drainVouchers(publicKey: string, signal: AbortSignal): Promise<{ givenUp: VoucherGivenUp[] }> {
+  const givenUp: VoucherGivenUp[] = [];
   const now = Date.now();
   let posts = 0;
 
@@ -82,6 +95,7 @@ export async function drainVouchers(publicKey: string, signal: AbortSignal): Pro
     }
     if (now - row.createdAt > MAX_AGE_MS) {
       finish(row, 'failed', 'Expired');
+      givenUp.push({ nonce: payload.nonce, reason: EXPIRED_REASON });
       continue;
     }
 
@@ -101,12 +115,12 @@ export async function drainVouchers(publicKey: string, signal: AbortSignal): Pro
     else if (outcome === 'failed') finish(row, 'failed', 'Failed on-chain');
     else if (outcome === 'rejected') {
       finish(row, 'failed', reason);
-      rejectedNonces.push(payload.nonce);
+      givenUp.push({ nonce: payload.nonce, reason: rejectionReason(reason) });
     } else if (outcome === 'later') retryLater(row, reason);
     else {
       retryLater(row, reason);
       break;
     }
   }
-  return { rejectedNonces };
+  return { givenUp };
 }

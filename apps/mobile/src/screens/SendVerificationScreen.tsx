@@ -61,9 +61,10 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   // Which funds this spends is the view the payment was started from, not whether the phone has internet.
   const online = useSendMode(mode) === 'online';
   const { activeAccount } = useAuth();
-  const { balances, refresh } = useWalletData();
-  // The connection can change between steps, so the funds are checked again for the path taken now.
-  const available = balances ? (online ? balances.online : balances.offline) : null;
+  const { balances, refresh, pendingOffline } = useWalletData();
+  // The connection can change between steps, so the funds are checked again for the path taken now. Offline, money
+  // committed to vouchers still waiting to settle is not spendable.
+  const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
   const fee = online ? 0 : OFFLINE_TOLL_PESOS;
   const total = Math.round((amount + fee) * 100) / 100;
@@ -157,6 +158,11 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       <GlassCard style={styles.panel}>
         <Text style={styles.caption}>RECIPIENT ACCOUNT</Text>
         <AccountRow icon={<RecipientIcon />} title={recipient.name} subtitle={`Short ID: ${recipient.shortId}`} />
+        {recipient.unverified ? (
+          <Text style={styles.unverified} accessibilityRole="alert">
+            This ID was not checked because you are offline. Make sure it is right before you authorize.
+          </Text>
+        ) : null}
         <Text style={styles.caption}>SENDER ACCOUNT</Text>
         <AccountRow
           icon={<OfflineFundsBadge color={colors.surface} />}
@@ -215,6 +221,7 @@ const styles = StyleSheet.create({
   escrowText: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase' },
 
   problem: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
+  unverified: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 15, color: colors.coral },
   panel: { padding: 12, gap: 6 },
   caption: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted },
   account: { height: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },

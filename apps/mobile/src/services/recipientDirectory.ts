@@ -48,6 +48,29 @@ export function rememberRecipient(recipient: Recipient): void {
   resolved.set(recipient.id, recipient);
 }
 
+/**
+ * A recipient for an offline voucher when there is no connection to check the short ID. A recipient already known on
+ * this phone (resolved earlier, or saved in Recents/Favorites) is returned as is; otherwise the entry carries only the
+ * ID and is marked unverified. A later `resolveRecipient` replaces it with the server's details.
+ */
+export function unverifiedRecipient(shortId: string): Recipient {
+  const known = resolved.get(shortId);
+  if (known) return known;
+  const recipient: Recipient = {
+    id: shortId,
+    name: 'Unverified ID',
+    initials: shortId.slice(0, 2).toUpperCase(),
+    color: colorFor(shortId),
+    provider: 'HoneBill',
+    account: shortId,
+    shortId,
+    favorite: false,
+    unverified: true,
+  };
+  resolved.set(shortId, recipient);
+  return recipient;
+}
+
 /** A recipient resolved this session. */
 export function findRecipientById(id: string): Recipient | undefined {
   return resolved.get(id);

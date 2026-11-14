@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SOURCE_LABEL, type Transaction } from '../../types/transaction';
+import { SOURCE_LABEL, failureText, type Transaction } from '../../types/transaction';
 import { formatAmount, formatClock } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { OfflineFundsBadge } from '../ui/smallIcons';
@@ -12,23 +12,40 @@ export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { 
   // Cents are shown: real amounts are not whole pesos like the design's samples.
   const amount = `${sign} ${formatAmount(tx.amount, tx.assetCode)}`;
   const time = formatClock(new Date(tx.timestamp));
+  const failed = tx.status === 'failed';
+  const statusLabel = failed ? 'Failed' : tx.status === 'pending' ? 'Pending' : null;
+  const failureNote = failed ? failureText(tx) : null;
+  // A failed payment must not read like an ordinary debit.
+  const spoken = failureNote ? `${amount}, failed. ${failureNote}` : statusLabel ? `${amount}, ${statusLabel}` : amount;
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={onPress ? () => onPress(tx.id) : undefined}
       accessibilityRole="button"
-      accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${time}. ${tx.description}. ${amount}`}
+      accessibilityLabel={`${SOURCE_LABEL[tx.source]}, ${time}. ${tx.description}. ${spoken}`}
     >
       <View style={styles.status}>
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>{SOURCE_LABEL[tx.source]}</Text>
+        <View style={styles.pills}>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>{SOURCE_LABEL[tx.source]}</Text>
+          </View>
+          {statusLabel ? (
+            <View style={[styles.statusPill, failed ? styles.failedPill : styles.pendingPill]}>
+              <Text style={styles.pillText}>{statusLabel}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.time}>{time}</Text>
       </View>
       <View style={styles.info}>
         <View style={styles.text}>
           <Text style={styles.description}>{tx.description}</Text>
-          <Text style={styles.amount}>{amount}</Text>
+          <Text style={[styles.amount, failed && styles.amountFailed]}>{amount}</Text>
+          {failureNote ? (
+            <Text style={styles.failure} numberOfLines={2}>
+              {failureNote}
+            </Text>
+          ) : null}
         </View>
         {tx.source === 'offline' ? <OfflineFundsBadge /> : null}
       </View>
@@ -55,7 +72,13 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.7 },
   status: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  pills: { flexDirection: 'row', gap: 6 },
   pill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.text },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  pendingPill: { backgroundColor: colors.primary },
+  failedPill: { backgroundColor: colors.coral },
+  amountFailed: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  failure: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 13, includeFontPadding: false, color: colors.coral },
   pillText: { fontFamily: fonts.regular, fontSize: 8, lineHeight: 10, includeFontPadding: false, color: colors.surface, textAlign: 'center' },
   time: { fontFamily: fonts.regular, fontSize: 8, lineHeight: 10, includeFontPadding: false, color: colors.textMuted, textTransform: 'uppercase' },
   info: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 10 },

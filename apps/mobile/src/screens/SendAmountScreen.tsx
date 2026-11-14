@@ -27,7 +27,7 @@ const FADE_MS = 250;
 
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
-  const { balances } = useWalletData();
+  const { balances, pendingOffline } = useWalletData();
   const online = useSendMode(route.params.mode) === 'online';
   const [amountText, setAmountText] = useState(route.params.amount ? route.params.amount.toFixed(2) : '');
   const [note, setNote] = useState('');
@@ -42,7 +42,8 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
 
   const amount = parseAmount(amountText);
   // The view this was started from decides: Online spends the online wallet and settles now; Offline spends the vault.
-  const available = balances ? (online ? balances.online : balances.offline) : null;
+  // Offline, money already committed to vouchers waiting to settle cannot be spent again: a second voucher for it fails.
+  const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
   const fee = online ? 0 : OFFLINE_TOLL_PESOS;
   const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
@@ -83,16 +84,19 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
               {recipient.account}
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={favorite ? `Remove ${recipient.name} from favorites` : `Add ${recipient.name} to favorites`}
-            accessibilityState={{ selected: favorite }}
-            hitSlop={6}
-            onPress={() => void toggleFavorite(recipient)}
-            style={styles.star}
-          >
-            <StarIcon filled={favorite} />
-          </Pressable>
+          {/* An ID nobody has confirmed is not saved, so it cannot be starred. */}
+          {recipient.unverified ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={favorite ? `Remove ${recipient.name} from favorites` : `Add ${recipient.name} to favorites`}
+              accessibilityState={{ selected: favorite }}
+              hitSlop={6}
+              onPress={() => void toggleFavorite(recipient)}
+              style={styles.star}
+            >
+              <StarIcon filled={favorite} />
+            </Pressable>
+          )}
         </View>
 
         {/* The ID is locked to the chosen recipient, so it keeps the muted look of the design. */}

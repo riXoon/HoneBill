@@ -6,6 +6,7 @@ import { GlassCard } from '../components/send/GlassCard';
 import { OutlinedField } from '../components/send/OutlinedField';
 import { RecipientCard } from '../components/send/RecipientCard';
 import { SendLayout } from '../components/send/SendLayout';
+import { Button } from '../components/ui/Button';
 import { ComingSoonDialog } from '../components/ui/ComingSoonDialog';
 import { useFieldFocus } from '../components/ui/fieldState';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
@@ -13,11 +14,13 @@ import { AddBoxIcon, BankIcon, ContactCardIcon, MoneyOutIcon, QrTitleIcon } from
 import { SHORT_ID_LENGTH } from '../config/limits';
 import { SEND_METHODS, type SendMethodKey } from '../config/sendMethods';
 import { useAuth } from '../context/AuthContext';
+import { useIsOnline } from '../hooks/useIsOnline';
 import { useRecentRecipients } from '../hooks/useRecentRecipients';
+import { useSendMode } from '../hooks/useSendMode';
 import type { RootStackParamList } from '../navigation/types';
 import type { Recipient } from '../types/recipient';
-import { errorMessage, isAborted } from '../services/api/client';
-import { resolveRecipient } from '../services/recipientDirectory';
+import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import { findRecipientById, resolveRecipient, unverifiedRecipient } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 1 - To (870:3195), 402x874.
@@ -33,6 +36,11 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
   /** True while the complete ID is being looked up, so a slow network does not look like nothing happened. */
   const [checking, setChecking] = useState(false);
   const lookup = useRef<AbortController | null>(null);
+  /** A complete ID that could not be checked because there is no connection; the user may still pay it by voucher. */
+  const [unverifiedId, setUnverifiedId] = useState<string | null>(null);
+  const connected = useIsOnline();
+  // No connection (or Send opened from the Offline view) means this payment is an offline voucher.
+  const offlineSend = useSendMode(route.params?.mode) === 'offline';
 
   useEffect(() => () => lookup.current?.abort(), []);
   const [method, setMethod] = useState<SendMethodKey>('honebill');
@@ -46,13 +54,27 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
 
   const goToAmount = (recipient: Recipient) => {
     Keyboard.dismiss();
-    navigation.navigate('SendAmount', { recipientId: recipient.id, mode: route.params?.mode });
+    // An unchecked ID can only be paid by voucher, even if the connection comes back on a later step.
+    const mode = recipient.unverified ? 'offline' : route.params?.mode;
+    navigation.navigate('SendAmount', { recipientId: recipient.id, mode });
+  };
+
+  /** Without a connection: a recipient already known on this phone goes straight through, any other ID gets the warning. */
+  const offerUnverified = (id: string) => {
+    const known = findRecipientById(id);
+    if (known && !known.unverified) goToAmount(known);
+    else setUnverifiedId(id);
   };
 
   const lookupRecipient = async (id: string) => {
     if (id === activeAccount?.shortId) {
       setInvalid(true);
       setLookupError("You can't send to yourself.");
+      return;
+    }
+    if (!connected) {
+      if (offlineSend) offerUnverified(id);
+      else setLookupError('No internet connection, so this ID cannot be checked. Connect, or send offline instead.');
       return;
     }
     const controller = new AbortController();
@@ -66,7 +88,11 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
         setLookupError('No account found for this ID.');
       }
     } catch (e) {
-      if (!isAborted(e)) setLookupError(errorMessage(e));
+      if (isAborted(e)) return;
+      // The phone looked connected but the request never got through (weak signal): treat it as offline.
+      const unreachable = e instanceof ApiError && (e.kind === 'network' || e.kind === 'timeout');
+      if (unreachable && offlineSend) offerUnverified(id);
+      else setLookupError(errorMessage(e));
     } finally {
       // A newer lookup owns the flag now; only the latest one may clear it.
       if (lookup.current === controller) setChecking(false);
@@ -79,11 +105,24 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
     setShortId(next);
     setInvalid(false);
     setLookupError(null);
+    setUnverifiedId(null);
     lookup.current?.abort();
     setChecking(false);
     // The short ID has a fixed length, so resolve it as soon as it is complete.
     if (next.length === SHORT_ID_LENGTH) void lookupRecipient(next);
   };
+
+  // When the connection comes back, an ID that could not be checked is checked now.
+  const wasConnected = useRef(connected);
+  useEffect(() => {
+    const reconnected = connected && !wasConnected.current;
+    wasConnected.current = connected;
+    if (!reconnected || shortId.length !== SHORT_ID_LENGTH || (unverifiedId === null && lookupError === null)) return;
+    setUnverifiedId(null);
+    setLookupError(null);
+    setInvalid(false);
+    void lookupRecipient(shortId);
+  });
 
   return (
     <SendLayout title="Send" icon={<MoneyOutIcon />} onBack={navigation.goBack}>
@@ -115,6 +154,18 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
           <Text style={styles.checking} accessibilityLiveRegion="polite">
             Checking ID…
           </Text>
+        ) : unverifiedId ? (
+          <View style={styles.unverified}>
+            <Text style={styles.unverifiedText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+              You're offline, so we can't confirm ID {unverifiedId}. Double-check it with the recipient before you
+              continue: a wrong ID will usually make the payment fail.
+            </Text>
+            <Button
+              label={`Continue with ${unverifiedId}`}
+              variant="outline"
+              onPress={() => goToAmount(unverifiedRecipient(unverifiedId))}
+            />
+          </View>
         ) : null}
       </GlassCard>
 
@@ -219,6 +270,8 @@ const styles = StyleSheet.create({
   label: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   lookupError: { fontFamily: fonts.regular, fontSize: 11, color: colors.coral },
   checking: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
+  unverified: { gap: 10 },
+  unverifiedText: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.coral },
   idTag: { width: 26, fontFamily: fonts.regular, fontSize: 10, color: colors.text },
   idInput: { flex: 1, padding: 0, fontFamily: fonts.regular, fontSize: 16, color: colors.text },
 

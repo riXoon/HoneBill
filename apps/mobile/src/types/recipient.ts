@@ -12,4 +12,9 @@ export type Recipient = {
   /** The recipient's wallet address, which an online transfer pays. Absent for entries not resolved from the server. */
   stellarPublicKey?: string;
   favorite: boolean;
+  /**
+   * Typed while offline and never checked against the server, so nobody knows whether an account has this short ID.
+   * Only an offline voucher can pay it; it is not saved to Recents or Favorites.
+   */
+  unverified?: boolean;
 };
