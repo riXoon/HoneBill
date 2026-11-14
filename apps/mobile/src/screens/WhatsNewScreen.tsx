@@ -36,14 +36,21 @@ export function WhatsNewScreen({ navigation, route }: NativeStackScreenProps<Roo
           <Text style={styles.title} accessibilityRole="header">
             {note.title}
           </Text>
-          <View style={styles.items}>
-            {note.items.map((item) => (
-              <View key={item} style={styles.item}>
-                <Text style={styles.bullet}>•</Text>
-                <Text style={styles.itemText}>{item}</Text>
+          {note.sections.map((section) => (
+            <View key={section.heading} style={styles.section}>
+              <Text style={styles.heading} accessibilityRole="header">
+                {section.heading}
+              </Text>
+              <View style={styles.items}>
+                {section.items.map((item) => (
+                  <View key={item} style={styles.item}>
+                    <Text style={styles.bullet}>•</Text>
+                    <Text style={styles.itemText}>{item}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </View>
+          ))}
         </View>
       ))}
     </SettingsPage>
@@ -65,6 +72,8 @@ const styles = StyleSheet.create({
   version: { fontFamily: fonts.semibold, fontSize: 14, color: colors.primary },
   date: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
   title: { fontFamily: fonts.semibold, fontSize: 18, color: colors.text },
+  section: { gap: 8, marginTop: 6 },
+  heading: { fontFamily: fonts.semibold, fontSize: 15, color: colors.coral },
   items: { gap: 8 },
   item: { flexDirection: 'row', gap: 8 },
   bullet: { fontFamily: fonts.bold, fontSize: 15, lineHeight: 22, color: colors.primary },
