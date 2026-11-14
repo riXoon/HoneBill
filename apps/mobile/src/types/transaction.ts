@@ -1,4 +1,4 @@
-import { formatDayHeading } from '../utils/format';
+import { formatDayHeading, shortRef, voucherRef } from '../utils/format';
 
 export type TransactionSource = 'wallet' | 'offline';
 export type TransactionStatus = 'completed' | 'pending' | 'failed';
@@ -24,7 +24,29 @@ export type Transaction = {
   counterpartyShortId?: string;
   /** The credit side of a move between the user's own wallets. History's "All" list shows the move once, by its debit side. */
   mirror?: boolean;
+  /** Why a failed payment did not go through, in plain words (from the server, or from this phone's own check). */
+  failureReason?: string;
 };
+
+/**
+ * What to tell the person about a failed entry. A failed offline voucher never settled, so no money left the vault;
+ * other kinds only show the reason, since a failed top-up or cash-out is not guaranteed to have moved nothing.
+ */
+export function failureText(tx: Pick<Transaction, 'source' | 'failureReason'>): string {
+  const reason = tx.failureReason ?? '';
+  // An expired payment was never answered, so nobody knows that no money moved; its reason says how to check.
+  if (tx.source !== 'offline' || reason === EXPIRED_REASON) return reason;
+  return reason ? `${reason} No money was taken.` : 'No money was taken.';
+}
+
+/** Shown on an offline payment nobody confirmed within 14 days; the phone stops trying to settle it then too. */
+export const EXPIRED_REASON =
+  'It was not confirmed within 14 days, so it will not be tried again. Check your balance before sending it again.';
+
+/** A reference a person can read: an offline voucher's matches the texts the gateway sends about it. */
+export function displayRef(tx: Pick<Transaction, 'source' | 'ref' | 'nonce'>): string {
+  return tx.source === 'offline' && tx.nonce ? voucherRef(tx.nonce) : shortRef(tx.ref);
+}
 
 export const TRANSACTION_FILTERS = ['All', 'Wallet', 'Offline Funds'] as const;
 export type TransactionFilter = (typeof TRANSACTION_FILTERS)[number];

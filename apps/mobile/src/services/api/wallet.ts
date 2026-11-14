@@ -25,6 +25,8 @@ export type HistoryItem = {
   counterpartyShortId?: string;
   /** The credit side of a move between the user's own wallets (the combined list leaves it out). */
   mirror?: boolean;
+  /** Plain-language reason, on a FAILED offline payment. */
+  failureReason?: string;
 };
 
 type AccountRef = { shortId: string; stellarPublicKey: string };

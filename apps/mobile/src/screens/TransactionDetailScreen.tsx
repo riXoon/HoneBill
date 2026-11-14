@@ -9,10 +9,12 @@ import { DownloadIcon, OfflineFundsBadge, ReceiptIcon } from '../components/ui/s
 import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
-import { SOURCE_LABEL, type TransactionStatus } from '../types/transaction';
-import { formatAmount, formatReceiptDate, shortRef } from '../utils/format';
+import { SOURCE_LABEL, displayRef, failureText, type TransactionStatus } from '../types/transaction';
+import { formatAmount, formatReceiptDate } from '../utils/format';
 
 // Detail page for one Transactions row. Built from the Receipt voucher (870:2835) so it shares the brand look.
+/** An offline payment still unconfirmed after this gets the "connect to check" hint. */
+const LONG_WAIT_MS = 24 * 60 * 60 * 1000;
 const STATUS_LABEL: Record<TransactionStatus, string> = { completed: 'Completed', pending: 'Pending', failed: 'Failed' };
 const STATUS_COLOR: Record<TransactionStatus, string> = {
   completed: colors.success,
@@ -39,23 +41,34 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
   const amount = formatAmount(tx.amount, tx.assetCode);
   const signed = `${incoming ? '+' : '-'} ${amount}`;
   const when = formatReceiptDate(new Date(tx.timestamp));
+  const ref = displayRef(tx);
+  const waitingLong = offline && tx.status === 'pending' && Date.now() - tx.timestamp > LONG_WAIT_MS;
   const ledger =
     tx.status === 'failed'
       ? 'Failed'
       : tx.status === 'pending'
         ? offline
-          ? 'Pending sync'
+          ? 'Sent by SMS, waiting for confirmation'
           : 'Pending'
         : offline
           ? 'Synced'
           : 'Confirmed';
+  // What the person needs to know beyond the status: why it failed, or how to find out.
+  const note =
+    tx.status === 'failed'
+      ? failureText(tx)
+      : offline && tx.status === 'pending' && !incoming
+        ? waitingLong
+          ? 'Still not confirmed. Connect to the internet to check, or look for a text from HoneBill with this reference.'
+          : `You will get a text from HoneBill with Ref ${ref} when it goes through or fails.`
+        : null;
 
   const share = () =>
     void Share.share({
-      message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${amount}\n${tx.description}\nRef No. ${tx.ref}\n${when}`,
+      message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${amount}\n${tx.description}\nStatus: ${STATUS_LABEL[tx.status]}\nRef No. ${ref}\n${when}`,
     });
   // There is no support flow in the app or backend yet, so say so instead of pretending to file a report.
-  const report = () => Alert.alert('Report a problem', `Support for Ref No. ${shortRef(tx.ref)} is not available yet.`);
+  const report = () => Alert.alert('Report a problem', `Support for Ref No. ${ref} is not available yet.`);
 
   return (
     <SendLayout
@@ -87,6 +100,12 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
           <Text style={styles.when}>{when}</Text>
         </View>
 
+        {note ? (
+          <Text style={[styles.note, tx.status === 'failed' && styles.noteFailed]} accessibilityLiveRegion="polite">
+            {note}
+          </Text>
+        ) : null}
+
         <View style={styles.voucher}>
           <View style={styles.details}>
             <DetailRow label="Type" value={incoming ? 'Received' : 'Sent'} />
@@ -99,7 +118,7 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
           <View style={styles.identifier}>
             <ReceiptBarcode />
             <View style={styles.identifierText}>
-              <Text style={styles.identifierLine}>Ref No. {shortRef(tx.ref)}</Text>
+              <Text style={styles.identifierLine}>Ref No. {ref}</Text>
               <Text style={styles.identifierLine}>{when}</Text>
             </View>
           </View>
@@ -120,6 +139,8 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 4 },
   amount: { fontFamily: fonts.semibold, fontSize: 28, color: colors.text },
   when: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
+  note: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textMuted, textAlign: 'center' },
+  noteFailed: { color: colors.coral },
 
   voucher: {
     width: '100%',

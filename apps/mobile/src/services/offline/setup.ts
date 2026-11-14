@@ -13,9 +13,15 @@ import { getOfflineSetup, saveOfflineSetup, type OfflineSetup } from './offlineC
  *     (a new phone, or a restored account, has a new key; the wallet signs the on-chain change);
  *  3. register the account's short ID on-chain, so a voucher can pay it, and take the backend's gateway, token and
  *     contract IDs, which the voucher signature covers.
- * The result is cached; it is repeated only when the wallet or the device key changes.
+ * The result is cached and steps 1-2 are still re-checked while online (at most every couple of minutes), since
+ * another install of the same account can take over the offline key; step 3 repeats only when the wallet or the
+ * device key changes.
  */
 let inFlight: Promise<OfflineSetup> | null = null;
+
+/** When this install last confirmed its offline key is the account's active one, so Home remounts don't repeat it. */
+const KEY_CHECK_INTERVAL_MS = 2 * 60_000;
+let lastKeyCheck: { key: string; at: number } | null = null;
 
 /** Development builds name each step as it starts, so a failure in the Metro log says which request it was. */
 let startedAt = 0;
@@ -43,17 +49,26 @@ async function run(walletPublicKey: string, signal?: AbortSignal): Promise<Offli
   }
 
   const cached = await getOfflineSetup(walletPublicKey, deviceKey);
-  if (cached) return cached;
+  const checkKey = `${walletPublicKey}:${deviceKey}`;
+  if (cached && lastKeyCheck?.key === checkKey && Date.now() - lastKeyCheck.at < KEY_CHECK_INTERVAL_MS) return cached;
 
   trace('SEP-10 sign-in (GET/POST /auth)');
   const token = await getSessionToken(signer, signal);
 
+  // Runs even when setup is cached: the account holds one offline key, and another install of the same account
+  // (the APK, Expo Go, another phone) takes it over when it goes online, which leaves this install's cache stale.
   trace('offline key check (POST /engine/offline-key)');
   const key = await prepareOfflineKey(deviceKey, token, signal);
   if (key.status === 'rotation_required') {
     trace('offline key changed: submitting rotation, then PATCH /engine/offline-key');
     await submitAndWait(signer.signPreparedTransaction(key.xdr, STELLAR_NETWORK_PASSPHRASE));
     await confirmOfflineKey(deviceKey, token, signal);
+  }
+  lastKeyCheck = { key: checkKey, at: Date.now() };
+
+  if (cached) {
+    trace('done (setup cached, key active)');
+    return cached;
   }
 
   trace('register short ID (POST /engine/recipient-registry)');

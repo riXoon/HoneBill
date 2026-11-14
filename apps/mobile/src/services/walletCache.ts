@@ -3,7 +3,7 @@ import Storage from 'expo-sqlite/kv-store';
 
 import { getDb, type Database } from '../db/client';
 import { walletState, walletTransactions, type NewWalletTransactionRow, type WalletTransactionRow } from '../db/schema';
-import type { Transaction } from '../types/transaction';
+import { EXPIRED_REASON, type Transaction } from '../types/transaction';
 
 /**
  * What the phone keeps of an account's activity so History and Home still have something to show with no
@@ -28,8 +28,39 @@ export type PendingOffline = Transaction & { nonce: string };
 
 type Origin = WalletTransactionRow['origin'];
 
-/** Pending payments older than this are dropped: the text never went out, or the server never settled it. */
-const PENDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * A payment still pending after this is shown as failed with the reason (the phone stops trying to settle it then too):
+ * the text never went out, or nothing settled it. It is never dropped without a word.
+ */
+const PENDING_MAX_AGE_MS = 14 * DAY_MS;
+/** A failed entry stays this long, so the person sees what happened even if they open the app weeks later. */
+const FAILED_KEEP_MS = 60 * DAY_MS;
+/** Re-exported for the voucher queue, which gives up at the same age. */
+export { EXPIRED_REASON };
+
+/**
+ * Ages pending entries: old pending ones become failed with the reason (`expired` counts them, so they can be
+ * announced), and failed ones go after `FAILED_KEEP_MS`. Needs no network, so it runs while offline too.
+ */
+export function agePending(items: PendingOffline[], now: number): { items: PendingOffline[]; expired: number; changed: boolean } {
+  let expired = 0;
+  let dropped = 0;
+  const aged = items.flatMap((item) => {
+    const age = now - item.timestamp;
+    if (item.status === 'failed') {
+      if (age <= FAILED_KEEP_MS) return [item];
+      dropped += 1;
+      return [];
+    }
+    if (item.status === 'pending' && age > PENDING_MAX_AGE_MS) {
+      expired += 1;
+      return [{ ...item, status: 'failed' as const, failureReason: item.failureReason ?? EXPIRED_REASON }];
+    }
+    return [item];
+  });
+  return { items: aged, expired, changed: expired > 0 || dropped > 0 };
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Rows <-> Transaction
@@ -52,6 +83,7 @@ function toRow(publicKey: string, origin: Origin, tx: Transaction, position: num
     nonce: tx.nonce ?? null,
     counterpartyShortId: tx.counterpartyShortId ?? null,
     mirror: tx.mirror ?? false,
+    failureReason: tx.failureReason ?? null,
   };
 }
 
@@ -71,6 +103,7 @@ function fromRow(row: WalletTransactionRow): Transaction {
   if (row.nonce !== null) tx.nonce = row.nonce;
   if (row.counterpartyShortId !== null) tx.counterpartyShortId = row.counterpartyShortId;
   if (row.mirror) tx.mirror = true;
+  if (row.failureReason !== null) tx.failureReason = row.failureReason;
   return tx;
 }
 
@@ -109,6 +142,51 @@ function writeGroup(publicKey: string, origin: Origin, items: Transaction[], ext
 // ---------------------------------------------------------------------------------------------------------------
 // One-time import from the key-value store this cache used before the database
 // ---------------------------------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------------------------------
+// Payment outcomes not yet seen (Home's notice), kept so closing the app does not lose them
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Counts of offline payments decided since the person last dismissed Home's notice: settled, failed (rejected; no money
+ * moved), and unconfirmed (given up after 14 days without an answer, so whether money moved is not known here).
+ */
+export type SavedOutcomes = { settled: number; failed: number; unconfirmed: number };
+export const NO_OUTCOMES: SavedOutcomes = { settled: 0, failed: 0, unconfirmed: 0 };
+
+export function addOutcomeCounts(a: SavedOutcomes, b: Partial<SavedOutcomes>): SavedOutcomes {
+  return {
+    settled: a.settled + (b.settled ?? 0),
+    failed: a.failed + (b.failed ?? 0),
+    unconfirmed: a.unconfirmed + (b.unconfirmed ?? 0),
+  };
+}
+
+export function hasOutcomes(o: SavedOutcomes): boolean {
+  return o.settled > 0 || o.failed > 0 || o.unconfirmed > 0;
+}
+
+const outcomesKey = (publicKey: string) => `honebill.outcomes.${publicKey}`;
+
+export async function loadOutcomes(publicKey: string): Promise<SavedOutcomes> {
+  try {
+    const value = parseJson(await Storage.getItem(outcomesKey(publicKey))) as Partial<SavedOutcomes> | null;
+    const count = (n: unknown) => (typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : 0);
+    return { settled: count(value?.settled), failed: count(value?.failed), unconfirmed: count(value?.unconfirmed) };
+  } catch {
+    return NO_OUTCOMES;
+  }
+}
+
+/** Saves the unseen outcomes; none left (dismissed) removes the entry. */
+export async function saveOutcomes(publicKey: string, outcomes: SavedOutcomes): Promise<void> {
+  try {
+    if (!hasOutcomes(outcomes)) await Storage.removeItem(outcomesKey(publicKey));
+    else await Storage.setItem(outcomesKey(publicKey), JSON.stringify(outcomes));
+  } catch {
+    // The notice is lost on restart; History still shows each result.
+  }
+}
 
 const legacyKeys = (publicKey: string) => ({
   snapshot: `honebill.cache.${publicKey}`,
@@ -238,9 +316,9 @@ export async function saveSnapshot(publicKey: string, snapshot: WalletSnapshot):
 export async function loadPending(publicKey: string): Promise<PendingOffline[]> {
   try {
     await ready(publicKey);
-    return readGroup(publicKey, 'pending', Date.now() - PENDING_MAX_AGE_MS).filter(
-      (item): item is PendingOffline => typeof item.nonce === 'string',
-    );
+    // Read without an age limit: an entry is only removed by `agePending`, after it has been shown as failed, so a
+    // payment that went unconfirmed while the app was unused for weeks is still announced, not dropped unseen.
+    return readGroup(publicKey, 'pending').filter((item): item is PendingOffline => typeof item.nonce === 'string');
   } catch {
     return [];
   }
@@ -291,9 +369,12 @@ export async function clearWalletCache(publicKey: string): Promise<void> {
   }
   // An old key-value copy that was never imported goes too.
   const keys = legacyKeys(publicKey);
-  await Promise.all([Storage.removeItem(keys.snapshot), Storage.removeItem(keys.pending), Storage.removeItem(keys.moves)]).catch(
-    () => {},
-  );
+  await Promise.all([
+    Storage.removeItem(keys.snapshot),
+    Storage.removeItem(keys.pending),
+    Storage.removeItem(keys.moves),
+    Storage.removeItem(outcomesKey(publicKey)),
+  ]).catch(() => {});
 }
 
 /** Voucher nonces are base64 of 32 bytes; the server may or may not keep the padding. */

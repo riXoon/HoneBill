@@ -10,6 +10,7 @@ import {
   verifyOfflineVoucherSignature,
 } from './offline-voucher.util.js';
 import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
+import type { VoucherNotice } from '../engine/settlement-notice.util.js';
 
 // Preserve the settlement helper exports while sharing parsing and XDR logic with Phase 5.
 /** Retains the existing settlement import while using the shared Base62 decoder. */
@@ -80,9 +81,8 @@ export class SettlementsService {
       this.prisma.account.findUnique({ where: { shortId: payload.receiverShortId } }),
       this.prisma.token.findUnique({ where: { id: Number(payload.tokenId) } }),
     ]);
-    if (!sender || !receiver) throw new NotFoundException('Account Not Found');
+    if (!sender) throw new NotFoundException('Sender account not found');
     if (!token) throw new NotFoundException('Token Not Found');
-    if (!token.isActive) throw new BadRequestException('Token is inactive');
     const gateway = this.config.get<string>('RELAYER_PUBLIC_KEY')?.trim();
     const secret = this.config.get<string>('RELAYER_SECRET_KEY')?.trim();
     if (!gateway || !secret) throw new ApiResponseException(500, { error: 'Relayer not configured' });
@@ -117,8 +117,21 @@ export class SettlementsService {
           signatureHex: signature.toString('hex'),
         })}`,
       );
-      throw new UnauthorizedException('Unauthorized');
+      throw new UnauthorizedException('Invalid voucher signature');
     }
+
+    // The sender signed this voucher, so from here a rejection is recorded: it shows in their history with the reason,
+    // and the nonce can never settle later (the sender was told no money was taken). Before the signature check nothing
+    // is recorded, so a forged text cannot put entries in someone's history.
+    if (!receiver) {
+      await this.recordRejection(existing, payload, token.id, amount, gateway, 'Recipient account not found');
+      throw new NotFoundException('Recipient account not found');
+    }
+    if (!token.isActive) {
+      await this.recordRejection(existing, payload, token.id, amount, gateway, 'Token is inactive');
+      throw new BadRequestException('Token is inactive');
+    }
+
     let settlement = existing;
     if (!settlement) {
       try {
@@ -179,6 +192,60 @@ export class SettlementsService {
       return { txHash: outcome.txHash, status: 'FAILED' };
     }
     throw new Error(`Settlement transaction ${outcome.txHash} is not confirmed yet (timeout)`);
+  }
+
+  /**
+   * What the settlement texts need about a voucher: amount, both short IDs, the token, and the receiver's number.
+   * `null` when the body cannot be read; a lookup that fails falls back to PHPC with no receiver number.
+   */
+  async describeVoucher(smsBody: string): Promise<VoucherNotice | null> {
+    let payload: ReturnType<typeof parseSettlementSmsBody>;
+    try {
+      payload = parseSettlementSmsBody(smsBody);
+    } catch {
+      return null;
+    }
+    const [token, receiver, sender] = await Promise.all([
+      this.prisma.token.findUnique({ where: { id: Number(payload.tokenId) } }).catch(() => null),
+      this.prisma.account.findUnique({ where: { shortId: payload.receiverShortId } }).catch(() => null),
+      this.prisma.account.findUnique({ where: { shortId: payload.senderShortId } }).catch(() => null),
+    ]);
+    return {
+      nonce: payload.nonce,
+      senderShortId: payload.senderShortId,
+      receiverShortId: payload.receiverShortId,
+      amountStroops: decodeBase62(payload.amountBase62),
+      symbol: token?.symbol ?? 'PHPC',
+      decimals: typeof token?.decimals === 'number' ? token.decimals : 7,
+      receiverPhone: receiver?.phoneNumber ?? null,
+      senderName: sender?.firstName ?? null,
+    };
+  }
+
+  /** Marks a signed voucher that can never settle as FAILED, keeping the reason. A parallel claim of the nonce wins. */
+  private async recordRejection(
+    existing: { id: number } | null,
+    payload: ReturnType<typeof parseSettlementSmsBody>,
+    tokenId: number,
+    amount: bigint,
+    gateway: string,
+    reason: string,
+  ): Promise<void> {
+    try {
+      if (existing) {
+        await this.prisma.settlement.update({ where: { id: existing.id }, data: { status: 'FAILED', failReason: reason } });
+        return;
+      }
+      await this.prisma.settlement.create({ data: {
+        qstashMessageId: `engine-${payload.nonce}`, nonce: payload.nonce, senderShortId: payload.senderShortId,
+        receiverShortId: payload.receiverShortId, tokenId, amountStroops: amount,
+        relayerAddress: gateway, status: 'FAILED', failReason: reason,
+      } });
+    } catch (error) {
+      if (!isPrismaUniqueConflict(error)) {
+        this.logger.warn(`Could not record rejected voucher ${payload.nonce}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 }
 

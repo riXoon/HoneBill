@@ -51,6 +51,10 @@ const STEPS: string[] = [
   CREATE UNIQUE INDEX outbox_dedupe ON outbox (kind, dedupe_key);
   CREATE INDEX outbox_due ON outbox (public_key, status, next_attempt_at);
   `,
+  // 2: why a failed payment did not go through.
+  `
+  ALTER TABLE wallet_transactions ADD COLUMN failure_reason TEXT;
+  `,
 ];
 
 /** Brings the database up to the latest step. Each step and its version bump commit together, or not at all. */

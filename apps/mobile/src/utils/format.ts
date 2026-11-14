@@ -27,6 +27,15 @@ export function shortRef(ref: string): string {
   return ref.length > 20 ? `${ref.slice(0, 8)}…${ref.slice(-8)}` : ref;
 }
 
+/**
+ * The short reference of an offline voucher: the first six letters and digits of its nonce, upper-cased. The backend
+ * builds the same one for its texts (`voucherRef` in apps/backend/src/modules/engine/settlement-notice.util.ts), so
+ * "Ref: 7F3KQ2" in a text matches the receipt and History.
+ */
+export function voucherRef(nonce: string): string {
+  return nonce.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
+}
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function clock(date: Date): string {

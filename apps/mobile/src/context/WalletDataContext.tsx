@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
+import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { errorMessage, isAborted } from '../services/api/client';
 import { getConnectivity } from '../services/connectivity';
 import { reportError } from '../services/errorReporting';
@@ -9,12 +11,20 @@ import { drainVouchers, enqueueVoucher } from '../services/sync/voucherOutbox';
 import { getHistory, getVaultBalance } from '../services/api/wallet';
 import { toTransactions } from '../services/transactionMapper';
 import {
+  addOutcomeCounts,
+  agePending,
   clearWalletCache,
+  EXPIRED_REASON,
+  hasOutcomes,
+  NO_OUTCOMES,
+  type SavedOutcomes,
   loadMoves,
+  loadOutcomes,
   loadPending,
   loadSnapshot,
   normalizeNonce,
   saveMoves,
+  saveOutcomes,
   savePending,
   saveSnapshot,
   type PendingOffline,
@@ -54,7 +64,17 @@ type WalletData = {
   addPendingOffline: (payment: PendingOffline, voucher: string) => void;
   /** Lists a move between the user's own wallets right away, until the server's history has it. */
   addMoves: (entries: Transaction[]) => void;
+  /**
+   * Pesos already committed by offline payments still waiting to settle (amount plus fee). The vault balance does not
+   * drop until a voucher settles, so this is what the screens subtract to show what can still be spent.
+   */
+  pendingOffline: number;
+  /** Offline payments that settled or failed since the user last dismissed the notice, for Home to announce. */
+  outcomes: PaymentOutcomes;
+  dismissOutcomes: () => void;
 };
+
+export type PaymentOutcomes = SavedOutcomes;
 
 const WalletDataContext = createContext<WalletData | undefined>(undefined);
 
@@ -78,6 +98,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [outcomes, setOutcomes] = useState<PaymentOutcomes>(NO_OUTCOMES);
   const request = useRef<AbortController | null>(null);
   const loadedAt = useRef(0);
   // Latest values for code that runs after an await, where the render's copies may be stale.
@@ -89,6 +110,45 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
   const shortId = activeAccount?.shortId ?? null;
   const publicKey = activeAccount?.stellarPublicKey ?? null;
+
+  // Unseen outcomes are saved on every change, so the notice survives the app being closed before Home is opened.
+  const outcomesRef = useRef<PaymentOutcomes>(NO_OUTCOMES);
+  const putOutcomes = useCallback(
+    (next: PaymentOutcomes) => {
+      outcomesRef.current = next;
+      setOutcomes(next);
+      if (publicKey) void saveOutcomes(publicKey, next);
+    },
+    [publicKey],
+  );
+  const addOutcomes = useCallback(
+    (delta: Partial<PaymentOutcomes>) => {
+      const next = addOutcomeCounts(outcomesRef.current, delta);
+      if (hasOutcomes(addOutcomeCounts(NO_OUTCOMES, delta))) putOutcomes(next);
+    },
+    [putOutcomes],
+  );
+
+  /**
+   * Turns payments nobody confirmed in time into failed ones, and announces them. Needs no network, so it runs when
+   * the account loads and whenever the app comes back on screen, even with no connection (sync does not run then).
+   */
+  const expirePending = useCallback(() => {
+    if (!publicKey) return;
+    const { items, expired, changed } = agePending(pendingRef.current, Date.now());
+    if (!changed) return;
+    pendingRef.current = items;
+    setPending(items);
+    void savePending(publicKey, items);
+    addOutcomes({ unconfirmed: expired });
+  }, [publicKey, addOutcomes]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') expirePending();
+    });
+    return () => sub.remove();
+  }, [expirePending]);
 
   const refresh = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
@@ -143,14 +203,29 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           void saveMoves(publicKey, stillLocal);
         }
 
-        // Payments this phone sent that the server now lists no longer need a placeholder.
-        const listed = new Set(next.flatMap((tx) => (tx.nonce ? [normalizeNonce(tx.nonce)] : [])));
-        const remaining = pendingRef.current.filter((p) => !listed.has(normalizeNonce(p.nonce)));
+        // Payments this phone sent that the server lists as decided no longer need a placeholder, and are announced.
+        // One the server lists as still pending keeps its placeholder (hidden behind the server's copy) until then,
+        // so its outcome is announced too, and its amount stays held back from what can be spent.
+        const decided = new Map(
+          next.flatMap((tx) => (tx.nonce && tx.status !== 'pending' ? [[normalizeNonce(tx.nonce), tx.status] as const] : [])),
+        );
+        const remaining: PendingOffline[] = [];
+        let settled = 0;
+        let failed = 0;
+        for (const p of pendingRef.current) {
+          const outcome = decided.get(normalizeNonce(p.nonce));
+          if (!outcome) remaining.push(p);
+          else if (p.status === 'pending') {
+            if (outcome === 'completed') settled += 1;
+            else failed += 1;
+          }
+        }
         if (remaining.length !== pendingRef.current.length) {
           pendingRef.current = remaining;
           setPending(remaining);
           void savePending(publicKey, remaining);
         }
+        addOutcomes({ settled, failed });
         void saveSnapshot(publicKey, { balances: balancesRef.current, transactions: next, savedAt: now });
       } else if (!isAborted(history.reason)) failure = failure ?? history.reason;
 
@@ -163,7 +238,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         setStatus('ready');
       }
     },
-    [shortId, publicKey],
+    [shortId, publicKey, addOutcomes],
   );
 
   // A different (or no) account means nothing from the previous one may stay on screen. The saved copy for the new
@@ -184,15 +259,21 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     setSyncedAt(null);
     setError(null);
     setStatus('idle');
+    // Not saved: the previous account's notice stays stored for it, and this account's is loaded below.
+    outcomesRef.current = NO_OUTCOMES;
+    setOutcomes(NO_OUTCOMES);
 
     if (shortId && publicKey) {
       void (async () => {
-        const [snapshot, savedPending, savedMoves] = await Promise.all([
+        const [snapshot, savedPending, savedMoves, savedOutcomes] = await Promise.all([
           loadSnapshot(publicKey),
           loadPending(publicKey),
           loadMoves(publicKey),
+          loadOutcomes(publicKey),
         ]);
         if (cancelled) return;
+        // Added to anything announced while loading, so neither is lost.
+        addOutcomes(savedOutcomes);
         if (snapshot) {
           balancesRef.current = snapshot.balances;
           serverRef.current = snapshot.transactions;
@@ -205,6 +286,8 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           pendingRef.current = savedPending;
           setPending(savedPending);
           hasData.current = true;
+          // Payments that expired while the app was closed are marked and announced now, before any network read.
+          expirePending();
         }
         if (savedMoves.length > 0) {
           movesRef.current = savedMoves;
@@ -219,7 +302,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       cancelled = true;
       request.current?.abort();
     };
-  }, [shortId, publicKey, refresh]);
+  }, [shortId, publicKey, refresh, addOutcomes, expirePending]);
 
   // The sync service decides when to read fresh data (reconnect, back on screen, interval, pull-to-refresh). After a
   // reconnect or a pull the data is re-read even if recent; the others skip it while it is still fresh.
@@ -241,19 +324,28 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       'vouchers',
       async ({ signal }) => {
         if (!getConnectivity().online) return;
-        const { rejectedNonces } = await drainVouchers(publicKey, signal);
-        if (rejectedNonces.length === 0) return;
-        const rejected = new Set(rejectedNonces.map(normalizeNonce));
-        const next = pendingRef.current.map((p) =>
-          rejected.has(normalizeNonce(p.nonce)) ? { ...p, status: 'failed' as const } : p,
-        );
+        const { givenUp } = await drainVouchers(publicKey, signal);
+        if (givenUp.length === 0) return;
+        const reasons = new Map(givenUp.map((g) => [normalizeNonce(g.nonce), g.reason]));
+        let failed = 0;
+        let unconfirmed = 0;
+        const next = pendingRef.current.map((p) => {
+          const reason = reasons.get(normalizeNonce(p.nonce));
+          if (reason === undefined || p.status !== 'pending') return p;
+          // A voucher given up for age was never answered, so whether money moved is not known: not "failed".
+          if (reason === EXPIRED_REASON) unconfirmed += 1;
+          else failed += 1;
+          return { ...p, status: 'failed' as const, failureReason: reason };
+        });
+        if (failed === 0 && unconfirmed === 0) return;
         pendingRef.current = next;
         setPending(next);
         void savePending(publicKey, next);
+        addOutcomes({ failed, unconfirmed });
       },
       SYNC_ORDER_VOUCHERS,
     );
-  }, [publicKey]);
+  }, [publicKey, addOutcomes]);
 
   // Settlement confirms queued by moves and transfers (e.g. the app was killed before they went out) are sent after
   // the vouchers and before the history read, so History already lists those transactions.
@@ -323,9 +415,32 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     return [...waiting, ...localMoves, ...serverTransactions].sort((a, b) => b.timestamp - a.timestamp);
   }, [serverTransactions, pending, moves]);
 
+  const pendingOffline = useMemo(
+    () =>
+      pending.reduce(
+        (sum, p) => (p.status === 'pending' && p.direction === 'out' ? sum + p.amount + OFFLINE_TOLL_PESOS : sum),
+        0,
+      ),
+    [pending],
+  );
+  const dismissOutcomes = useCallback(() => putOutcomes(NO_OUTCOMES), [putOutcomes]);
+
   const value = useMemo<WalletData>(
-    () => ({ balances, transactions, status, error, syncedAt, refresh, syncNow, addPendingOffline, addMoves }),
-    [balances, transactions, status, error, syncedAt, refresh, addPendingOffline, addMoves],
+    () => ({
+      balances,
+      transactions,
+      status,
+      error,
+      syncedAt,
+      refresh,
+      syncNow,
+      addPendingOffline,
+      addMoves,
+      pendingOffline,
+      outcomes,
+      dismissOutcomes,
+    }),
+    [balances, transactions, status, error, syncedAt, refresh, addPendingOffline, addMoves, pendingOffline, outcomes, dismissOutcomes],
   );
 
   return <WalletDataContext.Provider value={value}>{children}</WalletDataContext.Provider>;

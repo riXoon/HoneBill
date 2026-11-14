@@ -73,10 +73,15 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
           direction: 'out',
           amount: draft.amount,
           assetCode: 'PHPC',
-          description: `Sent to ${recipient?.name ?? 'recipient'}`,
+          description: !recipient
+            ? 'Sent to recipient'
+            : recipient.unverified
+              ? `Sent to ID ${recipient.shortId}`
+              : `Sent to ${recipient.name}`,
           status: 'pending',
           ref: nonce,
           nonce,
+          ...(recipient ? { counterpartyShortId: recipient.shortId } : {}),
         },
         signed,
       );

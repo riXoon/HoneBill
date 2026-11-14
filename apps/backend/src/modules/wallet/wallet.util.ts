@@ -3,6 +3,7 @@ import { rpc } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { userFailureReason } from '../engine/settlement-notice.util.js';
 
 /**
  * Issuer of each supported asset. PHPC's comes from `PHPC_ISSUER_PUBKEY`, the same setting the anchor pays out
@@ -176,6 +177,8 @@ export class WalletService {
           timestamp: item.createdAt.toISOString(),
           ...(item.txHash ? { txHash: item.txHash } : {}),
           ...(item.nonce ? { nonce: item.nonce } : {}),
+          // Plain words only: the stored reason can be raw ledger output.
+          ...(item.status === 'FAILED' ? { failureReason: userFailureReason(item.failReason) } : {}),
         };
       });
 
