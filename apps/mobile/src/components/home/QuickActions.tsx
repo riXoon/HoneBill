@@ -114,8 +114,8 @@ export function QuickActions({ online, onPress }: QuickActionsProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { width: ROW_WIDTH, height: 120 },
-  item: { position: 'absolute', top: 0, width: COLUMN, height: 120, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 12, gap: 12 },
+  row: { width: ROW_WIDTH, height: 140 },
+  item: { position: 'absolute', top: 0, width: COLUMN, height: 140, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 12, gap: 12 },
   pressed: { opacity: 0.7 },
   circle: {
     width: 62,
@@ -130,5 +130,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text,
     elevation: 4,
   },
-  label: { fontFamily: fonts.regular, fontSize: 12, color: colors.text, textAlign: 'center' },
+  label: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 16, color: colors.text, textAlign: 'center' },
 });

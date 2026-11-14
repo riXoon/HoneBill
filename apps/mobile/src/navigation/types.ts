@@ -13,8 +13,11 @@ export type TabParamList = {
 /** v2 route map. Add screens here as they are built. */
 export type RootStackParamList = {
   Landing: undefined;
-  /** `pinChanged`: arrived right after changing the MPIN, so it asks for the new one instead of offering the fingerprint first. */
-  Login: { reason?: 'pinChanged' } | undefined;
+  /**
+   * `pinChanged`: arrived right after changing the MPIN, so it asks for the new one instead of offering the fingerprint first.
+   * `locked`: the app was away too long and locked itself; the prompt says so (the fingerprint is still offered).
+   */
+  Login: { reason?: 'pinChanged' | 'locked' } | undefined;
   /** Forgot MPIN, for the number on the sign-in screen: SMS code and the phone's wallet prove ownership, then a new MPIN. */
   ForgotMpin: { phone: string };
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
@@ -59,6 +62,8 @@ export type RootStackParamList = {
   TransactionDetail: { id: string };
   /** Help & Feedback. With `transactionId` (from a transaction's "Report a problem") that payment is attached. */
   Feedback: { transactionId?: string } | undefined;
+  /** Release notes, newest first. `version` (from an Inbox notice) is highlighted. */
+  WhatsNew: { version?: string } | undefined;
   /** Adds PHPC to the online wallet through the anchor's deposit. */
   TopUp: undefined;
   /** Moves funds between the user's own wallets. */

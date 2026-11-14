@@ -195,7 +195,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
 }
 
 const styles = StyleSheet.create({
-  question: { fontFamily: fonts.regular, fontSize: 15, color: colors.text },
+  question: { fontFamily: fonts.regular, fontSize: 17, color: colors.text },
   options: { gap: 12 },
   pressed: { opacity: 0.85 },
   card: { padding: 16 },
@@ -213,9 +213,9 @@ const styles = StyleSheet.create({
   },
   text: { flex: 1, height: 100, justifyContent: 'space-between', paddingHorizontal: 10 },
   copy: { gap: 8 },
-  title: { fontFamily: fonts.regular, fontSize: 12, color: colors.text, textTransform: 'capitalize' },
-  body: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted },
+  title: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, textTransform: 'capitalize' },
+  body: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.text },
-  badgeText: { fontFamily: fonts.regular, fontSize: 8, color: colors.surface, textAlign: 'center' },
+  badgeText: { fontFamily: fonts.regular, fontSize: 11, color: colors.surface, textAlign: 'center' },
   chevron: { height: 100, justifyContent: 'center' },
 });

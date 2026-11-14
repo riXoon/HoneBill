@@ -60,9 +60,9 @@ const styles = StyleSheet.create({
   },
   message: { width: '100%', gap: 8 },
   heading: { fontFamily: fonts.semibold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  copy: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.textMuted, textAlign: 'center' },
+  copy: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted, textAlign: 'center' },
   actions: { width: '100%', gap: 4 },
   cancel: { alignItems: 'center', paddingVertical: 12 },
-  cancelText: { fontFamily: fonts.medium, fontSize: 14, color: colors.primary },
+  cancelText: { fontFamily: fonts.medium, fontSize: 16, color: colors.primary },
   pressed: { opacity: 0.7 },
 });

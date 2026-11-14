@@ -64,6 +64,6 @@ const styles = StyleSheet.create({
   comb: { position: 'absolute', top: 32, width: 402, height: 332 },
   welcome: { height: 99, alignItems: 'center' },
   logo: { width: 178, height: 140, marginTop: -72 },
-  tagline: { marginTop: 8, width: '100%', maxWidth: 300, textAlign: 'center', fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  tagline: { marginTop: 8, width: '100%', maxWidth: 300, textAlign: 'center', fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   actions: { width: '100%', maxWidth: 302, gap: 12 },
 });

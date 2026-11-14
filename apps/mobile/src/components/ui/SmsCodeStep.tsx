@@ -146,14 +146,14 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
 
 const styles = StyleSheet.create({
   block: { gap: 14, alignItems: 'center' },
-  subtitle: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.text, textAlign: 'center' },
+  subtitle: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.text, textAlign: 'center' },
   phone: { fontFamily: fonts.semibold },
-  status: { minHeight: 18, fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  status: { minHeight: 18, fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   error: { color: colors.coral },
   resend: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
   resendActive: { backgroundColor: colors.yellow, borderColor: colors.primarySoft },
   pressed: { opacity: 0.7 },
-  resendWaiting: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  resendHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.text, textAlign: 'center' },
-  resendAction: { fontFamily: fonts.bold, fontSize: 14, color: colors.borderRed, textDecorationLine: 'underline' },
+  resendWaiting: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  resendHint: { fontFamily: fonts.regular, fontSize: 15, color: colors.text, textAlign: 'center' },
+  resendAction: { fontFamily: fonts.bold, fontSize: 16, color: colors.borderRed, textDecorationLine: 'underline' },
 });

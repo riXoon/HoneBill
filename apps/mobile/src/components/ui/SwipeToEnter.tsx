@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     right: PADDING,
     textAlign: 'center',
     fontFamily: fonts.medium,
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: 6,
     color: colors.surface,
   },

@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', padding: 40, gap: 40 },
   titleBlock: { gap: 8 },
-  subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   codeBlock: { gap: 12, alignItems: 'center' },
-  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
+  error: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral, textAlign: 'center' },
   mascotSlot: { alignItems: 'center' },
 });

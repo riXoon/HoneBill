@@ -171,11 +171,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: 40, gap: 20 },
   header: { gap: 10 },
-  subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   box: { minHeight: 130, padding: 14, borderRadius: radius.field, borderWidth: 1 },
-  input: { minHeight: 100, padding: 0, fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.text },
-  count: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted, textAlign: 'right' },
-  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
+  input: { minHeight: 100, padding: 0, fontFamily: fonts.regular, fontSize: 17, lineHeight: 25, color: colors.text },
+  count: { fontFamily: fonts.light, fontSize: 14, color: colors.textMuted, textAlign: 'right' },
+  error: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral },
   // The mascot image is larger than its slot (soft glow bleed), so it overflows evenly.
   mascot: { height: 230, alignItems: 'center', justifyContent: 'center' },
 });

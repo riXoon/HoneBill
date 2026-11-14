@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  titleText: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
+  titleText: { fontFamily: fonts.regular, fontSize: 18, color: colors.text },
   spacer: { flex: 1 },
   footer: { alignItems: 'center' },
 });

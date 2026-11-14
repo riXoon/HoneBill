@@ -71,5 +71,5 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.5 },
-  label: { fontSize: 15, textAlign: 'center' },
+  label: { fontSize: 17, textAlign: 'center' },
 });

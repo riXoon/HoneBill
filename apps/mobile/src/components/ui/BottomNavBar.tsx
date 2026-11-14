@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   buttons: { position: 'absolute', top: 34 + 13, left: 0, width: BAR_WIDTH, height: 50 },
   tab: { position: 'absolute', top: 0, width: 48, height: 50, alignItems: 'center', gap: 6 },
   dot: { position: 'absolute', top: 54, left: 0, width: 5, height: 5, borderRadius: 3, backgroundColor: colors.coral },
-  label: { width: 48, textAlign: 'center', fontFamily: fonts.regular, fontSize: 10 },
+  label: { width: 64, textAlign: 'center', fontFamily: fonts.regular, fontSize: 12 },
   // 69 dp touch area; the ring (77 dp) overflows it as in Figma.
   scan: { position: 'absolute', top: 0, left: 145, width: 69, height: 69 },
   scanPressed: { opacity: 0.85 },

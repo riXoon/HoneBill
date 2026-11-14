@@ -78,6 +78,6 @@ export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFie
 
 const styles = StyleSheet.create({
   field: { justifyContent: 'center', gap: 17 },
-  currency: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
+  currency: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   input: { padding: 0, fontFamily: fonts.regular, fontSize: 32, color: colors.text, textAlign: 'center' },
 });

@@ -102,6 +102,6 @@ const styles = StyleSheet.create({
   stack: { alignItems: 'center', gap: 20 },
   pressed: { opacity: 0.85 },
   withAmount: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 8 },
-  withAmountText: { fontFamily: fonts.regular, fontSize: 15, color: colors.primary, textAlign: 'center' },
-  caption: { width: '100%', maxWidth: 302, alignSelf: 'center', fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  withAmountText: { fontFamily: fonts.regular, fontSize: 17, color: colors.primary, textAlign: 'center' },
+  caption: { width: '100%', maxWidth: 302, alignSelf: 'center', fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
 });

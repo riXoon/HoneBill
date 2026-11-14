@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   sharing: { opacity: 0.4 },
   message: { width: '100%', gap: 8 },
   heading: { fontFamily: fonts.semibold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  copy: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 15, color: colors.textMuted, textAlign: 'center' },
+  copy: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.textMuted, textAlign: 'center' },
 
   voucher: {
     width: '100%',
@@ -168,12 +168,12 @@ const styles = StyleSheet.create({
   },
   details: { width: '100%', gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  rowValue: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
+  rowLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
+  rowValue: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   rowValueStrong: { fontFamily: fonts.medium },
   divider: { width: '100%', height: 1, backgroundColor: 'rgba(34, 32, 33, 0.2)' },
   identifier: { width: '100%', height: 74, gap: 8, alignItems: 'center' },
   identifierText: { width: '100%', gap: 2, alignItems: 'center' },
-  identifierLine: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted, textAlign: 'center' },
+  identifierLine: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted, textAlign: 'center' },
   edge: { position: 'absolute', left: -1, right: -1, bottom: -1 },
 });

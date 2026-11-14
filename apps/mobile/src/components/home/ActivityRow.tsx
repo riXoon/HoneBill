@@ -32,22 +32,35 @@ function SwapIcon() {
   );
 }
 
+/** Four-point sparkle, for app update notices ("what's new"). */
+function SparkleIcon() {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Path d="M12 3L13.9 10.1L21 12L13.9 13.9L12 21L10.1 13.9L3 12L10.1 10.1Z" fill={colors.surface} />
+    </Svg>
+  );
+}
+
 export type ActivityRowProps = {
   title: string;
   body: string;
   /** Already formatted for display, e.g. "25m ago". */
   time: string;
   /** Money in (check mark, the default) or money out (arrows). */
-  kind?: 'received' | 'sent';
+  kind?: 'received' | 'sent' | 'update';
+  /** Not opened yet: the title is drawn bolder. */
+  unread?: boolean;
 };
 
 /** One activity row (Figma Notifs > Content, 870:3119 on Home and 870:3133 on Inbox). */
-export const ActivityRow = memo(function ActivityRow({ title, body, time, kind = 'received' }: ActivityRowProps) {
+export const ActivityRow = memo(function ActivityRow({ title, body, time, kind = 'received', unread = false }: ActivityRowProps) {
   return (
     <View style={styles.row}>
-      <View style={styles.icon}>{kind === 'sent' ? <SwapIcon /> : <CheckIcon />}</View>
+      <View style={[styles.icon, kind === 'update' && styles.iconUpdate]}>
+        {kind === 'sent' ? <SwapIcon /> : kind === 'update' ? <SparkleIcon /> : <CheckIcon />}
+      </View>
       <View style={styles.text}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
           {title}
         </Text>
         <Text style={styles.body} numberOfLines={1}>
@@ -85,8 +98,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconUpdate: { backgroundColor: colors.primary },
   text: { flex: 1, gap: 2, justifyContent: 'center', padding: 10 },
-  title: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
-  body: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted },
-  time: { fontFamily: fonts.light, fontSize: 10, color: colors.textMuted, textAlign: 'right' },
+  title: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
+  titleUnread: { fontFamily: fonts.semibold },
+  body: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted },
+  time: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted, textAlign: 'right' },
 });

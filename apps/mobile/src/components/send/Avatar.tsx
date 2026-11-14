@@ -14,5 +14,5 @@ export function Avatar({ initials, color, ring = false }: { initials: string; co
 const styles = StyleSheet.create({
   disc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   ring: { borderWidth: 6, borderColor: colors.background },
-  text: { fontFamily: fonts.bold, fontSize: 12, color: colors.white },
+  text: { fontFamily: fonts.bold, fontSize: 14, color: colors.white },
 });

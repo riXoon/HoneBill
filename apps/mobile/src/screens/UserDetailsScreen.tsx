@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   // 60 dp spacer under the back button, then the header, as in the design.
   content: { flexGrow: 1, paddingHorizontal: 40, paddingTop: 100, paddingBottom: 40, gap: 40 },
   header: { gap: 10 },
-  subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   fields: { alignItems: 'center', gap: 12 },
   spacer: { flex: 1 },
 });

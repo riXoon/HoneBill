@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primarySoft,
     backgroundColor: colors.surface,
   },
-  text: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 18, color: colors.text, textAlign: 'center' },
+  text: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 21, color: colors.text, textAlign: 'center' },
   error: { color: colors.coral },
   tail: {
     position: 'absolute',

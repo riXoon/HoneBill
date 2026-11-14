@@ -68,6 +68,6 @@ export function OutcomeNotice({
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 342 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 24 },
-  view: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primary },
-  dismiss: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
+  view: { fontFamily: fonts.semibold, fontSize: 15, color: colors.primary },
+  dismiss: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted },
 });

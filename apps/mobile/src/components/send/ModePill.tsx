@@ -26,5 +26,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.placeholderTint,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  label: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted },
+  label: { fontFamily: fonts.light, fontSize: 14, color: colors.textMuted },
 });

@@ -90,8 +90,8 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.7 },
   copied: { color: colors.borderRed },
-  pillLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
-  pillValue: { fontFamily: fonts.bold, fontSize: 16, letterSpacing: 2, color: colors.text },
-  label: { fontFamily: fonts.regular, fontSize: 10, letterSpacing: 1, color: colors.textMuted },
+  pillLabel: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
+  pillValue: { fontFamily: fonts.bold, fontSize: 18, letterSpacing: 2, color: colors.text },
+  label: { fontFamily: fonts.regular, fontSize: 12, letterSpacing: 1, color: colors.textMuted },
   value: { fontFamily: fonts.bold, fontSize: 28, letterSpacing: 3, color: colors.text, textAlign: 'center' },
 });

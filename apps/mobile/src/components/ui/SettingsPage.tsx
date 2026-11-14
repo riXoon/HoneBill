@@ -47,5 +47,5 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { paddingHorizontal: 40, gap: 24 },
   header: { gap: 8 },
-  subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
 });
