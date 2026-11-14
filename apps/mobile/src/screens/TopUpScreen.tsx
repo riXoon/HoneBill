@@ -21,6 +21,13 @@ const STEP_LABEL: Record<TopUpStep, string> = {
   requesting: 'REQUESTING TOP-UP…',
   paying: 'ADDING FUNDS…',
 };
+/** The same steps, worded for the loading screen. */
+const STEP_TEXT: Record<TopUpStep, string> = {
+  preparing: 'Getting ready…',
+  wallet: 'Setting up your wallet…',
+  requesting: 'Requesting the top-up…',
+  paying: 'Adding funds…',
+};
 
 /**
  * Top-up: adds PHPC to the online wallet through the anchor's deposit. On testnet the anchor pays from its own
@@ -41,6 +48,7 @@ export function TopUpScreen({ navigation }: NativeStackScreenProps<RootStackPara
       title="Top-up"
       icon={<AddBoxIcon size={24} color={colors.text} />}
       onBack={navigation.goBack}
+      processing={busy ? { title: `Adding ${formatPeso(amount)} to your wallet`, step: STEP_TEXT[step ?? 'preparing'] } : null}
       footer={
         <View style={styles.footer}>
           <Mascot mood="bill" width={264} />

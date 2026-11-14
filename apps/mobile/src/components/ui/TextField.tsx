@@ -5,7 +5,10 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, fonts, radius } from '../../theme';
 import { fieldStateStyle, useFieldFocus } from './fieldState';
 
-type TextFieldProps = Pick<TextInputProps, 'keyboardType' | 'autoCapitalize' | 'autoComplete' | 'textContentType'> & {
+type TextFieldProps = Pick<
+  TextInputProps,
+  'keyboardType' | 'autoCapitalize' | 'autoComplete' | 'textContentType' | 'placeholder'
+> & {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
@@ -42,6 +45,7 @@ export function TextField({ label, value, onChangeText, error, ...inputProps }: 
         onFocus={onFocus}
         onBlur={onBlur}
         accessibilityLabel={label}
+        placeholderTextColor={colors.textMuted}
         style={[styles.field, fieldStateStyle(focused, value.length > 0)]}
       />
       {/* Always reserve the row so the layout does not jump when an error appears. */}

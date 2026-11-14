@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GlassCard } from '../components/send/GlassCard';
 import { SendLayout } from '../components/send/SendLayout';
+import { Notice } from '../components/ui/Notice';
 import { CheckIcon, CheckTitleIcon, OfflineFundsBadge, RecipientIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
@@ -118,6 +119,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       icon={<CheckTitleIcon />}
       onBack={navigation.goBack}
       gap={12}
+      processing={busy ? { title: `Sending ${formatPeso(amount)} to ${recipient.name}` } : null}
       footer={
         <SwipeToEnter
           label={swipeLabel}
@@ -159,9 +161,9 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
         <Text style={styles.caption}>RECIPIENT ACCOUNT</Text>
         <AccountRow icon={<RecipientIcon />} title={recipient.name} subtitle={`Short ID: ${recipient.shortId}`} />
         {recipient.unverified ? (
-          <Text style={styles.unverified} accessibilityRole="alert">
-            This ID was not checked because you are offline. Make sure it is right before you authorize.
-          </Text>
+          <Notice tone="warning" title="ID not checked">
+            You're offline, so this ID could not be confirmed. Make sure it is right before you authorize.
+          </Notice>
         ) : null}
         <Text style={styles.caption}>SENDER ACCOUNT</Text>
         <AccountRow
@@ -221,7 +223,6 @@ const styles = StyleSheet.create({
   escrowText: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase' },
 
   problem: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
-  unverified: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 15, color: colors.coral },
   panel: { padding: 12, gap: 6 },
   caption: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted },
   account: { height: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },

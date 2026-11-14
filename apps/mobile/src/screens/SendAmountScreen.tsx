@@ -143,6 +143,8 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
             onFocus={noteFocus.onFocus}
             onBlur={noteFocus.onBlur}
             accessibilityLabel="Note, optional"
+            placeholder="e.g. Lunch, rent, pasalubong"
+            placeholderTextColor={colors.textMuted}
             style={styles.noteInput}
           />
         </OutlinedField>

@@ -8,6 +8,7 @@ import { RecipientCard } from '../components/send/RecipientCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { Button } from '../components/ui/Button';
 import { ComingSoonDialog } from '../components/ui/ComingSoonDialog';
+import { Notice } from '../components/ui/Notice';
 import { useFieldFocus } from '../components/ui/fieldState';
 import { FilterSlideProvider, SlideRow, useFilterSlide } from '../components/ui/FilterSlide';
 import { AddBoxIcon, BankIcon, ContactCardIcon, MoneyOutIcon, QrTitleIcon } from '../components/ui/smallIcons';
@@ -155,17 +156,20 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
             Checking ID…
           </Text>
         ) : unverifiedId ? (
-          <View style={styles.unverified}>
-            <Text style={styles.unverifiedText} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              You're offline, so we can't confirm ID {unverifiedId}. Double-check it with the recipient before you
-              continue: a wrong ID will usually make the payment fail.
-            </Text>
-            <Button
-              label={`Continue with ${unverifiedId}`}
-              variant="outline"
-              onPress={() => goToAmount(unverifiedRecipient(unverifiedId))}
-            />
-          </View>
+          <Notice
+            tone="warning"
+            title="Check this ID before you continue"
+            action={
+              <Button
+                label={`Continue with ${unverifiedId}`}
+                variant="outline"
+                onPress={() => goToAmount(unverifiedRecipient(unverifiedId))}
+              />
+            }
+          >
+            You're offline, so we can't confirm ID {unverifiedId}. Ask the recipient to confirm it. A wrong ID will usually
+            make the payment fail.
+          </Notice>
         ) : null}
       </GlassCard>
 
@@ -270,8 +274,6 @@ const styles = StyleSheet.create({
   label: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   lookupError: { fontFamily: fonts.regular, fontSize: 11, color: colors.coral },
   checking: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
-  unverified: { gap: 10 },
-  unverifiedText: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.coral },
   idTag: { width: 26, fontFamily: fonts.regular, fontSize: 10, color: colors.text },
   idInput: { flex: 1, padding: 0, fontFamily: fonts.regular, fontSize: 16, color: colors.text },
 

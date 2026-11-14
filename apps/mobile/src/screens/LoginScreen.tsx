@@ -69,7 +69,10 @@ function pinErrorMessage(error: unknown): string {
   return errorMessage(error);
 }
 
-export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
+export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
+  // Right after an MPIN change, the person signs in with the new MPIN: no automatic fingerprint prompt (the keypad
+  // still offers it), and the prompt says why they are here.
+  const pinChanged = route.params?.reason === 'pinChanged';
   const insets = useSafeAreaInsets();
   // The keypad (shorter rows on a shorter phone) and the fixed blocks above it come first; Honi takes what is left,
   // between 90 and 200 dp, so the PIN dots never end up on the keys.
@@ -88,7 +91,7 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
   const [biometricSupported, setBiometricSupported] = useState(false);
   /** The profile left by the last sign-in, which a fingerprint may reopen. */
   const [stored, setStored] = useState<AccountProfile | null>(null);
-  const prompted = useRef(false);
+  const prompted = useRef(pinChanged);
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -255,7 +258,9 @@ export function LoginScreen({ navigation }: NativeStackScreenProps<RootStackPara
               {error}
             </Text>
           ) : (
-            <Text style={styles.prompt}>{busy || entering ? 'Signing in…' : 'Enter your MPIN'}</Text>
+            <Text style={styles.prompt}>
+              {busy || entering ? 'Signing in…' : pinChanged ? 'MPIN changed. Enter your new MPIN' : 'Enter your MPIN'}
+            </Text>
           )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
         </View>

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, fonts } from '../../theme';
 import { AppBackground } from '../ui/AppBackground';
+import { ProcessingOverlay, type Processing } from '../ui/ProcessingOverlay';
 import { ChevronLeftIcon } from '../ui/smallIcons';
 
 type SendLayoutProps = {
@@ -17,6 +18,11 @@ type SendLayoutProps = {
   footer?: ReactNode;
   /** Centre the body between the top bar and the footer instead of stacking it under the top bar (the receipt). */
   centered?: boolean;
+  /**
+   * For screens that run a transaction: while not `null`, a full-screen loading view covers the screen and the user
+   * cannot go back (Android Back, iOS swipe) until it finishes.
+   */
+  processing?: Processing | null;
   children: ReactNode;
 };
 
@@ -25,7 +31,7 @@ type SendLayoutProps = {
  * 30 dp side gutters and an optional footer pinned at the bottom. Scrolls when the content (or the
  * keyboard) leaves no room, so small phones can still reach everything.
  */
-export function SendLayout({ title, icon, onBack, gap = 20, footer, centered = false, children }: SendLayoutProps) {
+export function SendLayout({ title, icon, onBack, gap = 20, footer, centered = false, processing, children }: SendLayoutProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.root}>
@@ -62,6 +68,8 @@ export function SendLayout({ title, icon, onBack, gap = 20, footer, centered = f
           </>
         ) : null}
       </ScrollView>
+      {/* Only screens that run a transaction pass `processing`; they get the loading view and the back lock. */}
+      {processing !== undefined ? <ProcessingOverlay processing={processing} /> : null}
     </View>
   );
 }

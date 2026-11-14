@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
 import { OutcomeNotice } from '../components/home/OutcomeNotice';
+import { Notice } from '../components/ui/Notice';
 import { BalanceCards } from '../components/home/BalanceCards';
 import type { BalanceMode } from '../components/home/BalanceCards';
 import { QuickActions, type QuickActionKey } from '../components/home/QuickActions';
@@ -173,10 +174,9 @@ export function HomeScreen() {
           onToggle={toggle}
         />
         {!online && pendingOffline > 0 && balances ? (
-          <Text style={styles.held} accessibilityLiveRegion="polite">
-            {formatPeso(pendingOffline)} is held for payments waiting to settle. You can still spend{' '}
-            {formatPeso(Math.max(0, balances.offline - pendingOffline))}.
-          </Text>
+          <Notice tone="info" title={`${formatPeso(Math.max(0, balances.offline - pendingOffline))} available to send`} style={styles.notice}>
+            {formatPeso(pendingOffline)} is held for offline payments that are still waiting to settle.
+          </Notice>
         ) : null}
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -272,5 +272,5 @@ const styles = StyleSheet.create({
   seeAll: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   activityList: { gap: 10 },
   error: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 11, color: colors.coral, textAlign: 'center' },
-  held: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textMuted, textAlign: 'center' },
+  notice: { maxWidth: 342 },
 });
