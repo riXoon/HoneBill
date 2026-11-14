@@ -94,9 +94,9 @@ const styles = StyleSheet.create({
   },
   message: { gap: 6, alignItems: 'center' },
   heading: { fontFamily: fonts.bold, fontSize: 18, color: colors.text, textAlign: 'center' },
-  copy: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
-  status: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  copy: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+  status: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   error: { color: colors.coral },
-  cancel: { fontFamily: fonts.medium, fontSize: 13, color: colors.primary },
+  cancel: { fontFamily: fonts.medium, fontSize: 15, color: colors.primary },
   pressed: { opacity: 0.7 },
 });

@@ -54,5 +54,5 @@ const styles = StyleSheet.create({
   },
   message: { gap: 8, alignItems: 'center' },
   heading: { fontFamily: fonts.bold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  copy: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 19, color: colors.textMuted, textAlign: 'center' },
+  copy: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textMuted, textAlign: 'center' },
 });

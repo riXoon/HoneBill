@@ -10,6 +10,7 @@ import { Keypad, keypadRowHeight } from '../components/ui/Keypad';
 import { HiveEntrance } from '../components/transition/HiveEntrance';
 import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { PinDots } from '../components/ui/PinDots';
+import { ProcessingOverlay } from '../components/ui/ProcessingOverlay';
 import { Mascot } from '../components/mascot/Mascot';
 import { MPIN_LENGTH } from '../config/limits';
 import { useAuth, type AccountProfile } from '../context/AuthContext';
@@ -29,8 +30,8 @@ import { afterNextPaint } from '../utils/async';
 // Figma: Login Page (870:3055), 402x874.
 /** Sign-in is something people do often, so its hive entrance runs a little shorter than the one after sign-up. */
 const SIGN_IN_HIVE_MS = 900;
-/** Logo (30 + 17), then the number pill, prompt and PIN dots (about 190 dp): what sits above and below Honi. */
-const LOGIN_FIXED_BLOCKS = 47 + 190;
+/** Logo (30 + 17), then the number pill, prompt, PIN dots and the "Forgot MPIN?" link (about 224 dp): what sits above and below Honi. */
+const LOGIN_FIXED_BLOCKS = 47 + 190 + 34;
 const logoHorizontal = require('../../assets/brand/logo-horizontal.png');
 
 /** Swap arrows from the Figma icon sprite (870:3065), cropped to the visible glyph. */
@@ -73,6 +74,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
   // Right after an MPIN change, the person signs in with the new MPIN: no automatic fingerprint prompt (the keypad
   // still offers it), and the prompt says why they are here.
   const pinChanged = route.params?.reason === 'pinChanged';
+  const locked = route.params?.reason === 'locked';
   const insets = useSafeAreaInsets();
   // The keypad (shorter rows on a shorter phone) and the fixed blocks above it come first; Honi takes what is left,
   // between 90 and 200 dp, so the PIN dots never end up on the keys.
@@ -85,6 +87,8 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
   /** undefined while the saved number loads, null when this phone has none yet. */
   const [phone, setPhone] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  /** What the sign-in loading screen says is happening. */
+  const [signInStep, setSignInStep] = useState('Checking your MPIN…');
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
 
@@ -136,15 +140,18 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
       if (!phone) return;
       const controller = new AbortController();
       request.current = controller;
+      setSignInStep('Checking your MPIN…');
       setBusy(true);
       setError(null);
       try {
         await verifyPin(phone, value, controller.signal);
+        setSignInStep('Opening your account…');
         // The PIN route returns no profile, so fetch the account it unlocked.
         const account = await lookupUserByPhone(phone, controller.signal);
         if (!account) throw new ApiError('http', 404, 'No account found for this number.');
         // The MPIN proves the account, not that this phone holds its wallet (a new device, or a re-created account).
         // Without the key nothing can be signed, so restore it from the recovery phrase before opening Home.
+        setSignInStep('Checking your wallet…');
         if (!(await holdsWalletFor(account.stellarPublicKey))) {
           await startRecovery(phone, controller.signal);
           return;
@@ -188,6 +195,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
     // Checking the wallet key takes a moment (it is derived from the stored phrase), so show "Signing in…" first.
     const controller = new AbortController();
     request.current = controller;
+    setSignInStep('Checking your wallet…');
     setBusy(true);
     setError(null);
     try {
@@ -259,16 +267,33 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
             </Text>
           ) : (
             <Text style={styles.prompt}>
-              {busy || entering ? 'Signing in…' : pinChanged ? 'MPIN changed. Enter your new MPIN' : 'Enter your MPIN'}
+              {busy || entering ? 'Signing in…' : pinChanged ? 'MPIN changed. Enter your new MPIN' : locked ? 'Locked for your security. Enter your MPIN' : 'Enter your MPIN'}
             </Text>
           )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
+          {/* Only with a number to reset for; hidden while signing in so it cannot be tapped mid-request. */}
+          {phone && !busy && !entering ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Forgot MPIN? Reset it"
+              hitSlop={10}
+              onPress={() => navigation.navigate('ForgotMpin', { phone })}
+              style={({ pressed }) => pressed && styles.forgotPressed}
+            >
+              <Text style={styles.forgot}>Forgot MPIN?</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.forgotSpace} />
+          )}
         </View>
       </View>
 
       <View style={[styles.keypad, { paddingBottom: Math.max(24, insets.bottom) }]}>
         <Keypad onDigit={onDigit} onDelete={onDelete} onBiometric={unlockable && !entering ? signInWithBiometrics : undefined} />
       </View>
+
+      {/* Covers the screen (and blocks Back) while the MPIN or fingerprint sign-in is checked. */}
+      <ProcessingOverlay processing={busy ? { title: 'Signing you in', step: signInStep, hint: 'One moment…' } : null} />
 
       {/* Created only on success, so signing in carries none of its cost until then. */}
       {entering ? <HiveEntrance progress={progress} /> : null}
@@ -283,6 +308,11 @@ const styles = StyleSheet.create({
   mascotArea: { width: '100%', maxWidth: 260, alignItems: 'center' },
   mascot: { marginTop: -20 },
   inputSection: { width: '100%', alignItems: 'center', paddingTop: 20, gap: 16 },
+  // borderRed (not primary), like the OTP screen's links: orange on this background is too low-contrast to read.
+  forgot: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21, color: colors.borderRed, textDecorationLine: 'underline' },
+  forgotPressed: { opacity: 0.6 },
+  // Holds the link's height while it is hidden, so the PIN dots and the keypad do not shift.
+  forgotSpace: { height: 18 },
   phonePill: {
     width: '100%',
     maxWidth: 302,
@@ -297,7 +327,7 @@ const styles = StyleSheet.create({
   },
   phone: { fontFamily: fonts.regular, fontSize: 18, color: colors.coral, textAlign: 'center' },
   swap: { position: 'absolute', right: 26, top: 0, bottom: 0, justifyContent: 'center' },
-  prompt: { width: '100%', maxWidth: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 14, color: colors.primary },
-  error: { width: '100%', maxWidth: 280, textAlign: 'center', fontFamily: fonts.regular, fontSize: 13, color: colors.coral },
+  prompt: { width: '100%', maxWidth: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 16, color: colors.primary },
+  error: { width: '100%', maxWidth: 280, textAlign: 'center', fontFamily: fonts.regular, fontSize: 15, color: colors.coral },
   keypad: { width: '100%' },
 });

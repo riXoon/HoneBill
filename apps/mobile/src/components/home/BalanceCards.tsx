@@ -298,11 +298,11 @@ const styles = StyleSheet.create({
   label: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   labelText: {
     fontFamily: fonts.regular,
-    fontSize: 16,
+    fontSize: 18,
     color: colors.surface,
   },
   chip: { backgroundColor: colors.text, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  chipText: { fontFamily: fonts.regular, fontSize: 8, color: colors.surface },
+  chipText: { fontFamily: fonts.regular, fontSize: 11, color: colors.surface },
   amountRow: { height: 40, flexDirection: 'row', alignItems: 'center', gap: 10 },
   amountWrap: { flex: 1, justifyContent: 'center' },
   skeletonWrap: { justifyContent: 'center' },

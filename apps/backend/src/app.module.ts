@@ -20,6 +20,7 @@ import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module.js';
 import { AnchorModule } from './modules/anchor/anchor.module.js';
 import { FeedbackModule } from './modules/feedback/feedback.module.js';
+import { AppVersionModule } from './modules/app-version/app-version.module.js';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module.js';
     EngineModule,
     AnchorModule,
     FeedbackModule,
+    AppVersionModule,
     HealthModule,
   ],
   providers: [

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -11,18 +11,26 @@ import { Lexend_600SemiBold } from '@expo-google-fonts/lexend/600SemiBold';
 import { Lexend_700Bold } from '@expo-google-fonts/lexend/700Bold';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { WalletDataProvider } from './src/context/WalletDataContext';
 import { ConnectionRestoredNotice } from './src/components/ConnectionRestoredNotice';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { useAutoLock } from './src/hooks/useAutoLock';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
+import { getAccountPhone } from './src/services/accountPhone';
+import { foregrounded$ } from './src/services/appLifecycle';
+import { checkForUpdate, initAppUpdates } from './src/services/appUpdates';
+import { useAppUpdates } from './src/hooks/useAppUpdates';
 import { syncService } from './src/services/sync/syncService';
 import { AccountSettingsScreen } from './src/screens/AccountSettingsScreen';
 import { ChangeMpinScreen } from './src/screens/ChangeMpinScreen';
 import { FeedbackScreen } from './src/screens/FeedbackScreen';
+import { UpdateRequiredScreen } from './src/screens/UpdateRequiredScreen';
+import { WhatsNewScreen } from './src/screens/WhatsNewScreen';
+import { ForgotMpinScreen } from './src/screens/ForgotMpinScreen';
 import { VaultSettingsScreen } from './src/screens/VaultSettingsScreen';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
@@ -57,12 +65,16 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // No database, sync or Stellar code runs at startup; data is fetched per account after sign-in.
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function RootNavigator() {
+function RootNavigator({ initialRoute }: { initialRoute: 'Landing' | 'Login' }) {
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  // Away from the app for a few minutes: back to the MPIN screen.
+  useAutoLock(navigationRef);
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false }}>
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="ForgotMpin" component={ForgotMpinScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />
@@ -86,6 +98,7 @@ function RootNavigator() {
         <Stack.Screen name="ChangeMpin" component={ChangeMpinScreen} />
         <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} />
+        <Stack.Screen name="WhatsNew" component={WhatsNewScreen} />
         <Stack.Screen name="TopUp" component={TopUpScreen} />
         <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
         <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />
@@ -105,10 +118,24 @@ export default function App() {
     [fonts.semibold]: Lexend_600SemiBold,
     [fonts.bold]: Lexend_700Bold,
   });
-  const ready = fontsLoaded || fontError != null;
+  // A phone that has signed in before opens on the MPIN screen; only a brand-new install starts at the landing page.
+  // undefined while the saved number is read, which keeps the splash screen up (a few milliseconds).
+  const [initialRoute, setInitialRoute] = useState<'Landing' | 'Login' | undefined>(undefined);
+  useEffect(() => {
+    void getAccountPhone().then((phone) => setInitialRoute(phone ? 'Login' : 'Landing'));
+  }, []);
+  const ready = (fontsLoaded || fontError != null) && initialRoute !== undefined;
 
   // Syncs on reconnect, return to the foreground, an interval and pull-to-refresh, for the app's lifetime.
   useEffect(() => syncService.start(), []);
+
+  // What's new (Inbox), update available, update required. Asked on launch, then at most hourly on return to the app.
+  useEffect(() => {
+    void initAppUpdates();
+    const sub = foregrounded$.subscribe(() => void checkForUpdate());
+    return () => sub.unsubscribe();
+  }, []);
+  const { required } = useAppUpdates();
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
@@ -122,7 +149,12 @@ export default function App() {
         <ErrorBoundary>
           <AuthProvider>
             <WalletDataProvider>
-              <RootNavigator />
+              {/* Too old to use (below the backend's minimum): only the update screen, nothing that can make a payment. */}
+              {required ? (
+                <UpdateRequiredScreen minimumVersion={required.minimumVersion} downloadUrl={required.downloadUrl} />
+              ) : (
+                <RootNavigator initialRoute={initialRoute ?? 'Landing'} />
+              )}
               <ConnectionRestoredNotice />
             </WalletDataProvider>
             <StatusBar style="dark" />

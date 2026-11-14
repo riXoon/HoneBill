@@ -36,10 +36,31 @@ export function changePin(
   });
 }
 
-/** Seconds until each can change again (0 = now), and whether `email` is used by another account. */
+/**
+ * "Forgot MPIN": sets a new MPIN without the current one. `sessionToken` is the wallet's SEP-10 session (proof this
+ * phone holds the account's wallet) and `verificationToken` is the SMS code's proof, which the server requires.
+ */
+export function resetPin(
+  phone: string,
+  newPin: string,
+  verificationToken: string | undefined,
+  sessionToken: string,
+  signal?: AbortSignal,
+): Promise<{ success: true }> {
+  return apiRequest('POST', '/auth/pin/reset', {
+    body: { phoneNumber: phone, newPin, ...(verificationToken ? { verificationToken } : {}) },
+    bearer: sessionToken,
+    signal,
+  });
+}
+
+/**
+ * Seconds until each can change again (0 = now), and whether `email` is used by another account. The email can also
+ * be held (`reason: 'reset'`) for 24 hours after a "Forgot MPIN" reset.
+ */
 export type ChangeAvailability = {
   pin: { retryAfter: number };
-  email: { retryAfter: number };
+  email: { retryAfter: number; reason?: 'recent' | 'reset' };
   emailTaken?: boolean;
 };
 

@@ -17,7 +17,7 @@ export function BalanceBar({ caption, ratio }: { caption: string; ratio: number 
 
 const styles = StyleSheet.create({
   bar: { gap: 6 },
-  caption: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted },
+  caption: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted },
   track: { height: 4, borderRadius: 10, overflow: 'hidden', backgroundColor: colors.track },
   filled: { height: 4, backgroundColor: colors.success },
 });

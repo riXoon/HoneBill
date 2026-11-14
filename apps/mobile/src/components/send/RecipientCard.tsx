@@ -55,7 +55,7 @@ export function RecipientCard({ recipient, favorite, onPress, onToggleFavorite }
 const styles = StyleSheet.create({
   card: {
     width: RECIPIENT_CARD_WIDTH,
-    height: 136,
+    height: 150,
     padding: 12,
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
   starRow: { width: '100%', height: 16, alignItems: 'flex-end', justifyContent: 'center' },
   star: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   info: { width: '100%', gap: 2 },
-  name: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
-  detail: { fontFamily: fonts.light, fontSize: 7, color: colors.textMuted },
+  name: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
+  detail: { fontFamily: fonts.light, fontSize: 10, color: colors.textMuted },
 });

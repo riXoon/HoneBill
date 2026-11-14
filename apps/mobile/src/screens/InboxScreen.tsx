@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityRow } from '../components/home/ActivityRow';
@@ -13,16 +15,13 @@ import { BANNER_HONI, PromoBanner } from '../components/ui/PromoBanner';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { greetingName, useAuth } from '../context/AuthContext';
 import { useInbox } from '../hooks/useInbox';
+import type { RootStackParamList } from '../navigation/types';
+import { markUpdateRead } from '../services/appUpdates';
 import { INBOX_FILTERS, filterInbox } from '../types/inbox';
 import type { InboxFilter, InboxItem } from '../types/inbox';
 import { colors, fonts } from '../theme';
 
 // Figma: Inbox (870:3123), 402x874.
-const renderItem = ({ item }: { item: InboxItem }) => (
-  <SlideRow>
-    <ActivityRow kind={item.kind} title={item.title} body={item.body} time={item.time} />
-  </SlideRow>
-);
 const keyExtractor = (item: InboxItem) => item.id;
 const Separator = () => <View style={styles.separator} />;
 
@@ -33,6 +32,42 @@ export function InboxScreen() {
   const { activeAccount } = useAuth();
   const { items: all } = useInbox();
   const items = useMemo(() => filterInbox(all, filter), [all, filter]);
+  const navigation = useNavigation();
+
+  /** An update notice opens that version's notes, or the download page of a newer app. */
+  const open = useCallback(
+    (item: InboxItem) => {
+      void markUpdateRead(item.id);
+      const target = item.update;
+      if (!target) return;
+      if (target.type === 'notes') {
+        // The tabs live inside the root stack, so the notes screen is opened from the parent navigator.
+        navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('WhatsNew', { version: target.version });
+      } else if (target.url) {
+        void Linking.openURL(target.url).catch(() => Alert.alert('Could not open the download', target.url ?? ''));
+      } else {
+        Alert.alert('Update available', 'Ask HoneBill support for the download link of the new version.');
+      }
+    },
+    [navigation],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: InboxItem }) => (
+      <SlideRow>
+        <Pressable
+          accessibilityRole={item.update ? 'button' : undefined}
+          accessibilityLabel={`${item.unread ? 'Unread. ' : ''}${item.title}. ${item.body}`}
+          disabled={!item.update}
+          onPress={() => open(item)}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <ActivityRow kind={item.kind} title={item.title} body={item.body} time={item.time} unread={item.unread} />
+        </Pressable>
+      </SlideRow>
+    ),
+    [open],
+  );
 
   const header = (
     <View style={styles.header}>
@@ -80,6 +115,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 30 },
   header: { gap: 20, marginBottom: 10 },
   separator: { height: 10 },
+  pressed: { opacity: 0.7 },
   sectionTitle: { minHeight: 30, justifyContent: 'center' },
-  sectionText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
+  sectionText: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
 });

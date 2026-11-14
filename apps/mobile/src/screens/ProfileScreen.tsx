@@ -13,6 +13,7 @@ import { LogoWatermark } from '../components/brand/LogoWatermark';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import {
   ChevronRightIcon,
@@ -25,6 +26,7 @@ import {
   VaultIcon,
   WalletIcon,
 } from '../components/ui/smallIcons';
+import { APP_VERSION_LABEL } from '../config/appVersion';
 import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
@@ -98,7 +100,9 @@ export function ProfileScreen() {
   // The tabs live inside the root stack, so screens outside the tabs are opened from the parent navigator.
   const rootNavigation = () => navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const signOut = async () => {
+    setConfirmingSignOut(false);
     await logout();
     // The tabs live inside the root stack, so reset from the parent navigator.
     navigation
@@ -133,7 +137,7 @@ export function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="Log out"
               hitSlop={7}
-              onPress={signOut}
+              onPress={() => setConfirmingSignOut(true)}
               style={styles.logout}
             >
               <LogoutIcon />
@@ -217,12 +221,38 @@ export function ProfileScreen() {
             />
           </View>
         </View>
+
+        {/* The installed version (for bug reports), and the release notes. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`HoneBill version ${APP_VERSION_LABEL}. See what's new`}
+          hitSlop={8}
+          onPress={() => rootNavigation()?.navigate('WhatsNew')}
+          style={({ pressed }) => [styles.version, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={styles.versionText}>
+            HoneBill {APP_VERSION_LABEL} · <Text style={styles.versionLink}>What's new</Text>
+          </Text>
+        </Pressable>
       </ScrollView>
+      <ConfirmDialog
+        visible={confirmingSignOut}
+        mood="question"
+        title="Sign out?"
+        message="You'll need your MPIN (or fingerprint) to get back in."
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        onConfirm={() => void signOut()}
+        onCancel={() => setConfirmingSignOut(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  version: { alignSelf: 'center', marginTop: 24, paddingVertical: 6 },
+  versionText: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  versionLink: { fontFamily: fonts.medium, color: colors.borderRed, textDecorationLine: 'underline' },
   root: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: 30, gap: 20 },
   logout: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
@@ -246,10 +276,10 @@ const styles = StyleSheet.create({
   avatarInner: { width: 90, height: 90 },
   avatarGlyph: { position: 'absolute', left: 8, top: 4, width: 73, height: 73 },
   details: { alignItems: 'center', gap: 4 },
-  name: { fontFamily: fonts.bold, fontSize: 17, color: colors.white },
-  phone: { fontFamily: fonts.regular, fontSize: 13, color: colors.white },
+  name: { fontFamily: fonts.bold, fontSize: 18, color: colors.white },
+  phone: { fontFamily: fonts.regular, fontSize: 15, color: colors.white },
   walletIdBox: { height: 27, justifyContent: 'flex-end' },
-  walletId: { fontFamily: fonts.regular, fontSize: 10, color: colors.white },
+  walletId: { fontFamily: fonts.regular, fontSize: 12, color: colors.white },
   walletIdLabel: { fontFamily: fonts.bold },
   menu: {
     position: 'absolute',
@@ -270,5 +300,5 @@ const styles = StyleSheet.create({
   rowIcon: { width: 30, height: 30 },
   gear: { position: 'absolute', left: 4.69, top: 4.67 },
   glyph: { position: 'absolute', left: 3, top: 3 },
-  rowLabel: { flex: 1, fontFamily: fonts.medium, fontSize: 10, color: colors.textMuted },
+  rowLabel: { flex: 1, fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
 });

@@ -91,9 +91,9 @@ export function TopUpScreen({ navigation }: NativeStackScreenProps<RootStackPara
 
 const styles = StyleSheet.create({
   card: { padding: 16, gap: 10 },
-  problem: { minHeight: 15, fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
-  hint: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted },
+  problem: { minHeight: 15, fontFamily: fonts.regular, fontSize: 14, color: colors.coral, textAlign: 'center' },
+  hint: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10 },
-  noteText: { flex: 1, fontFamily: fonts.medium, fontSize: 10, color: colors.textMuted },
+  noteText: { flex: 1, fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
   footer: { alignItems: 'center', gap: 20 },
 });

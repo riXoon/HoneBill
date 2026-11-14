@@ -3,6 +3,7 @@ import {
   ConflictException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -34,6 +35,8 @@ return failures
 
 @Injectable()
 export class AccountsService {
+  private readonly logger = new Logger(AccountsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisService: RedisService,
@@ -223,7 +226,7 @@ export class AccountsService {
     }
 
     const dbPhone = toDbPhone(phoneNumber);
-    const failKey = `honebill:pin:fail:${dbPhone}`;
+    const failKey = pinFailKey(phoneNumber);
     const redis = this.redisService.getClient();
     let currentFailures: number;
     let retryAfter: number;
@@ -313,7 +316,7 @@ export class AccountsService {
     return {
       success: true,
       pin: { retryAfter: cooldownLeft(account.pinChangedAt) },
-      email: { retryAfter: cooldownLeft(account.emailChangedAt) },
+      email: emailWait(account),
       ...(wanted ? { emailTaken: await this.emailInUse(wanted, account.id) } : {}),
     };
   }
@@ -379,7 +382,7 @@ export class AccountsService {
     // Saving the same address again is not a change, so it needs no code and does not start a cooldown.
     const emailChanging = email !== undefined && email !== account?.email;
     if (emailChanging) {
-      if (account) assertNoCooldown('email', account.emailChangedAt);
+      if (account) assertEmailChangeAllowed(account);
       this.assertPhoneVerified(phoneNumber, verificationToken);
     }
 
@@ -405,12 +408,58 @@ export class AccountsService {
     return { success: true, data: updated };
   }
 
+  /**
+   * "Forgot MPIN": sets a new PIN without the current one. Ownership is proved by two things instead: a fresh SMS code
+   * for the account's number, and the wallet's SEP-10 session (`walletPublicKey` is the token's subject), so someone who
+   * only controls the phone number (a SIM swap) cannot reset it. The 24-hour limit does not block it (the person cannot
+   * remember the PIN), but a reset starts the PIN cooldown, pauses email changes for 24 hours and clears the wrong-PIN
+   * lockout.
+   */
+  async resetPin(phoneNumber: string, newPin: string, verificationToken: string | undefined, walletPublicKey: string) {
+    if (!isValidPinFormat(newPin)) {
+      throw new ApiResponseException(400, {
+        error: 'Validation failed',
+        fieldErrors: { newPin: 'PIN must be 4 to 6 digits.' },
+      });
+    }
+    this.assertPhoneVerified(phoneNumber, verificationToken);
+
+    const account = await this.findChangeAccount(phoneNumber);
+    if (!account) throw new NotFoundException('Account not found.');
+    if (account.stellarPublicKey !== walletPublicKey) {
+      throw new ApiResponseException(403, {
+        error: "This wallet doesn't belong to the account for this number.",
+        code: 'WALLET_MISMATCH',
+      });
+    }
+
+    const now = new Date();
+    await this.prisma.account.update({
+      where: { id: account.id },
+      data: { pin: await hashPin(newPin), pinChangedAt: now, pinResetAt: now },
+    });
+    try {
+      await this.redisService.getClient().del(pinFailKey(phoneNumber));
+    } catch (error) {
+      // The new PIN is already saved; a leftover lockout just expires on its own (15 minutes).
+      this.logger.warn(`Could not clear the PIN lockout after a reset: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return { success: true };
+  }
+
   /** The account a PIN or email change applies to: the newest one on the number, as verifyPin uses. */
   private findChangeAccount(phoneNumber: string) {
     return this.prisma.account.findFirst({
       where: { phoneNumber: toDbPhone(phoneNumber) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, pinChangedAt: true, emailChangedAt: true },
+      select: {
+        id: true,
+        email: true,
+        stellarPublicKey: true,
+        pinChangedAt: true,
+        emailChangedAt: true,
+        pinResetAt: true,
+      },
     });
   }
 
@@ -460,6 +509,38 @@ export function describeWait(seconds: number): string {
   }
   const minutes = Math.max(1, Math.ceil(seconds / 60));
   return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+/** The Redis key counting wrong PIN tries for a number; shared by verifyPin and the "Forgot MPIN" reset. */
+export function pinFailKey(phoneNumber: string): string {
+  return `honebill:pin:fail:${toDbPhone(phoneNumber)}`;
+}
+
+/**
+ * How long until the email can change, and why it is held: it changed recently, or the MPIN was just reset (a reset
+ * pauses email changes for 24 hours, so someone who gets past "Forgot MPIN" cannot move the account's email at once).
+ */
+export function emailWait(
+  account: { emailChangedAt: Date | null; pinResetAt: Date | null },
+  now = Date.now(),
+): { retryAfter: number; reason?: 'recent' | 'reset' } {
+  const recent = cooldownLeft(account.emailChangedAt, now);
+  const reset = cooldownLeft(account.pinResetAt, now);
+  if (reset > recent) return { retryAfter: reset, reason: 'reset' };
+  return recent > 0 ? { retryAfter: recent, reason: 'recent' } : { retryAfter: 0 };
+}
+
+function assertEmailChangeAllowed(account: { emailChangedAt: Date | null; pinResetAt: Date | null }): void {
+  const wait = emailWait(account);
+  if (wait.retryAfter === 0) return;
+  const message =
+    wait.reason === 'reset'
+      ? `For your security, your email can't be changed for ${describeWait(wait.retryAfter)} after an MPIN reset.`
+      : `You changed your email recently. You can change it again in ${describeWait(wait.retryAfter)}.`;
+  throw new HttpException(
+    { error: message, code: 'CHANGE_COOLDOWN', reason: wait.reason, retryAfter: wait.retryAfter },
+    429,
+  );
 }
 
 function assertNoCooldown(field: 'pin' | 'email', changedAt: Date | null): void {

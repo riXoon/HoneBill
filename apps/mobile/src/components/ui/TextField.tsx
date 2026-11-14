@@ -59,17 +59,17 @@ export function TextField({ label, value, onChangeText, error, ...inputProps }: 
 
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 302, gap: 8 },
-  label: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
+  label: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   field: {
     height: 50,
     paddingHorizontal: 20,
     borderRadius: radius.field,
     borderWidth: 1,
     fontFamily: fonts.light,
-    fontSize: 12,
+    fontSize: 14,
     color: colors.text,
   },
-  alert: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 12 },
+  alert: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 16 },
   alertHidden: { opacity: 0 },
-  alertText: { fontFamily: fonts.regular, fontSize: 10, color: colors.coral },
+  alertText: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
 });

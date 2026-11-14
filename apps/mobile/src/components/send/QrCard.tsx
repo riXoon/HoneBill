@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   },
   brand: { fontFamily: fonts.semibold, fontSize: 24, color: colors.primary },
   body: { alignItems: 'center', gap: 4, paddingTop: 18, paddingBottom: 20, paddingHorizontal: 16 },
-  label: { fontFamily: fonts.light, fontSize: 10, letterSpacing: 1.5, color: colors.textMuted },
+  label: { fontFamily: fonts.light, fontSize: 12, letterSpacing: 1.5, color: colors.textMuted },
   name: { fontFamily: fonts.medium, fontSize: 20, color: colors.text, textAlign: 'center' },
   amount: { fontFamily: fonts.semibold, fontSize: 32, color: colors.primary, textAlign: 'center' },
   qrBox: {
@@ -95,5 +95,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   footer: { alignItems: 'center', paddingVertical: 12, backgroundColor: colors.primary },
-  footerText: { fontFamily: fonts.regular, fontSize: 13, color: colors.surface },
+  footerText: { fontFamily: fonts.regular, fontSize: 15, color: colors.surface },
 });

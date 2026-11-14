@@ -224,6 +224,6 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
 
 const styles = StyleSheet.create({
   codeBlock: { gap: 12, alignItems: 'center' },
-  status: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  status: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   error: { color: colors.coral },
 });

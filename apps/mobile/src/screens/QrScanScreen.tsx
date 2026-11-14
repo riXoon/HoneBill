@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  titleText: { fontFamily: fonts.regular, fontSize: 16, color: colors.text },
+  titleText: { fontFamily: fonts.regular, fontSize: 18, color: colors.text },
   modeRow: { height: 60, alignItems: 'center' },
   modePill: {
     flexDirection: 'row',
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.placeholderTint,
   },
   modeDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.textMuted },
-  modeText: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted },
+  modeText: { fontFamily: fonts.light, fontSize: 14, color: colors.textMuted },
   details: { gap: 12 },
   // The shadow lives on this wrapper because overflow:hidden on the panel would clip it on iOS.
   panelWrap: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   // The orb is centred on the panel's top edge.
   orb: { position: 'absolute', top: -SCAN_ORB_SIZE / 2, left: 0, right: 0, alignItems: 'center' },
   hint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 10 },
-  hintText: { fontFamily: fonts.medium, fontSize: 10, color: 'rgba(34, 32, 33, 0.2)' },
+  hintText: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(34, 32, 33, 0.2)' },
   actions: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', gap: 12 },
   generate: {
     flex: 1,
@@ -328,5 +328,5 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 2,
   },
-  generateText: { fontFamily: fonts.regular, fontSize: 15, color: colors.primary, textAlign: 'center' },
+  generateText: { fontFamily: fonts.regular, fontSize: 17, color: colors.primary, textAlign: 'center' },
 });

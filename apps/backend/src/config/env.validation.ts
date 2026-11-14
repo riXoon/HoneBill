@@ -57,6 +57,14 @@ export const envValidationSchema = Joi.object({
   TEXTBEE_WEBHOOK_SECRET: Joi.string().allow('').optional(),
   /** Discord channel webhook that Help & Feedback reports are posted to. Unset: reports are only stored. */
   DISCORD_FEEDBACK_WEBHOOK_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
+  /**
+   * App releases, served by GET /app/version (app-version module). Versions look like 1.2.3; a malformed one is
+   * ignored with a warning rather than stopping the server. Unset: the app has nothing to announce.
+   */
+  APP_LATEST_VERSION: Joi.string().allow('').optional(),
+  APP_MIN_SUPPORTED_VERSION: Joi.string().allow('').optional(),
+  APP_DOWNLOAD_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
+  APP_LATEST_NOTES: Joi.string().max(300).allow('').optional(),
   SMS_DISPATCH_SECRET: Joi.string().allow('').optional(),
   OFFLINE_TRANSACTION_DEBUG: Joi.boolean().truthy('true').falsy('false').default(false),
   NEXT_PUBLIC_APP_URL: Joi.string().uri().allow('').optional(),

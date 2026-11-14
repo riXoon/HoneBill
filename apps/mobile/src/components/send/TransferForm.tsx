@@ -119,9 +119,9 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
 const styles = StyleSheet.create({
   card: { padding: 16, gap: 10 },
   problemSlot: { minHeight: 15, alignItems: 'center', justifyContent: 'center' },
-  problem: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
-  hint: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted },
+  problem: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral, textAlign: 'center' },
+  hint: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10 },
-  noteText: { flex: 1, fontFamily: fonts.medium, fontSize: 10, color: colors.textMuted },
+  noteText: { flex: 1, fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted },
   footer: { alignItems: 'center', gap: 20 },
 });

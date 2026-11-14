@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   box: { width: '100%', gap: 12, padding: 12, borderRadius: 10, borderWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   text: { flex: 1, gap: 2 },
-  title: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18 },
-  body: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.text },
+  title: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 21 },
+  body: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21, color: colors.text },
   action: { width: '100%' },
 });

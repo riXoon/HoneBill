@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import * as Application from 'expo-application';
+import { APP_VERSION_LABEL } from '../config/appVersion';
 import { randomUUID } from 'expo-crypto';
 
 import { Button } from '../components/ui/Button';
@@ -85,7 +85,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
       message: text,
       ...(activeAccount?.shortId ? { shortId: activeAccount.shortId } : {}),
       context: {
-        appVersion: Application.nativeApplicationVersion ?? undefined,
+        appVersion: APP_VERSION_LABEL,
         platform: Platform.OS,
         online: connected,
         ...(tx ? transactionContext(tx) : {}),
@@ -224,27 +224,27 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
-  sectionLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.text },
+  sectionLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1 },
   chipIdle: { backgroundColor: colors.surface, borderColor: colors.primarySoft },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
+  chipText: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   chipTextActive: { fontFamily: fonts.medium, color: colors.surface },
   messageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  counter: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
+  counter: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
   message: {
     minHeight: 140,
     padding: 14,
     borderRadius: radius.field,
     borderWidth: 1,
     fontFamily: fonts.regular,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 22,
     color: colors.text,
   },
-  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral },
-  privacy: { fontFamily: fonts.light, fontSize: 11, lineHeight: 16, color: colors.textMuted },
+  error: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral },
+  privacy: { fontFamily: fonts.light, fontSize: 13, lineHeight: 19, color: colors.textMuted },
   txCard: {
     gap: 4,
     padding: 12,
@@ -253,6 +253,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primarySoft,
     backgroundColor: colors.surface,
   },
-  txTitle: { fontFamily: fonts.medium, fontSize: 13, color: colors.text },
-  txLine: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
+  txTitle: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
+  txLine: { fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted },
 });

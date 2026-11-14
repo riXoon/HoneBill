@@ -42,7 +42,7 @@ export const FilterChips = memo(FilterChipsBase) as typeof FilterChipsBase;
 const styles = StyleSheet.create({
   row: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10 },
   label: { minWidth: 60, paddingHorizontal: 18, paddingVertical: 7, alignItems: 'center', justifyContent: 'center' },
-  labelText: { fontFamily: fonts.regular, fontSize: 10, color: colors.text, textAlign: 'center' },
+  labelText: { fontFamily: fonts.regular, fontSize: 12, color: colors.text, textAlign: 'center' },
   chip: {
     minWidth: 30,
     paddingHorizontal: 20,
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
-  chipText: { fontFamily: fonts.regular, fontSize: 10, textAlign: 'center' },
+  chipText: { fontFamily: fonts.regular, fontSize: 12, textAlign: 'center' },
   chipTextActive: { color: colors.surface },
   chipTextIdle: { color: colors.textMuted },
 });

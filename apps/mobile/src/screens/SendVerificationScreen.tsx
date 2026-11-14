@@ -207,7 +207,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
 
 const styles = StyleSheet.create({
   total: { alignItems: 'center', gap: 8, paddingVertical: 4 },
-  totalLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted, textAlign: 'center' },
+  totalLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   totalAmount: { fontFamily: fonts.semibold, fontSize: 36, lineHeight: 41.4, color: colors.text, textAlign: 'center' },
   escrow: {
     flexDirection: 'row',
@@ -220,11 +220,11 @@ const styles = StyleSheet.create({
   },
   escrowDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.statusOffline },
   escrowDotOnline: { backgroundColor: colors.statusOnline },
-  escrowText: { fontFamily: fonts.light, fontSize: 8, color: colors.textMuted, textTransform: 'uppercase' },
+  escrowText: { fontFamily: fonts.light, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase' },
 
-  problem: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
+  problem: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral, textAlign: 'center' },
   panel: { padding: 12, gap: 6 },
-  caption: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted },
+  caption: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
   account: { height: 50, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
   accountIcon: {
     width: 40,
@@ -237,24 +237,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accountText: { flex: 1, gap: 2, justifyContent: 'center' },
-  accountTitle: { fontFamily: fonts.medium, fontSize: 12, color: colors.text },
-  accountSubtitle: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
+  accountTitle: { fontFamily: fonts.medium, fontSize: 14, color: colors.text },
+  accountSubtitle: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
   memo: { gap: 3, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.placeholderTint },
-  memoText: { fontFamily: fonts.regular, fontSize: 10, color: colors.text },
+  memoText: { fontFamily: fonts.regular, fontSize: 12, color: colors.text },
 
   summary: { padding: 14, gap: 8 },
   breakdown: { gap: 10 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  summaryLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  summaryValue: { fontFamily: fonts.medium, fontSize: 10, color: colors.text },
+  summaryLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
+  summaryValue: { fontFamily: fonts.medium, fontSize: 12, color: colors.text },
   divider: { height: 1, backgroundColor: 'rgba(34, 32, 33, 0.2)' },
   totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  totalRowLabel: { fontFamily: fonts.semibold, fontSize: 12, color: colors.text },
+  totalRowLabel: { fontFamily: fonts.semibold, fontSize: 14, color: colors.text },
   totalRowValue: { fontFamily: fonts.semibold, fontSize: 18, color: colors.text },
 
   confirm: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 },
   // The unticked state is not in the design: same 18 dp box and radius, outlined in the primary orange.
   box: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   boxChecked: { backgroundColor: colors.primary },
-  confirmText: { flex: 1, fontFamily: fonts.medium, fontSize: 10, lineHeight: 15, color: colors.text },
+  confirmText: { flex: 1, fontFamily: fonts.medium, fontSize: 12, lineHeight: 18, color: colors.text },
 });

@@ -146,10 +146,10 @@ const styles = StyleSheet.create({
   card: { padding: 20, gap: 16, alignItems: 'center' },
   badges: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   status: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  statusText: { fontFamily: fonts.medium, fontSize: 10, color: colors.surface },
+  statusText: { fontFamily: fonts.medium, fontSize: 12, color: colors.surface },
   hero: { alignItems: 'center', gap: 4 },
   amount: { fontFamily: fonts.semibold, fontSize: 28, color: colors.text },
-  when: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
+  when: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
 
   voucher: {
     width: '100%',
@@ -163,15 +163,15 @@ const styles = StyleSheet.create({
   },
   details: { width: '100%', gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  rowLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  rowValue: { flexShrink: 1, textAlign: 'right', fontFamily: fonts.regular, fontSize: 10, color: colors.text },
+  rowLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted },
+  rowValue: { flexShrink: 1, textAlign: 'right', fontFamily: fonts.regular, fontSize: 12, color: colors.text },
   rowValueStrong: { fontFamily: fonts.medium },
   divider: { width: '100%', height: 1, backgroundColor: 'rgba(34, 32, 33, 0.2)' },
   identifier: { width: '100%', height: 74, gap: 8, alignItems: 'center' },
   identifierText: { width: '100%', gap: 2, alignItems: 'center' },
-  identifierLine: { fontFamily: fonts.regular, fontSize: 8, color: colors.textMuted, textAlign: 'center' },
+  identifierLine: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted, textAlign: 'center' },
   edge: { position: 'absolute', left: -1, right: -1, bottom: -1 },
 
   actions: { width: '100%', gap: 12, alignItems: 'center' },
-  report: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, paddingVertical: 4 },
+  report: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, paddingVertical: 4 },
 });

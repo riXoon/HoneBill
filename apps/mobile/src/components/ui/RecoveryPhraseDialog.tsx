@@ -75,5 +75,5 @@ const styles = StyleSheet.create({
   },
   message: { width: '100%', gap: 8 },
   heading: { fontFamily: fonts.semibold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  copy: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 18, color: colors.textMuted, textAlign: 'center' },
+  copy: { fontFamily: fonts.regular, fontSize: 14, lineHeight: 21, color: colors.textMuted, textAlign: 'center' },
 });

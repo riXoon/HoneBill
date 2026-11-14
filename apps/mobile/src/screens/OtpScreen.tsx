@@ -163,17 +163,17 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', padding: 40, gap: 40 },
   header: { gap: 11 },
-  subtitle: { fontFamily: fonts.light, fontSize: 13, color: colors.textMuted },
+  subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   codeBlock: { gap: 12, alignItems: 'center' },
-  error: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
+  error: { fontFamily: fonts.regular, fontSize: 14, color: colors.coral, textAlign: 'center' },
   mascotSlot: { alignItems: 'center', justifyContent: 'center' },
   footer: { gap: 16, alignItems: 'center' },
   resendPill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: radius.pill, borderWidth: 1, borderColor: 'transparent' },
   // Ready to tap: tinted pill with a visible border so it reads as an action, not a caption.
   resendPillActive: { backgroundColor: colors.yellow, borderColor: colors.primarySoft },
   resendPillPressed: { opacity: 0.7 },
-  resendWaiting: { fontFamily: fonts.regular, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  resendHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.text, textAlign: 'center' },
+  resendWaiting: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
+  resendHint: { fontFamily: fonts.regular, fontSize: 15, color: colors.text, textAlign: 'center' },
   // borderRed (not primary) for the link text: orange on this background is too low-contrast to read comfortably.
-  resendAction: { fontFamily: fonts.bold, fontSize: 14, color: colors.borderRed, textDecorationLine: 'underline' },
+  resendAction: { fontFamily: fonts.bold, fontSize: 16, color: colors.borderRed, textDecorationLine: 'underline' },
 });

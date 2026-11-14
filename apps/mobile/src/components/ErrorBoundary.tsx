@@ -60,9 +60,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
   title: { fontSize: 22, fontWeight: '700', color: '#111111' },
-  body: { fontSize: 15, lineHeight: 22, color: '#4B5563' },
+  body: { fontSize: 17, lineHeight: 25, color: '#4B5563' },
   devBox: { maxHeight: 160, backgroundColor: '#F3F4F6', borderRadius: 8, padding: 12 },
-  devText: { fontSize: 12, color: '#B91C1C' },
+  devText: { fontSize: 14, color: '#B91C1C' },
   button: { marginTop: 12, backgroundColor: '#111111', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
 });

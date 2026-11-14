@@ -51,9 +51,9 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
 const styles = StyleSheet.create({
   details: { gap: 12 },
   card: { padding: 16, gap: 8, alignItems: 'center' },
-  amountLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.coral, textAlign: 'center' },
+  amountLabel: { fontFamily: fonts.regular, fontSize: 12, color: colors.coral, textAlign: 'center' },
   pressed: { opacity: 0.85 },
   generate: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 14 },
   generateOff: { opacity: 0.5 },
-  generateText: { fontFamily: fonts.regular, fontSize: 15, color: colors.primary, textAlign: 'center' },
+  generateText: { fontFamily: fonts.regular, fontSize: 17, color: colors.primary, textAlign: 'center' },
 });

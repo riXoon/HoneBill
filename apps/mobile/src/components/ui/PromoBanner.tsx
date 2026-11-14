@@ -97,6 +97,6 @@ const styles = StyleSheet.create({
   // Greeting at the top, subtext pinned to the bottom edge so the two read as separate lines with room between.
   text: { position: 'absolute', left: 19, top: 16, bottom: 16, width: '61%', justifyContent: 'space-between' },
   title: { fontFamily: fonts.medium, fontSize: 18, color: colors.surface },
-  subtitle: { fontFamily: fonts.light, fontSize: 12, color: colors.surface },
+  subtitle: { fontFamily: fonts.light, fontSize: 14, color: colors.surface },
   honiFrame: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
 });

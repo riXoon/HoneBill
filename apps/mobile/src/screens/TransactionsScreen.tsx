@@ -112,5 +112,5 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 30 },
   header: { gap: 20, marginBottom: 20 },
   separator: { height: 10 },
-  savedNotice: { fontFamily: fonts.light, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  savedNotice: { fontFamily: fonts.light, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
 });
