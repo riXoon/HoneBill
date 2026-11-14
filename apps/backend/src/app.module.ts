@@ -19,6 +19,7 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
 import { CommonModule } from './common/common.module';
 import { EngineModule } from './modules/engine/engine.module.js';
 import { AnchorModule } from './modules/anchor/anchor.module.js';
+import { FeedbackModule } from './modules/feedback/feedback.module.js';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { AnchorModule } from './modules/anchor/anchor.module.js';
     SettlementsModule,
     EngineModule,
     AnchorModule,
+    FeedbackModule,
     HealthModule,
   ],
   providers: [

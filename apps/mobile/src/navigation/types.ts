@@ -55,6 +55,8 @@ export type RootStackParamList = {
   /** Profile menu: current MPIN, then a new one twice. */
   ChangeMpin: undefined;
   TransactionDetail: { id: string };
+  /** Help & Feedback. With `transactionId` (from a transaction's "Report a problem") that payment is attached. */
+  Feedback: { transactionId?: string } | undefined;
   /** Adds PHPC to the online wallet through the anchor's deposit. */
   TopUp: undefined;
   /** Moves funds between the user's own wallets. */

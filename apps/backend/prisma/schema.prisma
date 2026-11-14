@@ -64,6 +64,32 @@ model Account {
   @@map("account")
 }
 
+enum FeedbackCategory {
+  PAYMENT
+  ACCOUNT
+  BUG
+  SUGGESTION
+}
+
+/// A report or suggestion sent from the app's Help & Feedback screen. One-way: nothing is sent back to the user.
+model Feedback {
+  id          Int              @id @default(autoincrement())
+  /// Made by the app per report, so a send retried from its offline queue is stored once.
+  clientId    String           @unique @map("client_id")
+  category    FeedbackCategory
+  message     String
+  /// As the app reported it; not verified (the endpoint takes no session).
+  shortId     String?          @map("short_id")
+  /// App version, platform, connection, and the transaction the report is about, if any.
+  context     Json?
+  /// When the report was posted to the team's Discord channel; null if that failed or is not set up.
+  forwardedAt DateTime?        @map("forwarded_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("feedback")
+}
+
 /// A pre-provisioned, single-use pair of disposable Testnet accounts for judges.
 /// Secrets are encrypted by the application before they are persisted.
 model DemoAccountPair {

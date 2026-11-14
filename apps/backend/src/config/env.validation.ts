@@ -55,6 +55,8 @@ export const envValidationSchema = Joi.object({
   TEXTBEE_FALLBACK_API_KEY: Joi.string().allow('').optional(),
   TEXTBEE_FALLBACK_SIM_SUBSCRIPTION_ID: Joi.string().allow('').optional(),
   TEXTBEE_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+  /** Discord channel webhook that Help & Feedback reports are posted to. Unset: reports are only stored. */
+  DISCORD_FEEDBACK_WEBHOOK_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
   SMS_DISPATCH_SECRET: Joi.string().allow('').optional(),
   OFFLINE_TRANSACTION_DEBUG: Joi.boolean().truthy('true').falsy('false').default(false),
   NEXT_PUBLIC_APP_URL: Joi.string().uri().allow('').optional(),
