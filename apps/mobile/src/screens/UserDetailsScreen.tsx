@@ -63,6 +63,7 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
         <View style={styles.fields}>
           <TextField
             label="First name"
+            placeholder="e.g. Juan"
             value={firstName}
             onChangeText={setFirstName}
             error={errors.firstName}
@@ -71,6 +72,7 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
           />
           <TextField
             label="Last name"
+            placeholder="e.g. Dela Cruz"
             value={lastName}
             onChangeText={setLastName}
             error={errors.lastName}
@@ -79,6 +81,7 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
           />
           <TextField
             label="Email"
+            placeholder="name@example.com"
             value={email}
             onChangeText={setEmail}
             error={errors.email}

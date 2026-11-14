@@ -31,4 +31,10 @@ export class UpdateProfileDto {
   @MaxLength(254)
   @IsEmail()
   email?: string;
+
+  /** From `POST /otp/verify`; required when the email changes. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  verificationToken?: string;
 }

@@ -58,6 +58,11 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
       title={title}
       icon={icon}
       onBack={onBack}
+      processing={
+        busy
+          ? { title: `Moving ${formatPeso(amount)} to your ${to === 'offline' ? 'offline vault' : 'online wallet'}` }
+          : null
+      }
       footer={
         <View style={styles.footer}>
           <Mascot mood={mood} width={264} />

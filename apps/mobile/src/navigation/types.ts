@@ -13,7 +13,8 @@ export type TabParamList = {
 /** v2 route map. Add screens here as they are built. */
 export type RootStackParamList = {
   Landing: undefined;
-  Login: undefined;
+  /** `pinChanged`: arrived right after changing the MPIN, so it asks for the new one instead of offering the fingerprint first. */
+  Login: { reason?: 'pinChanged' } | undefined;
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
   InputNumber: { mode?: 'signin'; termsAccepted?: boolean } | undefined;
   /** `accept` is the sign-up gate (read to the end, tick, "I Agree"); without it the terms are read-only. */

@@ -9,7 +9,8 @@ import { DownloadIcon, OfflineFundsBadge, ReceiptIcon } from '../components/ui/s
 import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
-import { SOURCE_LABEL, displayRef, failureText, type TransactionStatus } from '../types/transaction';
+import { Notice, type NoticeTone } from '../components/ui/Notice';
+import { EXPIRED_REASON, SOURCE_LABEL, displayRef, failureText, type TransactionStatus } from '../types/transaction';
 import { formatAmount, formatReceiptDate } from '../utils/format';
 
 // Detail page for one Transactions row. Built from the Receipt voucher (870:2835) so it shares the brand look.
@@ -62,6 +63,16 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
           ? 'Still not confirmed. Connect to the internet to check, or look for a text from HoneBill with this reference.'
           : `You will get a text from HoneBill with Ref ${ref} when it goes through or fails.`
         : null;
+  // Never answered is a warning (check the balance); rejected is an error; still waiting is information.
+  const unconfirmed = tx.status === 'failed' && tx.failureReason === EXPIRED_REASON;
+  const noteTone: NoticeTone = unconfirmed ? 'warning' : tx.status === 'failed' ? 'error' : 'info';
+  const noteTitle = unconfirmed
+    ? 'Could not be confirmed'
+    : tx.status === 'failed'
+      ? 'This payment did not go through'
+      : waitingLong
+        ? 'Still waiting'
+        : 'Waiting for confirmation';
 
   const share = () =>
     void Share.share({
@@ -87,8 +98,8 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
     >
       <GlassCard style={styles.card}>
         <View style={styles.badges}>
-          <View style={[styles.status, { backgroundColor: STATUS_COLOR[tx.status] }]}>
-            <Text style={styles.statusText}>{STATUS_LABEL[tx.status]}</Text>
+          <View style={[styles.status, { backgroundColor: unconfirmed ? colors.primary : STATUS_COLOR[tx.status] }]}>
+            <Text style={styles.statusText}>{unconfirmed ? 'Unconfirmed' : STATUS_LABEL[tx.status]}</Text>
           </View>
           {offline ? <OfflineFundsBadge /> : null}
         </View>
@@ -101,9 +112,9 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
         </View>
 
         {note ? (
-          <Text style={[styles.note, tx.status === 'failed' && styles.noteFailed]} accessibilityLiveRegion="polite">
+          <Notice tone={noteTone} title={noteTitle}>
             {note}
-          </Text>
+          </Notice>
         ) : null}
 
         <View style={styles.voucher}>
@@ -139,8 +150,6 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 4 },
   amount: { fontFamily: fonts.semibold, fontSize: 28, color: colors.text },
   when: { fontFamily: fonts.regular, fontSize: 10, color: colors.textMuted },
-  note: { fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, color: colors.textMuted, textAlign: 'center' },
-  noteFailed: { color: colors.coral },
 
   voucher: {
     width: '100%',

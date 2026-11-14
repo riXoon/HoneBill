@@ -36,6 +36,16 @@ export function voucherRef(nonce: string): string {
   return nonce.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase();
 }
 
+/** 82800 -> "23 hours", 3600 -> "1 hour", 90 -> "2 minutes": a wait, rounded up (matches the backend's wording). */
+export function formatWait(seconds: number): string {
+  if (seconds >= 3600) {
+    const hours = Math.ceil(seconds / 3600);
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 function clock(date: Date): string {

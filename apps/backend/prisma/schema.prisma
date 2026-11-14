@@ -50,6 +50,9 @@ model Account {
   firstName        String?  @map("first_name")
   lastName         String?  @map("last_name")
   email            String?  @map("email")
+  /// When the MPIN / email was last changed; each can change again only after a 24-hour cooldown.
+  pinChangedAt     DateTime? @map("pin_changed_at")
+  emailChangedAt   DateTime? @map("email_changed_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
@@ -57,6 +60,7 @@ model Account {
   demoReceiverPair DemoAccountPair? @relation("DemoReceiverAccount")
 
   @@index([phoneNumber])
+  @@index([email])
   @@map("account")
 }
 

@@ -36,7 +36,19 @@ export function lookupUserByPhone(phone: string, signal?: AbortSignal): Promise<
 
 export type ProfileChanges = { firstName?: string; lastName?: string; email?: string };
 
-/** Edits the account's name and/or email. The PIN proves the caller owns the account. */
-export function updateProfile(phone: string, pin: string, changes: ProfileChanges, signal?: AbortSignal): Promise<{ success: true }> {
-  return apiRequest('PATCH', '/users/profile', { body: { phoneNumber: phone, pin, ...changes }, signal });
+/**
+ * Edits the account's name and/or email. The PIN proves the caller owns the account; an email change also needs the
+ * `verificationToken` from `POST /otp/verify`.
+ */
+export function updateProfile(
+  phone: string,
+  pin: string,
+  changes: ProfileChanges,
+  verificationToken?: string,
+  signal?: AbortSignal,
+): Promise<{ success: true }> {
+  return apiRequest('PATCH', '/users/profile', {
+    body: { phoneNumber: phone, pin, ...changes, ...(verificationToken ? { verificationToken } : {}) },
+    signal,
+  });
 }

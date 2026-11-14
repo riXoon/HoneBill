@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SOURCE_LABEL, failureText, type Transaction } from '../../types/transaction';
+import { EXPIRED_REASON, SOURCE_LABEL, failureText, type Transaction } from '../../types/transaction';
 import { formatAmount, formatClock } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { OfflineFundsBadge } from '../ui/smallIcons';
@@ -13,7 +13,9 @@ export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { 
   const amount = `${sign} ${formatAmount(tx.amount, tx.assetCode)}`;
   const time = formatClock(new Date(tx.timestamp));
   const failed = tx.status === 'failed';
-  const statusLabel = failed ? 'Failed' : tx.status === 'pending' ? 'Pending' : null;
+  // Never answered is not a known failure (money may have moved), so it gets its own label and a neutral look.
+  const unconfirmed = failed && tx.failureReason === EXPIRED_REASON;
+  const statusLabel = unconfirmed ? 'Unconfirmed' : failed ? 'Failed' : tx.status === 'pending' ? 'Pending' : null;
   const failureNote = failed ? failureText(tx) : null;
   // A failed payment must not read like an ordinary debit.
   const spoken = failureNote ? `${amount}, failed. ${failureNote}` : statusLabel ? `${amount}, ${statusLabel}` : amount;
@@ -30,7 +32,7 @@ export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { 
             <Text style={styles.pillText}>{SOURCE_LABEL[tx.source]}</Text>
           </View>
           {statusLabel ? (
-            <View style={[styles.statusPill, failed ? styles.failedPill : styles.pendingPill]}>
+            <View style={[styles.statusPill, failed && !unconfirmed ? styles.failedPill : styles.pendingPill]}>
               <Text style={styles.pillText}>{statusLabel}</Text>
             </View>
           ) : null}
@@ -40,9 +42,9 @@ export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { 
       <View style={styles.info}>
         <View style={styles.text}>
           <Text style={styles.description}>{tx.description}</Text>
-          <Text style={[styles.amount, failed && styles.amountFailed]}>{amount}</Text>
+          <Text style={[styles.amount, failed && !unconfirmed && styles.amountFailed]}>{amount}</Text>
           {failureNote ? (
-            <Text style={styles.failure} numberOfLines={2}>
+            <Text style={[styles.failure, unconfirmed && styles.unconfirmedNote]} numberOfLines={3}>
               {failureNote}
             </Text>
           ) : null}
@@ -78,7 +80,8 @@ const styles = StyleSheet.create({
   pendingPill: { backgroundColor: colors.primary },
   failedPill: { backgroundColor: colors.coral },
   amountFailed: { color: colors.textMuted, textDecorationLine: 'line-through' },
-  failure: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 13, includeFontPadding: false, color: colors.coral },
+  failure: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 15, includeFontPadding: false, color: colors.coral },
+  unconfirmedNote: { fontFamily: fonts.regular, color: colors.text },
   pillText: { fontFamily: fonts.regular, fontSize: 8, lineHeight: 10, includeFontPadding: false, color: colors.surface, textAlign: 'center' },
   time: { fontFamily: fonts.regular, fontSize: 8, lineHeight: 10, includeFontPadding: false, color: colors.textMuted, textTransform: 'uppercase' },
   info: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'flex-end', gap: 10 },
