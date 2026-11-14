@@ -9,7 +9,12 @@ export function configureApp(app: INestApplication): void {
   const corsOrigin = configService.get<string>('CORS_ORIGIN', '*');
 
   app.setGlobalPrefix(API_PREFIX, {
-    exclude: [{ path: '.well-known/(.*)', method: RequestMethod.ALL }],
+    exclude: [
+      { path: '.well-known/(.*)', method: RequestMethod.ALL },
+      // The public APK download page, honebill.app/download (app-version module).
+      { path: 'download', method: RequestMethod.GET },
+      { path: 'download/honebill.apk', method: RequestMethod.GET },
+    ],
   });
 
   const express = app.getHttpAdapter().getInstance();

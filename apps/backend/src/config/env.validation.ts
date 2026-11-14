@@ -65,6 +65,8 @@ export const envValidationSchema = Joi.object({
   APP_MIN_SUPPORTED_VERSION: Joi.string().allow('').optional(),
   APP_DOWNLOAD_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
   APP_LATEST_NOTES: Joi.string().max(300).allow('').optional(),
+  /** The APK file (e.g. a Vercel Blob link) that honebill.app/download/honebill.apk redirects to. */
+  APP_APK_URL: Joi.string().uri({ scheme: ['https'] }).allow('').optional(),
   SMS_DISPATCH_SECRET: Joi.string().allow('').optional(),
   OFFLINE_TRANSACTION_DEBUG: Joi.boolean().truthy('true').falsy('false').default(false),
   NEXT_PUBLIC_APP_URL: Joi.string().uri().allow('').optional(),

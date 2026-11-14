@@ -58,6 +58,12 @@ export class AppVersionService {
     };
   }
 
+  /** The APK file itself (APP_APK_URL, e.g. a Vercel Blob link), which /download/honebill.apk redirects to. */
+  getApkUrl(): string | null {
+    const url = this.config.get<string>('APP_APK_URL')?.trim();
+    return url && url.startsWith('https://') ? url : null;
+  }
+
   private version(key: string): string | null {
     const value = this.config.get<string>(key)?.trim();
     if (!value) return null;
