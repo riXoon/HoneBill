@@ -15,6 +15,8 @@ export type RootStackParamList = {
   Landing: undefined;
   /** `pinChanged`: arrived right after changing the MPIN, so it asks for the new one instead of offering the fingerprint first. */
   Login: { reason?: 'pinChanged' } | undefined;
+  /** Forgot MPIN, for the number on the sign-in screen: SMS code and the phone's wallet prove ownership, then a new MPIN. */
+  ForgotMpin: { phone: string };
   /** `signin` finds an existing account (no OTP) instead of starting sign-up. */
   InputNumber: { mode?: 'signin'; termsAccepted?: boolean } | undefined;
   /** `accept` is the sign-up gate (read to the end, tick, "I Agree"); without it the terms are read-only. */

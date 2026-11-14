@@ -29,8 +29,8 @@ import { afterNextPaint } from '../utils/async';
 // Figma: Login Page (870:3055), 402x874.
 /** Sign-in is something people do often, so its hive entrance runs a little shorter than the one after sign-up. */
 const SIGN_IN_HIVE_MS = 900;
-/** Logo (30 + 17), then the number pill, prompt and PIN dots (about 190 dp): what sits above and below Honi. */
-const LOGIN_FIXED_BLOCKS = 47 + 190;
+/** Logo (30 + 17), then the number pill, prompt, PIN dots and the "Forgot MPIN?" link (about 224 dp): what sits above and below Honi. */
+const LOGIN_FIXED_BLOCKS = 47 + 190 + 34;
 const logoHorizontal = require('../../assets/brand/logo-horizontal.png');
 
 /** Swap arrows from the Figma icon sprite (870:3065), cropped to the visible glyph. */
@@ -263,6 +263,20 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
             </Text>
           )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
+          {/* Only with a number to reset for; hidden while signing in so it cannot be tapped mid-request. */}
+          {phone && !busy && !entering ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Forgot MPIN? Reset it"
+              hitSlop={10}
+              onPress={() => navigation.navigate('ForgotMpin', { phone })}
+              style={({ pressed }) => pressed && styles.forgotPressed}
+            >
+              <Text style={styles.forgot}>Forgot MPIN?</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.forgotSpace} />
+          )}
         </View>
       </View>
 
@@ -283,6 +297,11 @@ const styles = StyleSheet.create({
   mascotArea: { width: '100%', maxWidth: 260, alignItems: 'center' },
   mascot: { marginTop: -20 },
   inputSection: { width: '100%', alignItems: 'center', paddingTop: 20, gap: 16 },
+  // borderRed (not primary), like the OTP screen's links: orange on this background is too low-contrast to read.
+  forgot: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: colors.borderRed, textDecorationLine: 'underline' },
+  forgotPressed: { opacity: 0.6 },
+  // Holds the link's height while it is hidden, so the PIN dots and the keypad do not shift.
+  forgotSpace: { height: 18 },
   phonePill: {
     width: '100%',
     maxWidth: 302,

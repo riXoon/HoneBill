@@ -23,6 +23,7 @@ import { syncService } from './src/services/sync/syncService';
 import { AccountSettingsScreen } from './src/screens/AccountSettingsScreen';
 import { ChangeMpinScreen } from './src/screens/ChangeMpinScreen';
 import { FeedbackScreen } from './src/screens/FeedbackScreen';
+import { ForgotMpinScreen } from './src/screens/ForgotMpinScreen';
 import { VaultSettingsScreen } from './src/screens/VaultSettingsScreen';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
@@ -63,6 +64,7 @@ function RootNavigator() {
       <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="ForgotMpin" component={ForgotMpinScreen} />
         <Stack.Screen name="InputNumber" component={InputNumberScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="Otp" component={OtpScreen} />

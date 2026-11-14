@@ -90,7 +90,10 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
       setMessage({
         tone: 'warning',
         title: 'Please try again later',
-        text: `You changed your email recently. You can change it again in ${formatWait(availability.email.retryAfter)}.`,
+        text:
+          availability.email.reason === 'reset'
+            ? `For your security, your email can't be changed for ${formatWait(availability.email.retryAfter)} after an MPIN reset.`
+            : `You changed your email recently. You can change it again in ${formatWait(availability.email.retryAfter)}.`,
       });
       return null;
     }

@@ -1,6 +1,6 @@
 import {
   All, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, Res, Body,
-  UseInterceptors, type RawBodyRequest,
+  UseGuards, UseInterceptors, type RawBodyRequest,
 } from '@nestjs/common';
 import { AccountsService } from '../accounts/accounts.service.js';
 import { AuthService } from './auth.service.js';
@@ -10,7 +10,8 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { VerifyPinDto } from '../accounts/dto/verify-pin.dto.js';
-import { ChangeAvailabilityDto, ChangePinDto } from '../accounts/dto/change-pin.dto.js';
+import { ChangeAvailabilityDto, ChangePinDto, ResetPinDto } from '../accounts/dto/change-pin.dto.js';
+import { Sep10JwtGuard } from '../../common/guards/sep10-jwt.guard.js';
 
 type QueryStringValue = string | string[] | Record<string, string>;
 
@@ -74,6 +75,22 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   changePin(@Body() body: ChangePinDto) {
     return this.accountsService.changePin(body.phoneNumber, body.currentPin.trim(), body.newPin.trim(), body.verificationToken);
+  }
+
+  /**
+   * "Forgot MPIN": a new MPIN without the current one. Needs the wallet's SEP-10 session token (the wallet must belong
+   * to the account for this number) and the SMS code's `verificationToken`.
+   */
+  @Post('pin/reset')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(Sep10JwtGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  resetPin(@Req() request: { user?: { sub?: unknown } }, @Body() body: ResetPinDto) {
+    const wallet = request.user?.sub;
+    if (typeof wallet !== 'string' || wallet.length === 0) {
+      throw new ApiResponseException(401, { error: 'Invalid or expired token' });
+    }
+    return this.accountsService.resetPin(body.phoneNumber, body.newPin.trim(), body.verificationToken, wallet);
   }
 
   /** Whether the MPIN / email can change now; checked with the PIN before the app asks for an SMS code. */
