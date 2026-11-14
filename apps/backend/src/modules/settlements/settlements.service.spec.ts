@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { Keypair } from '@stellar/stellar-sdk';
-import { SettlementsService } from './settlements.util.js';
+import { SettlementsService, buildOfflineSignatureXdr, decodeBase62 } from './settlements.util.js';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 import type { ConfigService } from '@nestjs/config';
@@ -60,5 +60,60 @@ describe('SettlementsService', () => {
     expect(transactionManager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
     expect(transactionManager.resumeTwoPhaseSettlement).not.toHaveBeenCalled();
     expect(prisma.settlement.create).not.toHaveBeenCalled();
+  });
+
+  it('records a signed voucher to an unknown recipient as FAILED, so it shows in history and never settles later', async () => {
+    const { service, prisma, transactionManager, senderKey, gateway } = makeService();
+    const tokenContractId = Keypair.random().publicKey();
+    const signed = buildOfflineSignatureXdr({
+      amountStroops: decodeBase62('3v5K'),
+      protocolToll: 5_000_000n,
+      nonce: Buffer.alloc(32, 1),
+      receiverShortId: 'def456',
+      gatewayPublicKey: gateway.publicKey(),
+      tokenContractId,
+      contractId: 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX',
+    });
+    prisma.settlement.findUnique.mockResolvedValue(null);
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ shortId: 'abc123', stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
+      .mockResolvedValueOnce(null);
+    prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
+
+    await expect(service.processSettlement(body(Buffer.from(senderKey.sign(signed))))).rejects.toMatchObject({ status: 404 });
+    expect(prisma.settlement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ status: 'FAILED', failReason: 'Recipient account not found', receiverShortId: 'def456' }),
+    });
+    expect(transactionManager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
+  });
+
+  it('records nothing for an unknown recipient when the signature is not valid', async () => {
+    const { service, prisma, senderKey } = makeService();
+    prisma.settlement.findUnique.mockResolvedValue(null);
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ shortId: 'abc123', stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
+      .mockResolvedValueOnce(null);
+    prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: Keypair.random().publicKey(), isActive: true });
+    await expect(service.processSettlement(body())).rejects.toMatchObject({ status: 401 });
+    expect(prisma.settlement.create).not.toHaveBeenCalled();
+  });
+
+  it('describes a voucher for the settlement texts', async () => {
+    const { service, prisma } = makeService();
+    prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', decimals: 7 });
+    prisma.account.findUnique.mockImplementation(async (args: any) =>
+      args.where.shortId === 'def456'
+        ? { shortId: 'def456', phoneNumber: '+639170000002', firstName: 'Ben' }
+        : { shortId: 'abc123', phoneNumber: '+639170000001', firstName: 'Ana' },
+    );
+    await expect(service.describeVoucher(body())).resolves.toMatchObject({
+      senderShortId: 'abc123',
+      receiverShortId: 'def456',
+      amountStroops: decodeBase62('3v5K'),
+      symbol: 'PHPC',
+      receiverPhone: '+639170000002',
+      senderName: 'Ana',
+    });
+    await expect(service.describeVoucher('not a voucher')).resolves.toBeNull();
   });
 });
