@@ -69,11 +69,12 @@ export class AccountsController {
   @Patch('users/profile')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   updateProfile(@Body() body: UpdateProfileDto) {
-    return this.accountsService.updateProfile(body.phoneNumber, body.pin.trim(), {
-      firstName: body.firstName,
-      lastName: body.lastName,
-      email: body.email,
-    });
+    return this.accountsService.updateProfile(
+      body.phoneNumber,
+      body.pin.trim(),
+      { firstName: body.firstName, lastName: body.lastName, email: body.email },
+      body.verificationToken,
+    );
   }
 
   @All('users/lookup')

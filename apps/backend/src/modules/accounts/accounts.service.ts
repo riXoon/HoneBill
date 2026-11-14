@@ -299,8 +299,30 @@ export class AccountsService {
     return { success: true };
   }
 
-  /** Replaces the PIN after checking the current one (which shares verifyPin's wrong-try lockout). */
-  async changePin(phoneNumber: string, currentPin: string, newPin: string) {
+  /**
+   * Whether the MPIN and the email can be changed right now, after checking the PIN (so it shares verifyPin's lockout
+   * and reveals nothing to someone without it). The app asks before collecting an SMS code and a new value, so a
+   * person in the cooldown is told up front. `retryAfter` is in seconds; 0 means allowed. With `email`, also says
+   * whether another account already uses it.
+   */
+  async changeAvailability(phoneNumber: string, pin: string, email?: string) {
+    await this.verifyPin(phoneNumber, pin);
+    const account = await this.findChangeAccount(phoneNumber);
+    if (!account) throw new NotFoundException('Account not found.');
+    const wanted = email?.trim().toLowerCase();
+    return {
+      success: true,
+      pin: { retryAfter: cooldownLeft(account.pinChangedAt) },
+      email: { retryAfter: cooldownLeft(account.emailChangedAt) },
+      ...(wanted ? { emailTaken: await this.emailInUse(wanted, account.id) } : {}),
+    };
+  }
+
+  /**
+   * Replaces the PIN. Needs the current PIN (sharing verifyPin's wrong-try lockout), a fresh SMS code for the
+   * account's number, and no PIN change in the last 24 hours.
+   */
+  async changePin(phoneNumber: string, currentPin: string, newPin: string, verificationToken?: string) {
     if (!isValidPinFormat(newPin)) {
       throw new ApiResponseException(400, {
         error: 'Validation failed',
@@ -314,24 +336,30 @@ export class AccountsService {
       });
     }
 
-    await this.verifyPin(phoneNumber, currentPin);
+    // Checked before the PIN, so a refused change does not use up the person's PIN tries.
+    const account = await this.findChangeAccount(phoneNumber);
+    if (account) assertNoCooldown('pin', account.pinChangedAt);
+    this.assertPhoneVerified(phoneNumber, verificationToken);
 
-    const account = await this.prisma.account.findFirst({
-      where: { phoneNumber: toDbPhone(phoneNumber) },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    });
+    await this.verifyPin(phoneNumber, currentPin);
     if (!account) throw new NotFoundException('Account not found.');
 
-    await this.prisma.account.update({ where: { id: account.id }, data: { pin: await hashPin(newPin) } });
+    await this.prisma.account.update({
+      where: { id: account.id },
+      data: { pin: await hashPin(newPin), pinChangedAt: new Date() },
+    });
     return { success: true };
   }
 
-  /** Updates the name and/or email after checking the PIN. Fields left out are unchanged. */
+  /**
+   * Updates the name and/or email after checking the PIN. Fields left out are unchanged. Changing the email also needs
+   * a fresh SMS code, no email change in the last 24 hours, and an address no other account uses.
+   */
   async updateProfile(
     phoneNumber: string,
     pin: string,
     changes: { firstName?: string; lastName?: string; email?: string },
+    verificationToken?: string,
   ) {
     const firstName = changes.firstName?.trim();
     const lastName = changes.lastName?.trim();
@@ -347,31 +375,105 @@ export class AccountsService {
       throw new ApiResponseException(400, { error: 'Validation failed', fieldErrors });
     }
 
-    await this.verifyPin(phoneNumber, pin);
+    const account = await this.findChangeAccount(phoneNumber);
+    // Saving the same address again is not a change, so it needs no code and does not start a cooldown.
+    const emailChanging = email !== undefined && email !== account?.email;
+    if (emailChanging) {
+      if (account) assertNoCooldown('email', account.emailChangedAt);
+      this.assertPhoneVerified(phoneNumber, verificationToken);
+    }
 
-    const account = await this.prisma.account.findFirst({
-      where: { phoneNumber: toDbPhone(phoneNumber) },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    });
+    await this.verifyPin(phoneNumber, pin);
     if (!account) throw new NotFoundException('Account not found.');
+
+    if (emailChanging && (await this.emailInUse(email, account.id))) {
+      throw new ApiResponseException(409, {
+        error: 'Validation failed',
+        fieldErrors: { email: 'This email is already used by another account.' },
+      });
+    }
 
     const updated = await this.prisma.account.update({
       where: { id: account.id },
       data: {
         ...(firstName !== undefined ? { firstName } : {}),
         ...(lastName !== undefined ? { lastName } : {}),
-        ...(email !== undefined ? { email } : {}),
+        ...(emailChanging ? { email, emailChangedAt: new Date() } : {}),
       },
       select: { firstName: true, lastName: true, email: true },
     });
     return { success: true, data: updated };
   }
 
+  /** The account a PIN or email change applies to: the newest one on the number, as verifyPin uses. */
+  private findChangeAccount(phoneNumber: string) {
+    return this.prisma.account.findFirst({
+      where: { phoneNumber: toDbPhone(phoneNumber) },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, email: true, pinChangedAt: true, emailChangedAt: true },
+    });
+  }
+
+  /** Emails are stored lower-cased, so an exact match is a case-insensitive one. */
+  private async emailInUse(email: string, ownId: number): Promise<boolean> {
+    const other = await this.prisma.account.findFirst({ where: { email, NOT: { id: ownId } }, select: { id: true } });
+    return other !== null;
+  }
+
+  /**
+   * A sensitive change needs proof the person holds the account's phone right now: the token `POST /otp/verify`
+   * returns. Required whenever the server can issue tokens; a development setup with no token secret skips it.
+   */
+  private assertPhoneVerified(phoneNumber: string, verificationToken?: string): void {
+    const secret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET');
+    if (!secret && !this.isOtpTokenRequired()) return;
+    const token = verificationToken?.trim() ?? '';
+    if (!token || !verifyVerificationToken(token, phoneNumber, secret)) {
+      throw new UnauthorizedException({
+        error: 'Enter the code we texted to your number to confirm this change.',
+        code: 'OTP_REQUIRED',
+      });
+    }
+  }
+
   private isOtpTokenRequired(): boolean {
     const required = this.configService.get<boolean | string>('REQUIRE_OTP_TOKEN');
     return required === true || required === 'true';
   }
+}
+
+/** How long after a change the same field (MPIN or email) can change again. */
+export const CHANGE_COOLDOWN_SECONDS = 24 * 60 * 60;
+
+/** Seconds until a field changed at `changedAt` can change again; 0 when it can now. */
+export function cooldownLeft(changedAt: Date | null | undefined, now = Date.now()): number {
+  if (!changedAt) return 0;
+  const left = changedAt.getTime() + CHANGE_COOLDOWN_SECONDS * 1000 - now;
+  return left > 0 ? Math.ceil(left / 1000) : 0;
+}
+
+/** "23 hours" / "1 hour" / "45 minutes": how long until the cooldown ends, rounded up. */
+export function describeWait(seconds: number): string {
+  if (seconds >= 3600) {
+    const hours = Math.ceil(seconds / 3600);
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+}
+
+function assertNoCooldown(field: 'pin' | 'email', changedAt: Date | null): void {
+  const retryAfter = cooldownLeft(changedAt);
+  if (retryAfter === 0) return;
+  const what = field === 'pin' ? 'MPIN' : 'email';
+  throw new HttpException(
+    {
+      error: `You changed your ${what} recently. You can change it again in ${describeWait(retryAfter)}.`,
+      code: 'CHANGE_COOLDOWN',
+      retryAfter,
+    },
+    429,
+  );
 }
 
 function optionalString(value: unknown): string | null {

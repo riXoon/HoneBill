@@ -10,7 +10,7 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { VerifyPinDto } from '../accounts/dto/verify-pin.dto.js';
-import { ChangePinDto } from '../accounts/dto/change-pin.dto.js';
+import { ChangeAvailabilityDto, ChangePinDto } from '../accounts/dto/change-pin.dto.js';
 
 type QueryStringValue = string | string[] | Record<string, string>;
 
@@ -73,6 +73,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   changePin(@Body() body: ChangePinDto) {
-    return this.accountsService.changePin(body.phoneNumber, body.currentPin.trim(), body.newPin.trim());
+    return this.accountsService.changePin(body.phoneNumber, body.currentPin.trim(), body.newPin.trim(), body.verificationToken);
+  }
+
+  /** Whether the MPIN / email can change now; checked with the PIN before the app asks for an SMS code. */
+  @Post('change/availability')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  changeAvailability(@Body() body: ChangeAvailabilityDto) {
+    return this.accountsService.changeAvailability(body.phoneNumber, body.pin.trim(), body.email);
   }
 }
