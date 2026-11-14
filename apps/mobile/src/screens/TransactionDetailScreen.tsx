@@ -1,4 +1,4 @@
-import { Alert, Share, StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { GlassCard } from '../components/send/GlassCard';
@@ -78,8 +78,8 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
     void Share.share({
       message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${amount}\n${tx.description}\nStatus: ${STATUS_LABEL[tx.status]}\nRef No. ${ref}\n${when}`,
     });
-  // There is no support flow in the app or backend yet, so say so instead of pretending to file a report.
-  const report = () => Alert.alert('Report a problem', `Support for Ref No. ${ref} is not available yet.`);
+  // Opens Help & Feedback with this payment attached, so the team can trace it without asking.
+  const report = () => navigation.navigate('Feedback', { transactionId: tx.id });
 
   return (
     <SendLayout

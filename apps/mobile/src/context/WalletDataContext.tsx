@@ -7,6 +7,7 @@ import { getConnectivity } from '../services/connectivity';
 import { reportError } from '../services/errorReporting';
 import { syncService } from '../services/sync/syncService';
 import { drainConfirms } from '../services/sync/confirmOutbox';
+import { drainFeedback } from '../services/sync/feedbackOutbox';
 import { drainVouchers, enqueueVoucher } from '../services/sync/voucherOutbox';
 import { getHistory, getVaultBalance } from '../services/api/wallet';
 import { toTransactions } from '../services/transactionMapper';
@@ -85,6 +86,7 @@ const MAX_MOVES = 100;
 /** The wallet read runs last in a sync, after steps that change what it returns (e.g. sending queued payments). */
 const SYNC_ORDER_WALLET = 100;
 const SYNC_ORDER_VOUCHERS = 10;
+const SYNC_ORDER_FEEDBACK = 30;
 const SYNC_ORDER_CONFIRMS = 20;
 const syncNow = () => syncService.requestSync();
 const OFFLINE_MESSAGE = "You're offline. Connect to the internet to load your transactions.";
@@ -358,6 +360,19 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         await drainConfirms(publicKey, signal);
       },
       SYNC_ORDER_CONFIRMS,
+    );
+  }, [publicKey]);
+
+  // Help & Feedback reports written offline go out on the next sync. After the payment steps, which matter more.
+  useEffect(() => {
+    if (!publicKey) return;
+    return syncService.registerStep(
+      'feedback',
+      async ({ signal }) => {
+        if (!getConnectivity().online) return;
+        await drainFeedback(publicKey, signal);
+      },
+      SYNC_ORDER_FEEDBACK,
     );
   }, [publicKey]);
 

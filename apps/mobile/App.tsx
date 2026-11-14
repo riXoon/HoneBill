@@ -22,6 +22,7 @@ import { installGlobalErrorHandler } from './src/services/errorReporting';
 import { syncService } from './src/services/sync/syncService';
 import { AccountSettingsScreen } from './src/screens/AccountSettingsScreen';
 import { ChangeMpinScreen } from './src/screens/ChangeMpinScreen';
+import { FeedbackScreen } from './src/screens/FeedbackScreen';
 import { VaultSettingsScreen } from './src/screens/VaultSettingsScreen';
 import { AccountConfirmationScreen } from './src/screens/AccountConfirmationScreen';
 import { InputNumberScreen } from './src/screens/InputNumberScreen';
@@ -84,6 +85,7 @@ function RootNavigator() {
         <Stack.Screen name="VaultSettings" component={VaultSettingsScreen} />
         <Stack.Screen name="ChangeMpin" component={ChangeMpinScreen} />
         <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} />
         <Stack.Screen name="TopUp" component={TopUpScreen} />
         <Stack.Screen name="TransferOnline" component={TransferToOnlineScreen} />
         <Stack.Screen name="TransferOffline" component={TransferToOfflineScreen} />

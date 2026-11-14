@@ -14,7 +14,17 @@ import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ProfileIcon } from '../components/ui/navIcons';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { ChevronRightIcon, CopyIcon, GearIcon, LockIcon, LogoutIcon, ReceiptIcon, VaultIcon, WalletIcon } from '../components/ui/smallIcons';
+import {
+  ChevronRightIcon,
+  CopyIcon,
+  GearIcon,
+  InfoIcon,
+  LockIcon,
+  LogoutIcon,
+  ReceiptIcon,
+  VaultIcon,
+  WalletIcon,
+} from '../components/ui/smallIcons';
 import { fullName, useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
@@ -184,6 +194,12 @@ export function ProfileScreen() {
               label="Change MPIN"
               trailing={<ChevronRightIcon />}
               onPress={() => rootNavigation()?.navigate('ChangeMpin')}
+            />
+            <MenuRow
+              icon={<View style={styles.glyph}><InfoIcon color={colors.textMuted} /></View>}
+              label="Help & Feedback"
+              trailing={<ChevronRightIcon />}
+              onPress={() => rootNavigation()?.navigate('Feedback')}
             />
             <MenuRow
               icon={<View style={styles.glyph}><ReceiptIcon color={colors.textMuted} /></View>}
