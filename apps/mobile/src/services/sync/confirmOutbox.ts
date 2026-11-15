@@ -76,10 +76,9 @@ export async function drainConfirms(publicKey: string, signal?: AbortSignal): Pr
         finishRow(row, 'failed', 'Unreadable queue entry');
         continue;
       }
-      if (now - row.createdAt > MAX_AGE_MS) {
-        finishRow(row, 'failed', 'Expired');
-        continue;
-      }
+      // Age alone never drops a confirm: a phone back after weeks offline still sends it (the money has moved, and
+      // History only lists it once the backend hears). A repeat is a no-op on the server.
+      const tooOld = now - row.createdAt > MAX_AGE_MS;
 
       posts += 1;
       let error: unknown | null = null;
@@ -98,8 +97,11 @@ export async function drainConfirms(publicKey: string, signal?: AbortSignal): Pr
       else if (outcome === 'rejected') {
         finishRow(row, 'failed', reason);
         reportError(error, { step: kind, hash: payload.txHash });
-      } else if (outcome === 'indexing') retryIndexing(row, reason);
-      else {
+      } else if (outcome === 'indexing') {
+        // The server answered but still cannot find the transaction, weeks on: stop trying.
+        if (tooOld) finishRow(row, 'failed', 'Expired');
+        else retryIndexing(row, reason);
+      } else {
         retryRow(row, reason, BASE_BACKOFF_MS, MAX_BACKOFF_MS);
         break;
       }

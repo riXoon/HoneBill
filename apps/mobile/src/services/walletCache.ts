@@ -1,4 +1,4 @@
-import { and, asc, eq, gte } from 'drizzle-orm';
+import { and, asc, eq, gte, ne } from 'drizzle-orm';
 import Storage from 'expo-sqlite/kv-store';
 
 import { getDb, type Database } from '../db/client';
@@ -30,8 +30,9 @@ type Origin = WalletTransactionRow['origin'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /**
- * A payment still pending after this is shown as failed with the reason (the phone stops trying to settle it then too):
- * the text never went out, or nothing settled it. It is never dropped without a word.
+ * A payment the server still does not list after this is shown as unconfirmed with the reason, but only once the phone
+ * is online and has just read the server's history: offline its money stays held, however long that lasts. It is
+ * never dropped without a word.
  */
 const PENDING_MAX_AGE_MS = 14 * DAY_MS;
 /** A failed entry stays this long, so the person sees what happened even if they open the app weeks later. */
@@ -41,7 +42,8 @@ export { EXPIRED_REASON };
 
 /**
  * Ages pending entries: old pending ones become failed with the reason (`expired` counts them, so they can be
- * announced), and failed ones go after `FAILED_KEEP_MS`. Needs no network, so it runs while offline too.
+ * announced), and failed ones go after `FAILED_KEEP_MS`. The caller runs it only right after a successful history
+ * read (see `WalletDataContext`), so a long time offline never releases money that may already have been paid.
  */
 export function agePending(items: PendingOffline[], now: number): { items: PendingOffline[]; expired: number; changed: boolean } {
   let expired = 0;
@@ -355,7 +357,10 @@ export async function saveMoves(publicKey: string, moves: Transaction[]): Promis
   }
 }
 
-/** Removes what this phone kept for a wallet (sign-out), so the next person to use the phone cannot read it. */
+/**
+ * Removes what this phone kept for a wallet when another account signs in here, so that person cannot read it. Not
+ * called on lock or sign-out: the same account coming back offline needs its saved balance and history.
+ */
 export async function clearWalletCache(publicKey: string): Promise<void> {
   try {
     await ready(publicKey);
@@ -375,6 +380,22 @@ export async function clearWalletCache(publicKey: string): Promise<void> {
     Storage.removeItem(keys.moves),
     Storage.removeItem(outcomesKey(publicKey)),
   ]).catch(() => {});
+}
+
+/**
+ * Removes what this phone kept for every wallet except `publicKey` (another account signed in here). Runs on each
+ * sign-in, so it also covers an account switch across an app restart. Queued vouchers are not touched.
+ */
+export async function clearOtherWalletCaches(publicKey: string): Promise<void> {
+  try {
+    const db = getDb();
+    db.transaction((tx) => {
+      tx.delete(walletTransactions).where(ne(walletTransactions.publicKey, publicKey)).run();
+      tx.delete(walletState).where(ne(walletState.publicKey, publicKey)).run();
+    });
+  } catch {
+    // Left for the next sign-in; it is never shown to another account (every read is by wallet address).
+  }
 }
 
 /** Voucher nonces are base64 of 32 bytes; the server may or may not keep the padding. */

@@ -23,6 +23,8 @@ import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { sendOtp } from '../services/api/otp';
 import { lookupUserByPhone } from '../services/api/users';
 import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
+import { getConnectivity } from '../services/connectivity';
+import { checkMpinOffline, forgetMpin, rememberMpin, type OfflineMpinResult } from '../services/offlineMpin';
 import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { colors, fonts, radius } from '../theme';
 import { afterNextPaint } from '../utils/async';
@@ -55,16 +57,37 @@ async function holdsWalletFor(publicKey: string): Promise<boolean> {
   }
 }
 
+/** The server could not be reached (no signal, or the request timed out), as opposed to it answering "no". */
+function isNoConnection(error: unknown): boolean {
+  return error instanceof ApiError && (error.kind === 'network' || error.kind === 'timeout');
+}
+
+function minutesText(seconds: number): string {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+function offlinePinMessage(result: Exclude<OfflineMpinResult, { ok: true }>, canUseFingerprint: boolean): string {
+  switch (result.reason) {
+    case 'wrong':
+      return `Incorrect MPIN. ${result.attemptsRemaining} ${result.attemptsRemaining === 1 ? 'try' : 'tries'} left.`;
+    case 'locked':
+      return `Too many incorrect tries. Try again in ${minutesText(result.retryAfterSeconds)}.`;
+    // Nothing saved yet: the MPIN works offline only after the server has accepted it once on this phone.
+    case 'unavailable':
+      return canUseFingerprint
+        ? "You're offline. To use your MPIN offline, sign in with it once while online. For now, use your fingerprint."
+        : "You're offline. To use your MPIN offline, sign in with it once while online.";
+  }
+}
+
 function pinErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401 && error.attemptsRemaining !== undefined) {
       const left = error.attemptsRemaining;
       return `Incorrect MPIN. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
     }
-    if (error.status === 423) {
-      const minutes = Math.max(1, Math.ceil((error.retryAfter ?? 900) / 60));
-      return `Too many incorrect tries. Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.`;
-    }
+    if (error.status === 423) return `Too many incorrect tries. Try again in ${minutesText(error.retryAfter ?? 900)}.`;
     if (error.status === 404) return 'No MPIN is set for this number. Tap the number to use another.';
   }
   return errorMessage(error);
@@ -127,12 +150,38 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
   /** Proves the number by OTP, then the recovery-phrase screen puts the wallet on this phone. */
   const startRecovery = useCallback(
     async (recoverPhone: string, signal: AbortSignal) => {
-      await clearStoredAccount();
+      await Promise.all([clearStoredAccount(), forgetMpin()]);
       setStored(null);
       await sendOtp(recoverPhone, signal);
       navigation.navigate('Otp', { phone: recoverPhone, purpose: 'recover' });
     },
     [navigation],
+  );
+
+  /**
+   * No connection: the MPIN is checked against the hash saved at the last online sign-in, and the saved profile is
+   * opened, exactly as the fingerprint does. Returns the message to show when it cannot sign in.
+   */
+  const signInOffline = useCallback(
+    async (signInPhone: string, value: string): Promise<string | null> => {
+      const canUseFingerprint = biometricSupported && stored !== null && stored.phone === signInPhone;
+      const result = await checkMpinOffline(signInPhone, value);
+      if (!result.ok) return offlinePinMessage(result, canUseFingerprint);
+      // Read again rather than trusting screen state: the profile must be the one the MPIN hash was saved for.
+      const profile = await getStoredAccount();
+      if (!profile || profile.phone !== signInPhone || profile.stellarPublicKey !== result.publicKey) {
+        return offlinePinMessage({ ok: false, reason: 'unavailable' }, canUseFingerprint);
+      }
+      setSignInStep('Checking your wallet…');
+      // Restoring a missing wallet needs an SMS code, so it waits for a connection.
+      if (!(await holdsWalletFor(profile.stellarPublicKey))) {
+        return "This phone doesn't have your wallet yet. Connect to the internet to restore it.";
+      }
+      await login(profile);
+      void enterHive();
+      return null;
+    },
+    [biometricSupported, stored, login, enterHive],
   );
 
   const submitPin = useCallback(
@@ -143,11 +192,30 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
       setSignInStep('Checking your MPIN…');
       setBusy(true);
       setError(null);
+      const offline = async () => {
+        const message = await signInOffline(phone, value);
+        if (message) {
+          setPin('');
+          setError(message);
+        }
+      };
       try {
-        await verifyPin(phone, value, controller.signal);
-        setSignInStep('Opening your account…');
-        // The PIN route returns no profile, so fetch the account it unlocked.
-        const account = await lookupUserByPhone(phone, controller.signal);
+        if (!getConnectivity().online) {
+          await offline();
+          return;
+        }
+        let account: Awaited<ReturnType<typeof lookupUserByPhone>>;
+        try {
+          await verifyPin(phone, value, controller.signal);
+          setSignInStep('Opening your account…');
+          // The PIN route returns no profile, so fetch the account it unlocked.
+          account = await lookupUserByPhone(phone, controller.signal);
+        } catch (e) {
+          // The phone thought it was online but the server could not be reached (weak signal, captive Wi-Fi).
+          if (!isNoConnection(e)) throw e;
+          await offline();
+          return;
+        }
         if (!account) throw new ApiError('http', 404, 'No account found for this number.');
         // The MPIN proves the account, not that this phone holds its wallet (a new device, or a re-created account).
         // Without the key nothing can be signed, so restore it from the recovery phrase before opening Home.
@@ -163,6 +231,8 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
           lastName: account.lastName,
           phone,
         });
+        // Saved for the next sign-in with no connection. Sliced, so it does not hold up the entrance animation.
+        void rememberMpin(phone, account.stellarPublicKey, value);
         void enterHive();
       } catch (e) {
         if (isAborted(e)) return;
@@ -172,7 +242,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
         setBusy(false);
       }
     },
-    [login, phone, enterHive, startRecovery],
+    [login, phone, enterHive, startRecovery, signInOffline],
   );
 
   useEffect(() => {

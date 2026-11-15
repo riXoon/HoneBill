@@ -22,7 +22,10 @@ const KIND = 'voucher';
 const MAX_POSTS_PER_DRAIN = 5;
 const BASE_BACKOFF_MS = 30_000;
 const MAX_BACKOFF_MS = 60 * 60_000;
-/** Matches how long History shows a pending payment: after this, the voucher is not tried again. */
+/**
+ * Matches how long History shows a pending payment. Past this, a voucher the server answers about but still cannot
+ * settle is given up; it is always posted at least once first, however old.
+ */
 const MAX_AGE_MS = 14 * 24 * 60 * 60_000;
 
 type VoucherPayload = { voucher: string; nonce: string };
@@ -93,11 +96,9 @@ export async function drainVouchers(publicKey: string, signal: AbortSignal): Pro
       finish(row, 'failed', 'Unreadable queue entry');
       continue;
     }
-    if (now - row.createdAt > MAX_AGE_MS) {
-      finish(row, 'failed', 'Expired');
-      givenUp.push({ nonce: payload.nonce, reason: EXPIRED_REASON });
-      continue;
-    }
+    // Age alone never drops a voucher: a phone back after weeks offline still posts it, since the server may never
+    // have heard of it (the text did not go out). Posting is always safe: the contract settles a nonce once.
+    const tooOld = now - row.createdAt > MAX_AGE_MS;
 
     posts += 1;
     let outcome: Outcome;
@@ -116,8 +117,14 @@ export async function drainVouchers(publicKey: string, signal: AbortSignal): Pro
     else if (outcome === 'rejected') {
       finish(row, 'failed', reason);
       givenUp.push({ nonce: payload.nonce, reason: rejectionReason(reason) });
-    } else if (outcome === 'later') retryLater(row, reason);
-    else {
+    } else if (outcome === 'later') {
+      // The server answered but still cannot settle it, weeks on: stop trying and say so.
+      if (tooOld) {
+        finish(row, 'failed', 'Expired');
+        givenUp.push({ nonce: payload.nonce, reason: EXPIRED_REASON });
+      } else retryLater(row, reason);
+    } else {
+      // No answer (network or server trouble) is not the voucher's fault, however old it is: try again later.
       retryLater(row, reason);
       break;
     }
