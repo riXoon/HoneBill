@@ -14,6 +14,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import { messages } from '../../i18n';
 
 // Honi poses from the designer's asset pack (`HONI MASCOT PNG` / `HONI MASCOT ANIMATED`), mirroring
 // the Figma `Emotes` component set (653:706). `width` is the default render size in dp (it includes
@@ -127,7 +128,7 @@ export function Mascot({ mood, width, scale: scaleOverride, animated = true, sty
     <Animated.View
       pointerEvents="none"
       accessible={useLottie}
-      accessibilityLabel={useLottie ? 'Honi, the HoneBill mascot' : undefined}
+      accessibilityLabel={useLottie ? messages().common.mascot : undefined}
       style={[{ width: w, height: w * aspect }, style, animated && !useLottie && animatedStyle]}
     >
       {useLottie ? (
@@ -150,7 +151,7 @@ export function Mascot({ mood, width, scale: scaleOverride, animated = true, sty
           source={source}
           style={{ width: '100%', height: '100%' }}
           contentFit={fit}
-          accessibilityLabel="Honi, the HoneBill mascot"
+          accessibilityLabel={messages().common.mascot}
         />
       )}
     </Animated.View>

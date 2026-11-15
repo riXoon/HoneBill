@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { APP_VERSION } from '../config/appVersion';
 import { checkForUpdate } from '../services/appUpdates';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 /**
  * Shown instead of the whole app when this version is older than the backend's minimum (APP_MIN_SUPPORTED_VERSION).
@@ -15,12 +16,13 @@ import { colors, fonts } from '../theme';
  * touched; installing the new APK over this one keeps it.
  */
 export function UpdateRequiredScreen({ minimumVersion, downloadUrl }: { minimumVersion: string; downloadUrl: string | null }) {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const [checking, setChecking] = useState(false);
 
   const download = () => {
     if (!downloadUrl) return;
-    void Linking.openURL(downloadUrl).catch(() => Alert.alert('Could not open the download', downloadUrl));
+    void Linking.openURL(downloadUrl).catch(() => Alert.alert(messages().common.openDownloadFailed, downloadUrl));
   };
 
   // After the backend lowers its minimum (or a mistake is fixed), this lets the app back in without a restart.
@@ -40,23 +42,22 @@ export function UpdateRequiredScreen({ minimumVersion, downloadUrl }: { minimumV
         <Mascot mood="alert" width={220} />
         <View style={styles.text}>
           <Text style={styles.title} accessibilityRole="header">
-            Update HoneBill to continue
+            {t.update.title}
           </Text>
           <Text style={styles.body}>
-            This version ({APP_VERSION}) is no longer supported. Install version {minimumVersion} or newer to keep using
-            your wallet.
+            {t.update.unsupported(APP_VERSION, minimumVersion)}
           </Text>
           <Text style={styles.body}>
-            Your money is safe. Install the new version over this one and your wallet stays on this phone.
+            {t.update.safe}
           </Text>
           {downloadUrl ? null : (
-            <Text style={styles.body}>Ask HoneBill support for the download link of the latest version.</Text>
+            <Text style={styles.body}>{t.update.askSupport}</Text>
           )}
         </View>
         <View style={styles.actions}>
-          {downloadUrl ? <Button label="Download the update" size="large" onPress={download} /> : null}
+          {downloadUrl ? <Button label={t.update.download} size="large" onPress={download} /> : null}
           <Button
-            label={checking ? 'Checking…' : 'Check again'}
+            label={checking ? t.common.checking : t.update.checkAgain}
             variant="outline"
             onPress={() => void checkAgain()}
             disabled={checking}

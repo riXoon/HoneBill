@@ -19,15 +19,17 @@ import { enqueueFeedback, isRetryable } from '../services/sync/feedbackOutbox';
 import { colors, fonts, radius } from '../theme';
 import { displayRef, type Transaction } from '../types/transaction';
 import { formatAmount, formatReceiptDate } from '../utils/format';
+import { messages, useT } from '../i18n';
 
 const MESSAGE_MIN = 5;
 const MESSAGE_MAX = 1000;
 
-const CATEGORIES: { key: FeedbackCategory; label: string; placeholder: string }[] = [
-  { key: 'payment', label: 'Payment problem', placeholder: 'e.g. I sent ₱500 by SMS yesterday and it has not arrived.' },
-  { key: 'account', label: 'Account or sign-in', placeholder: 'e.g. My MPIN is not accepted after I changed it.' },
-  { key: 'bug', label: "Something isn't working", placeholder: 'Tell us what you were doing and what happened.' },
-  { key: 'suggestion', label: 'Suggestion', placeholder: 'What would make HoneBill better for you?' },
+/** The categories in order; their labels and examples are in the reader's language (`feedback.categories`). */
+const CATEGORIES: { key: FeedbackCategory }[] = [
+  { key: 'payment' },
+  { key: 'account' },
+  { key: 'bug' },
+  { key: 'suggestion' },
 ];
 
 /** The transaction details sent with a payment report, so the team can trace it without asking. */
@@ -52,6 +54,7 @@ type Result = 'sent' | 'queued';
  * phone's queue and goes out on the next sync.
  */
 export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Feedback'>) {
+  const t = useT();
   const { activeAccount } = useAuth();
   const { transactions } = useWalletData();
   const connected = useIsOnline();
@@ -70,13 +73,13 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
 
-  const placeholder = CATEGORIES.find((c) => c.key === category)?.placeholder;
+  const placeholder = CATEGORIES.some((c) => c.key === category) ? t.feedback.categories[category as FeedbackCategory].placeholder : undefined;
 
   const send = async () => {
     if (busy) return;
     const text = message.trim();
     if (text.length < MESSAGE_MIN) {
-      setError('Please tell us a little more.');
+      setError(messages().feedback.moreDetail);
       return;
     }
     const report: FeedbackReport = {
@@ -106,7 +109,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
     setError(null);
     if (!connected) {
       if (queue()) setResult('queued');
-      else setError('Your report could not be saved. Please try again when you are online.');
+      else setError(messages().feedback.saveFailed);
       return;
     }
 
@@ -130,15 +133,15 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
     return (
       <SettingsPage title="Help & Feedback" onBack={navigation.goBack}>
         {result === 'sent' ? (
-          <Notice tone="info" title="Thank you! Your report was sent.">
-            Our team reads every report. We can't reply in the app yet, but your report helps us fix problems faster.
+          <Notice tone="info" title={t.feedback.sentTitle}>
+            {t.feedback.sentBody}
           </Notice>
         ) : (
-          <Notice tone="warning" title="Saved. We'll send it when you're back online.">
-            Your report is kept on this phone and goes out automatically the next time you have a connection.
+          <Notice tone="warning" title={t.feedback.queuedTitle}>
+            {t.feedback.queuedBody}
           </Notice>
         )}
-        <Button label="Done" size="large" onPress={navigation.goBack} />
+        <Button label={t.common.done} size="large" onPress={navigation.goBack} />
       </SettingsPage>
     );
   }
@@ -146,12 +149,12 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
   return (
     <SettingsPage
       title="Help & Feedback"
-      subtitle="Tell us about a problem or an idea. We read every report."
+      subtitle={t.feedback.subtitle}
       onBack={navigation.goBack}
     >
       {tx ? (
-        <View style={styles.txCard} accessibilityLabel="The payment this report is about">
-          <Text style={styles.sectionLabel}>About this payment</Text>
+        <View style={styles.txCard} accessibilityLabel={t.feedback.txA11y}>
+          <Text style={styles.sectionLabel}>{t.feedback.aboutPayment}</Text>
           <Text style={styles.txTitle}>{tx.description}</Text>
           <Text style={styles.txLine}>
             {formatAmount(tx.amount, tx.assetCode)} · Ref {displayRef(tx)} · {tx.status}
@@ -161,7 +164,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>What is it about?</Text>
+        <Text style={styles.sectionLabel}>{t.feedback.whatAbout}</Text>
         <View style={styles.chips} accessibilityRole="radiogroup">
           {CATEGORIES.map((c) => {
             const selected = c.key === category;
@@ -173,7 +176,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
                 onPress={() => setCategory(c.key)}
                 style={[styles.chip, selected ? styles.chipActive : styles.chipIdle]}
               >
-                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{c.label}</Text>
+                <Text style={[styles.chipText, selected && styles.chipTextActive]}>{t.feedback.categories[c.key].label}</Text>
               </Pressable>
             );
           })}
@@ -182,7 +185,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
 
       <View style={styles.section}>
         <View style={styles.messageHeader}>
-          <Text style={styles.sectionLabel}>Your message</Text>
+          <Text style={styles.sectionLabel}>{t.feedback.yourMessage}</Text>
           <Text style={styles.counter}>
             {message.length}/{MESSAGE_MAX}
           </Text>
@@ -200,7 +203,7 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
           textAlignVertical="top"
           onFocus={focus.onFocus}
           onBlur={focus.onBlur}
-          accessibilityLabel="Your message"
+          accessibilityLabel={t.feedback.yourMessage}
           style={[styles.message, fieldStateStyle(focus.focused, message.length > 0)]}
         />
         {error ? (
@@ -211,13 +214,12 @@ export function FeedbackScreen({ navigation, route }: NativeStackScreenProps<Roo
       </View>
 
       {!connected ? (
-        <Notice tone="info">You're offline. Your report will be saved and sent when you're back online.</Notice>
+        <Notice tone="info">{t.feedback.offline}</Notice>
       ) : null}
       <Text style={styles.privacy}>
-        We include your Short ID, the app version and your phone type so we can look into it. Never share your MPIN or
-        recovery phrase, not even with us.
+        {t.feedback.privacy}
       </Text>
-      <Button label={busy ? 'Sending…' : 'Send report'} size="large" onPress={() => void send()} disabled={busy} />
+      <Button label={busy ? t.feedback.sending : t.feedback.send} size="large" onPress={() => void send()} disabled={busy} />
     </SettingsPage>
   );
 }

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { useWalletData } from '../../context/WalletDataContext';
+import { useT } from '../../i18n';
 import { colors, fonts } from '../../theme';
 import { formatPeso, formatWhole } from '../../utils/format';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
@@ -40,6 +41,7 @@ type TransferFormProps = {
 export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = false, dialog }: TransferFormProps) {
   const from: WalletKind = to === 'online' ? 'offline' : 'online';
   const [amountText, setAmountText] = useState('');
+  const t = useT();
 
   const { balances, pendingOffline } = useWalletData();
 
@@ -47,7 +49,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
   // Moving money out of the vault must leave what pending vouchers will take, or those vouchers fail when they settle.
   const available = balances ? (from === 'offline' ? Math.max(0, balances.offline - pendingOffline) : balances[from]) : null;
   // Without balances read from the server there is nothing to check an amount against.
-  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, available);
+  const problem = available === null ? t.amount.unavailable : amountProblem(amount, available);
   const valid = problem === null;
   // The bar shows how much of the user's combined funds sit in the receiving wallet afterwards.
   const destinationAfter = balances ? balances[to] + (valid ? amount : 0) : null;
@@ -60,20 +62,20 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
       onBack={onBack}
       processing={
         busy
-          ? { title: `Moving ${formatPeso(amount)} to your ${to === 'offline' ? 'offline vault' : 'online wallet'}` }
+          ? { title: (to === 'offline' ? t.transfer.movingToOffline : t.transfer.movingToOnline)(formatPeso(amount)) }
           : null
       }
       footer={
         <View style={styles.footer}>
           <Mascot mood={mood} width={264} />
           <SwipeToEnter
-            label={busy ? 'TRANSFERRING…' : 'SWIPE TO  PROCEED'}
+            label={busy ? t.transfer.transferring : t.transfer.swipe}
             accessibilityLabel={
               busy
-                ? `Transferring ${formatPeso(amount)}, please wait`
+                ? t.transfer.transferringA11y(formatPeso(amount))
                 : valid
-                  ? `Swipe to transfer ${formatPeso(amount)}`
-                  : 'Swipe to proceed, enter a valid amount first'
+                  ? t.transfer.swipeA11y(formatPeso(amount))
+                  : t.transfer.swipeInvalidA11y
             }
             disabled={!valid || busy}
             busy={busy}
@@ -93,7 +95,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
         </View>
 
         <BalanceBar
-          caption={`${NAMES[to]} Balance after: ${destinationAfter === null ? '--' : `₱${formatWhole(destinationAfter)}`}`}
+          caption={t.transfer.balanceAfter(NAMES[to], destinationAfter === null ? '--' : `₱${formatWhole(destinationAfter)}`)}
           ratio={destinationAfter !== null && total > 0 ? destinationAfter / total : 0}
         />
 
@@ -101,14 +103,14 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
 
         <View>
           <Text style={styles.hint}>
-            Available Balance {NAMES[from]}: PHP {available === null ? '--' : formatWhole(available)}
+            {t.transfer.available(NAMES[from], available === null ? '--' : formatWhole(available))}
           </Text>
         </View>
       </GlassCard>
 
       <View style={styles.noteRow}>
         <InfoIcon color={colors.textMuted} />
-        <Text style={styles.noteText}>You are transferring funds from your {NAMES[from].toLowerCase()} wallet</Text>
+        <Text style={styles.noteText}>{t.transfer.fromNote(NAMES[from].toLowerCase())}</Text>
       </View>
 
       <ResultDialog {...dialog} />

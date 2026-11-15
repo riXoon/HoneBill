@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import type { ResultDialogProps } from '../components/ui/ResultDialog';
 import { useAuth } from '../context/AuthContext';
+import { messages } from '../i18n';
 import { useWalletData } from '../context/WalletDataContext';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
@@ -41,11 +42,12 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         addMoves(buildMoveEntries(to, amount, hash));
         void refresh({ force: true });
         successHaptic();
+        const t = messages();
         setOutcome({
           mood: 'success',
-          title: 'Transfer complete',
-          message: `${formatPeso(amount)} is now in your ${LABEL[to]} wallet.`,
-          buttonLabel: 'Done',
+          title: t.transfer.successTitle,
+          message: t.transfer.successBody(formatPeso(amount), LABEL[to]),
+          buttonLabel: t.common.done,
           done: true,
         });
       } catch (error) {
@@ -53,7 +55,8 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         if (error instanceof PendingTransactionError) void refresh({ force: true });
         if (!(error instanceof UserFacingError)) reportError(error, { step: `transferTo${to}` });
         errorHaptic();
-        setOutcome({ mood: 'fail', title: 'Transfer not completed', message: errorMessage(error), buttonLabel: 'Try again', done: false });
+        const t = messages();
+        setOutcome({ mood: 'fail', title: t.transfer.failTitle, message: errorMessage(error), buttonLabel: t.common.tryAgain, done: false });
       } finally {
         running.current = false;
         setBusy(false);

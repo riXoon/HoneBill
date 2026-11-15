@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../../i18n';
 import { colors, fonts } from '../../theme';
 import { Mascot } from '../mascot/Mascot';
 import { Button } from './Button';
@@ -15,6 +16,7 @@ type RecoveryPhraseDialogProps = {
 
 /** Frosted card on a dimmed backdrop, with Honi's alert pose, telling the user to protect the recovery phrase. */
 export function RecoveryPhraseDialog({ visible, onDismiss }: RecoveryPhraseDialogProps) {
+  const t = useT();
   const [left, setLeft] = useState(READ_SECONDS);
 
   // Counts down each time the dialog opens; the interval is cleared when it closes or unmounts.
@@ -34,18 +36,13 @@ export function RecoveryPhraseDialog({ visible, onDismiss }: RecoveryPhraseDialo
           <Mascot mood="alert" width={150} />
           <View style={styles.message}>
             <Text style={styles.heading} accessibilityRole="header">
-              Protect your recovery phrase
+              {t.recovery.dialogTitle}
             </Text>
-            <Text style={styles.copy}>
-              These 12 words are the only way to recover your account when you log in on another device or lose this phone.
-            </Text>
-            <Text style={styles.copy}>
-              Write them down and keep them somewhere safe. Never share them with anyone: HoneBill cannot recover them for
-              you. You will be asked to confirm them next.
-            </Text>
+            <Text style={styles.copy}>{t.recovery.dialogWhy}</Text>
+            <Text style={styles.copy}>{t.recovery.dialogKeep}</Text>
           </View>
           <Button
-            label={left > 0 ? `I understand (${left})` : 'I understand'}
+            label={t.recovery.understand(left)}
             size="large"
             onPress={onDismiss}
             disabled={left > 0}

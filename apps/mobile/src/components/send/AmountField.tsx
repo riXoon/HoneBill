@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TextInput } from 'react-native';
 
+import { messages } from '../../i18n';
 import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { useFieldFocus } from '../ui/fieldState';
@@ -29,8 +30,8 @@ export function parseAmount(text: string): number {
  * out when nothing caps the amount (a payment request). There is no transfer limit: the backend sets none.
  */
 export function amountProblem(amount: number, available?: number): string | null {
-  if (amount <= 0) return 'Enter Amount';
-  if (available !== undefined && amount > available) return 'Not enough balance';
+  if (amount <= 0) return messages().amount.enter;
+  if (available !== undefined && amount > available) return messages().amount.notEnough;
   return null;
 }
 
@@ -69,7 +70,7 @@ export function AmountField({ value, onChangeText, currency = 'PHP' }: AmountFie
         placeholder="0.00"
         placeholderTextColor="rgba(34, 32, 33, 0.2)"
         keyboardType="decimal-pad"
-        accessibilityLabel={`Amount in ${currency === 'PHP' ? 'pesos' : currency}`}
+        accessibilityLabel={currency === 'PHP' ? messages().amount.inPesos : `Amount in ${currency}`}
         style={[styles.input, { width: fieldWidth(value) }]}
       />
     </OutlinedField>

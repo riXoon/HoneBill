@@ -1,6 +1,7 @@
 import type { OutboxRow } from '../../db/schema';
 import { ApiError } from '../api/client';
 import { settleVoucher, type SettlementResult } from '../api/settlements';
+import { en } from '../../i18n/en';
 import { EXPIRED_REASON, normalizeNonce } from '../walletCache';
 import { dueRows, enqueue, finishRow, retryRow } from './outboxStore';
 
@@ -67,14 +68,18 @@ export function classify(result: { ok: SettlementResult } | { error: unknown }):
 /** A voucher this phone will not try again, with the reason to show on its pending entry. */
 export type VoucherGivenUp = { nonce: string; reason: string };
 
-/** The server's rejection in plain words. Never shows internals; the screens add "No money was taken." themselves. */
+/**
+ * The server's rejection in plain words. Never shows internals; the screens add "No money was taken." themselves.
+ * Saved on the payment in English, whatever the app's language, and translated when shown (`failureText`).
+ */
 export function rejectionReason(message: string): string {
-  if (/recipient.*not found/i.test(message)) return 'No account has this ID.';
-  if (/signature/i.test(message)) return 'The payment could not be verified.';
-  if (/offline device key/i.test(message)) return 'This phone was not set up for offline payments.';
-  if (/token/i.test(message)) return 'This currency is not accepted right now.';
-  if (/sender account/i.test(message)) return 'Your account was not found.';
-  return 'The payment was not accepted.';
+  const r = en.tx.reasons;
+  if (/recipient.*not found/i.test(message)) return r.noAccount;
+  if (/signature/i.test(message)) return r.notVerified;
+  if (/offline device key/i.test(message)) return r.notSetUp;
+  if (/token/i.test(message)) return r.currency;
+  if (/sender account/i.test(message)) return r.senderMissing;
+  return r.notAccepted;
 }
 
 /**

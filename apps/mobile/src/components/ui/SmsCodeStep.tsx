@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatPhoneDisplay } from '../../services/accountPhone';
 import { ApiError, errorMessage, isAborted } from '../../services/api/client';
 import { sendOtp, verifyOtp } from '../../services/api/otp';
+import { messages, useT } from '../../i18n';
 import { colors, fonts, radius } from '../../theme';
 import { Button } from './Button';
 import { CodeBoxes } from './CodeBoxes';
@@ -15,8 +16,7 @@ const RESEND_SECONDS = 30;
 
 function verifyErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 401 && error.attemptsRemaining !== undefined) {
-    const left = error.attemptsRemaining;
-    return `Incorrect code. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
+    return messages().smsCode.wrongCode(error.attemptsRemaining);
   }
   return errorMessage(error);
 }
@@ -37,6 +37,7 @@ type SmsCodeStepProps = {
  * screen, sized to sit inside a settings page.
  */
 export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
+  const t = useT();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(true);
@@ -81,7 +82,7 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
   const verify = async (value: string) => {
     if (busy || done.current) return;
     if (value.length !== CODE_LENGTH) {
-      setError(`Enter the ${CODE_LENGTH}-digit code.`);
+      setError(messages().smsCode.enterCode(CODE_LENGTH));
       return;
     }
     const controller = new AbortController();
@@ -112,16 +113,16 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
   return (
     <View style={styles.block}>
       <Text style={styles.subtitle}>
-        {sending ? 'Sending a code to ' : 'We texted a 6-digit code to '}
+        {sending ? t.smsCode.sendingTo : t.smsCode.sentTo}
         <Text style={styles.phone}>{formatPhoneDisplay(phone)}</Text>.
       </Text>
-      <CodeBoxes length={CODE_LENGTH} value={code} onChange={onChange} autoFocus accessibilityLabel="SMS verification code" />
+      <CodeBoxes length={CODE_LENGTH} value={code} onChange={onChange} autoFocus accessibilityLabel={t.smsCode.codeA11y} />
       <Text
         style={[styles.status, error ? styles.error : null]}
         accessibilityRole={error ? 'alert' : undefined}
         accessibilityLiveRegion="polite"
       >
-        {busy ? 'Checking…' : (error ?? ' ')}
+        {busy ? t.smsCode.checking : (error ?? ' ')}
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -133,13 +134,14 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
       >
         {canResend ? (
           <Text style={styles.resendHint}>
-            Didn't get it? <Text style={styles.resendAction}>Resend</Text>
+            {t.smsCode.didntGetIt}
+            <Text style={styles.resendAction}>{t.smsCode.resend}</Text>
           </Text>
         ) : (
-          <Text style={styles.resendWaiting}>{sending ? 'Sending…' : `Resend code in ${cooldown}s`}</Text>
+          <Text style={styles.resendWaiting}>{sending ? t.smsCode.sending : t.smsCode.resendIn(cooldown)}</Text>
         )}
       </Pressable>
-      <Button label={busy ? 'Please wait…' : 'Verify'} size="large" onPress={() => void verify(code)} disabled={busy} />
+      <Button label={busy ? t.common.pleaseWait : t.smsCode.verify} size="large" onPress={() => void verify(code)} disabled={busy} />
     </View>
   );
 }

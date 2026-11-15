@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { reportError } from '../services/errorReporting';
 import { copySensitive } from '../services/secureClipboard';
 import { getDeviceRecoveryWords } from '../services/wallet/deviceWallet';
+import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 // Figma "Seed Phrase" (1131:4123): 12 words in a 3-column grid inside a card, then a security reminder.
@@ -28,6 +29,7 @@ function chunk(words: string[]): string[][] {
 }
 
 export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'RecoveryPhrase'>) {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const [phrase, setPhrase] = useState<Words>({ status: 'loading' });
   const [copied, setCopied] = useState(false);
@@ -66,7 +68,7 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
     try {
       await copySensitive(phrase.words.join(' '));
       setCopied(true);
-      AccessibilityInfo.announceForAccessibility('Recovery phrase copied. The clipboard clears in 60 seconds.');
+      AccessibilityInfo.announceForAccessibility(t.recovery.copiedAnnounce);
     } catch (e) {
       reportError(e, { step: 'copyRecoveryPhrase' });
     }
@@ -89,7 +91,7 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
       >
         <View style={styles.header}>
           <GradientTitle>Seed Phrase</GradientTitle>
-          <Text style={styles.subtitle}>Copy and save these 12 words somewhere secure.</Text>
+          <Text style={styles.subtitle}>{t.recovery.subtitle}</Text>
         </View>
 
         <View style={styles.card}>
@@ -102,14 +104,14 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={copied ? 'Copied' : 'Copy phrase'}
+              accessibilityLabel={copied ? t.recovery.copied : t.recovery.copyA11y}
               accessibilityState={{ disabled: !ready }}
               disabled={!ready}
               onPress={() => void copy()}
               style={({ pressed }) => [styles.copyPill, pressed && styles.pressed, !ready && styles.disabled]}
             >
               <CopyIcon color={colors.primary} size={10} />
-              <Text style={styles.copyLabel}>{copied ? 'Copied' : 'Copy'}</Text>
+              <Text style={styles.copyLabel}>{copied ? t.recovery.copied : t.recovery.copy}</Text>
             </Pressable>
           </View>
 
@@ -120,7 +122,7 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
                   {row.map((word, c) => {
                     const n = r * COLUMNS + c + 1;
                     return (
-                      <View key={n} style={styles.word} accessible accessibilityLabel={`Word ${n}, ${word}`}>
+                      <View key={n} style={styles.word} accessible accessibilityLabel={t.recovery.wordA11y(n, word)}>
                         <Text style={styles.wordText} numberOfLines={1} adjustsFontSizeToFit>
                           {n}. {word}
                         </Text>
@@ -131,14 +133,14 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
               ))}
             </View>
           ) : phrase.status === 'loading' ? (
-            <Text style={styles.status}>Loading your phrase…</Text>
+            <Text style={styles.status}>{t.recovery.loading}</Text>
           ) : (
             <View style={styles.errorBlock}>
               <Text style={styles.status} accessibilityRole="alert">
-                We could not read your recovery phrase from this device.
+                {t.recovery.readFailed}
               </Text>
               <Pressable accessibilityRole="button" onPress={load} hitSlop={8}>
-                <Text style={styles.retry}>Try again</Text>
+                <Text style={styles.retry}>{t.common.tryAgain}</Text>
               </Pressable>
             </View>
           )}
@@ -147,17 +149,14 @@ export function RecoveryPhraseScreen({ navigation }: NativeStackScreenProps<Root
         <View style={styles.reminder}>
           <View style={styles.reminderHeader}>
             <CheckTitleIcon color={colors.primary} size={24} />
-            <Text style={styles.reminderTitle}>Security Reminder</Text>
+            <Text style={styles.reminderTitle}>{t.recovery.reminderTitle}</Text>
           </View>
-          <Text style={styles.reminderText}>
-            Never share these words with anyone. Store them in a secure, offline location such as a safe or a secure
-            note-taking app.
-          </Text>
+          <Text style={styles.reminderText}>{t.recovery.reminderBody}</Text>
         </View>
 
         <View style={styles.spacer} />
 
-        <Button label="I've Saved It" size="large" onPress={next} disabled={!ready} />
+        <Button label={t.recovery.saved} size="large" onPress={next} disabled={!ready} />
       </ScrollView>
       <RecoveryPhraseDialog visible={showInfo} onDismiss={() => setShowInfo(false)} />
     </View>

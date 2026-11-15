@@ -19,6 +19,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { confirmHaptic } from '../../services/haptics';
 import { colors, fonts } from '../../theme';
+import { messages } from '../../i18n';
 
 type SwipeToEnterProps = {
   onComplete: () => void;
@@ -68,7 +69,7 @@ function BusyKnob() {
 export function SwipeToEnter({
   onComplete,
   label = 'SWIPE TO  ENTER',
-  accessibilityLabel = 'Swipe to enter',
+  accessibilityLabel = messages().common.swipeToEnter,
   disabled = false,
   busy = false,
 }: SwipeToEnterProps) {

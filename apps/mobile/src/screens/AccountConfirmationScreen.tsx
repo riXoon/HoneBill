@@ -17,6 +17,7 @@ import { SignupIncompleteError, completeSignup, fieldErrorText } from '../servic
 import { reportError } from '../services/errorReporting';
 import { clearSignupSession } from '../services/signupSession';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 // Figma: Account Confirmation (870:2950), 402x874.
 const combImage = require('../../assets/landing/comb.png');
@@ -25,6 +26,7 @@ const wordmarkImage = require('../../assets/brand/logo-wordmark.png');
 export function AccountConfirmationScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, 'AccountConfirmation'>) {
+  const t = useT();
   const { login } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,22 +69,22 @@ export function AccountConfirmationScreen({
     } catch (e) {
       if (isAborted(e)) return;
       if (e instanceof SignupIncompleteError) {
-        Alert.alert('Session expired', 'Please verify your number again to finish creating your account.', [
-          { text: 'OK', onPress: startOver },
+        Alert.alert(messages().common.sessionExpired, messages().onboarding.verifyAgainFinish, [
+          { text: messages().common.ok, onPress: startOver },
         ]);
       } else if (e instanceof ApiError && e.status === 401) {
         // The OTP proof expired (30 minutes) or does not match this number.
-        Alert.alert('Verification expired', 'Please verify your phone number again.', [{ text: 'OK', onPress: startOver }]);
+        Alert.alert(messages().onboarding.verificationExpired, messages().onboarding.verifyPhoneAgain, [{ text: messages().common.ok, onPress: startOver }]);
       } else if (e instanceof ApiError && e.status === 409) {
-        setError('This number already has an account. Go back and sign in.');
+        setError(messages().onboarding.hasAccount);
       } else if (e instanceof ApiError && e.status === 400) {
         // The server only says "Bad Request" for DTO failures, so point at the likely cause.
-        setError(fieldErrorText(e) ?? 'Some of your details were rejected. Please start over and check your name and email.');
+        setError(fieldErrorText(e) ?? messages().onboarding.detailsRejected);
       } else if (e instanceof ApiError) {
         setError(errorMessage(e));
       } else {
         reportError(e, { step: 'completeSignup' });
-        setError('We could not create your account. Please try again.');
+        setError(messages().onboarding.createFailed);
       }
     } finally {
       setBusy(false);
@@ -95,8 +97,8 @@ export function AccountConfirmationScreen({
 
       <View style={styles.content}>
         <Animated.View style={[styles.titleBlock, edgeStyle]}>
-          <GradientTitle size={32}>Vault Secured</GradientTitle>
-          <Text style={styles.subtitle}>Your device is now primed for offline zero data transactions.</Text>
+          <GradientTitle size={32}>{t.onboarding.securedTitle}</GradientTitle>
+          <Text style={styles.subtitle}>{t.onboarding.securedSubtitle}</Text>
         </Animated.View>
 
         {/* "mascot w bg": honeycomb, Honi, a faded mirrored copy and the wordmark, 400 dp tall. */}
@@ -115,7 +117,7 @@ export function AccountConfirmationScreen({
             </Text>
           ) : null}
           <Button
-            label={busy ? 'Creating your account…' : 'Enter HoneBill'}
+            label={busy ? t.onboarding.creatingAccount : t.onboarding.enter}
             size="large"
             onPress={() => void enter()}
             disabled={busy || entering}

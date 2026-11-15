@@ -11,9 +11,9 @@ import { TextField } from '../components/ui/TextField';
 import type { RootStackParamList } from '../navigation/types';
 import { getSignupSession, setSignupDetails } from '../services/signupSession';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 // Figma: User Details (870:3010), 402x874.
-const REQUIRED = 'Input is required';
 /** Same limits the server enforces, so a bad value is caught here and not after the MPIN step. */
 const NAME_MAX = 50;
 const EMAIL_MAX = 254;
@@ -22,6 +22,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Errors = { firstName?: string; lastName?: string; email?: string };
 
 export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'UserDetails'>) {
+  const t = useT();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,12 +33,12 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
     const last = lastName.trim();
     const mail = email.trim();
     const next: Errors = {};
-    if (!first) next.firstName = REQUIRED;
-    else if (first.length > NAME_MAX) next.firstName = `At most ${NAME_MAX} characters`;
-    if (!last) next.lastName = REQUIRED;
-    else if (last.length > NAME_MAX) next.lastName = `At most ${NAME_MAX} characters`;
-    if (!mail) next.email = REQUIRED;
-    else if (mail.length > EMAIL_MAX || !EMAIL_PATTERN.test(mail)) next.email = 'Enter a valid email address';
+    if (!first) next.firstName = messages().common.required;
+    else if (first.length > NAME_MAX) next.firstName = messages().onboarding.tooLong(NAME_MAX);
+    if (!last) next.lastName = messages().common.required;
+    else if (last.length > NAME_MAX) next.lastName = messages().onboarding.tooLong(NAME_MAX);
+    if (!mail) next.email = messages().common.required;
+    else if (mail.length > EMAIL_MAX || !EMAIL_PATTERN.test(mail)) next.email = messages().common.invalidEmail;
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -56,14 +57,14 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
 
       <AuthScroll style={styles.content}>
         <View style={styles.header}>
-          <GradientTitle>User Details</GradientTitle>
-          <Text style={styles.subtitle}>Enter details to complete registration</Text>
+          <GradientTitle>{t.onboarding.detailsTitle}</GradientTitle>
+          <Text style={styles.subtitle}>{t.onboarding.detailsSubtitle}</Text>
         </View>
 
         <View style={styles.fields}>
           <TextField
-            label="First name"
-            placeholder="e.g. Juan"
+            label={t.onboarding.firstName}
+            placeholder={t.onboarding.firstNameExample}
             value={firstName}
             onChangeText={setFirstName}
             error={errors.firstName}
@@ -71,8 +72,8 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
             textContentType="givenName"
           />
           <TextField
-            label="Last name"
-            placeholder="e.g. Dela Cruz"
+            label={t.onboarding.lastName}
+            placeholder={t.onboarding.lastNameExample}
             value={lastName}
             onChangeText={setLastName}
             error={errors.lastName}
@@ -93,7 +94,7 @@ export function UserDetailsScreen({ navigation }: NativeStackScreenProps<RootSta
         </View>
 
         <View style={styles.spacer} />
-        <Button label="Continue" size="large" onPress={submit} />
+        <Button label={t.common.continue} size="large" onPress={submit} />
       </AuthScroll>
       {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}
       <AuthChrome step={3} onBack={navigation.goBack} />

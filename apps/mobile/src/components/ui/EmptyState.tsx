@@ -3,9 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import { useLoadingMessage } from '../../hooks/useLoadingMessage';
 import { Mascot } from '../mascot/Mascot';
 import { SpeechBubble } from './SpeechBubble';
+import { useT } from '../../i18n';
 
 /** Honi says it and nudges the user to start: shown wherever transactions would be listed. */
-export const EMPTY_TRANSACTIONS_MESSAGE = 'Nothing to see here!\nMake your first transaction!';
 
 type EmptyStateProps = {
   message?: string;
@@ -15,11 +15,12 @@ type EmptyStateProps = {
 };
 
 /** Honi's idle animation (the same one the offline Home uses), with the message as his speech bubble above him. */
-export function EmptyState({ message = EMPTY_TRANSACTIONS_MESSAGE, isError = false, loading = false }: EmptyStateProps) {
+export function EmptyState({ message, isError = false, loading = false }: EmptyStateProps) {
+  const t = useT();
   const chatter = useLoadingMessage(loading);
   return (
     <View style={styles.wrap}>
-      <SpeechBubble message={loading ? chatter : message} isError={isError} />
+      <SpeechBubble message={loading ? chatter : (message ?? t.history.empty)} isError={isError} />
       {/* The Lottie canvas is larger than the box (soft glow), so the slot is sized to the picture, not the canvas. */}
       <View style={styles.honi} pointerEvents="none">
         <Mascot mood="idlePlain" width={347} />

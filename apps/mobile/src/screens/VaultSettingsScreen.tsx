@@ -24,6 +24,7 @@ import { copySensitive } from '../services/secureClipboard';
 import { getDeviceRecoveryWords } from '../services/wallet/deviceWallet';
 import { isValidStellarPublicKey } from '../services/wallet/stellarKeys';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 /** The phrase hides itself after this long, so it is never left on screen. */
 const REVEAL_MS = 60_000;
@@ -36,6 +37,7 @@ function shorten(value: string): string {
 }
 
 export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'VaultSettings'>) {
+  const t = useT();
   const { activeAccount } = useAuth();
   const online = useIsOnline();
   const stored = activeAccount?.stellarPublicKey ?? '';
@@ -97,14 +99,14 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
     setAddressCopied(true);
     if (timers.current.address) clearTimeout(timers.current.address);
     timers.current.address = setTimeout(() => setAddressCopied(false), 1800);
-    AccessibilityInfo.announceForAccessibility('Vault address copied');
+    AccessibilityInfo.announceForAccessibility(messages().common.vaultCopied);
   };
 
   const show = async () => {
     try {
       const recovered = await getDeviceRecoveryWords();
       if (!recovered) {
-        setPhraseError('This phone does not hold the recovery phrase for this account.');
+        setPhraseError(messages().vault.noPhrase);
         return;
       }
       setPhraseError(null);
@@ -112,14 +114,14 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
       timers.current.phrase = setTimeout(hidePhrase, REVEAL_MS);
     } catch (e) {
       reportError(e, { step: 'revealRecoveryPhrase' });
-      setPhraseError('We could not read the recovery phrase on this phone.');
+      setPhraseError(messages().vault.readFailed);
     }
   };
 
   /** A fingerprint is enough when the phone has one; otherwise (or if it is declined) the MPIN is asked for. */
   const reveal = async () => {
     setPhraseError(null);
-    if ((await isBiometricAvailable()) && (await authenticateWithBiometrics('Show your recovery phrase'))) {
+    if ((await isBiometricAvailable()) && (await authenticateWithBiometrics(messages().vault.biometricPrompt))) {
       await show();
       return;
     }
@@ -128,7 +130,7 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
 
   const checkPin = async (pin: string): Promise<string | null> => {
     const phone = activeAccount?.phone;
-    if (!phone) return 'This account has no phone number on this device.';
+    if (!phone) return messages().common.noPhone;
     try {
       await verifyPin(phone, pin);
     } catch (e) {
@@ -146,7 +148,7 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
     try {
       await copySensitive(words.join(' '));
       setPhraseCopied(true);
-      AccessibilityInfo.announceForAccessibility('Recovery phrase copied. The clipboard clears in 60 seconds.');
+      AccessibilityInfo.announceForAccessibility(messages().recovery.copiedAnnounce);
     } catch (e) {
       reportError(e, { step: 'copyRecoveryPhrase' });
     }
@@ -167,20 +169,20 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
   };
 
   return (
-    <SettingsPage title="Vault Settings" subtitle="Your wallet address, recovery phrase and offline payments." onBack={navigation.goBack}>
+    <SettingsPage title="Vault Settings" subtitle={t.vault.subtitle} onBack={navigation.goBack}>
       <Section title="Vault address">
         <Text style={styles.address} selectable>
-          {address || 'Vault address unavailable'}
+          {address || t.common.vaultUnavailable}
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={address ? 'Copy vault address' : 'Vault address unavailable'}
+          accessibilityLabel={address ? t.common.copyVault : t.common.vaultUnavailable}
           disabled={!address}
           onPress={() => void copyAddress()}
           style={({ pressed }) => [styles.pill, pressed && styles.pressed, !address && styles.disabled]}
         >
           <CopyIcon color={colors.primary} size={18} />
-          <Text style={styles.pillText}>{addressCopied ? 'Copied!' : 'Copy address'}</Text>
+          <Text style={styles.pillText}>{addressCopied ? t.common.copied : t.vault.copyAddress}</Text>
         </Pressable>
       </Section>
 
@@ -189,7 +191,7 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
           <>
             <View style={styles.grid}>
               {words.map((word, i) => (
-                <View key={i} style={styles.word} accessible accessibilityLabel={`Word ${i + 1}, ${word}`}>
+                <View key={i} style={styles.word} accessible accessibilityLabel={t.recovery.wordA11y(i + 1, word)}>
                   <Text style={styles.wordNumber}>{i + 1}</Text>
                   <Text style={styles.wordText} numberOfLines={1} adjustsFontSizeToFit>
                     {word}
@@ -197,7 +199,7 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
                 </View>
               ))}
             </View>
-            <Text style={styles.warning}>Anyone with these 12 words can take your money. Never share them. They hide again in a minute.</Text>
+            <Text style={styles.warning}>{t.vault.warning}</Text>
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
@@ -205,19 +207,19 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
                 style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
               >
                 <CopyIcon color={colors.primary} size={18} />
-                <Text style={styles.pillText}>{phraseCopied ? 'Copied!' : 'Copy phrase'}</Text>
+                <Text style={styles.pillText}>{phraseCopied ? t.common.copied : t.recovery.copyA11y}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={hidePhrase} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
-                <Text style={styles.pillText}>Hide</Text>
+                <Text style={styles.pillText}>{t.vault.hide}</Text>
               </Pressable>
             </View>
           </>
         ) : (
           <>
             <Text style={styles.body}>
-              These 12 words restore your wallet on a new phone. We will ask for your fingerprint or MPIN before showing them.
+              {t.vault.explain}
             </Text>
-            <Button label="Show recovery phrase" size="large" onPress={() => void reveal()} />
+            <Button label={t.vault.show} size="large" onPress={() => void reveal()} />
           </>
         )}
         {phraseError ? (
@@ -231,16 +233,16 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
         <View style={styles.statusRow}>
           <View style={[styles.dot, { backgroundColor: offline.status === 'ready' ? colors.statusOnline : colors.statusOffline }]} />
           <Text style={styles.statusText}>
-            {offline.status === 'checking' ? 'Checking…' : offline.status === 'ready' ? 'Ready to pay without internet' : 'Not set up on this phone yet'}
+            {offline.status === 'checking' ? t.common.checking : offline.status === 'ready' ? t.vault.ready : t.vault.notSetUp}
           </Text>
         </View>
         {offline.status === 'ready' ? <Text style={styles.body}>Offline key: {shorten(offline.deviceKey)}</Text> : null}
         {offline.status === 'missing' ? (
           <>
             <Text style={styles.body}>
-              {online ? 'Set this up once while you are online, so you can send money later with no connection.' : 'Connect to the internet to set this up.'}
+              {online ? t.vault.setUpHint : t.vault.connectToSetUp}
             </Text>
-            <Button label={settingUp ? 'Setting up…' : 'Set up now'} size="large" onPress={() => void setUpOffline()} disabled={!online || settingUp} />
+            <Button label={settingUp ? t.vault.settingUp : t.vault.setUpNow} size="large" onPress={() => void setUpOffline()} disabled={!online || settingUp} />
           </>
         ) : null}
         {setupError ? (
@@ -252,8 +254,8 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
 
       <PinDialog
         visible={askPin}
-        title="Confirm with your MPIN"
-        message="Enter your 4-digit MPIN to show your recovery phrase."
+        title={t.common.confirmMpinTitle}
+        message={t.vault.pinMessage}
         onSubmit={checkPin}
         onCancel={() => setAskPin(false)}
       />

@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fonts } from '../../theme';
 import { Mascot } from '../mascot/Mascot';
 import { Button } from './Button';
+import { messages } from '../../i18n';
 
 type ComingSoonDialogProps = {
   /** What is not available yet, e.g. "Maya"; null hides the dialog. */
@@ -15,17 +16,17 @@ export function ComingSoonDialog({ feature, onDismiss }: ComingSoonDialogProps) 
   return (
     <Modal visible={feature !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Dismiss" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel={messages().common.dismiss} />
         <View style={styles.card} accessibilityViewIsModal>
           <Mascot mood="question" width={150} />
           <View style={styles.message}>
             <Text style={styles.heading} accessibilityRole="header">
-              Not available yet
+              {messages().common.notAvailableYet}
             </Text>
-            <Text style={styles.copy}>{feature} is not available for now. We are working on it, so please check back soon.</Text>
-            <Text style={styles.copy}>In the meantime, you can send with HoneBill.</Text>
+            <Text style={styles.copy}>{messages().comingSoon.body(feature ?? '')}</Text>
+            <Text style={styles.copy}>{messages().comingSoon.meantime}</Text>
           </View>
-          <Button label="Got it" size="large" onPress={onDismiss} />
+          <Button label={messages().common.gotIt} size="large" onPress={onDismiss} />
         </View>
       </View>
     </Modal>

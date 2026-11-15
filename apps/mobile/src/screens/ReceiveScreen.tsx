@@ -8,9 +8,11 @@ import { SendLayout } from '../components/send/SendLayout';
 import { GenerateQrIcon, ReceiveTitleIcon } from '../components/ui/smallIcons';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
+import { useT } from '../i18n';
 
 /** Step two of Receive: the amount to request. The Short ID QR itself is `ReceiveQr`, which opens first. */
 export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'ReceiveAmount'>) {
+  const t = useT();
   const [amountText, setAmountText] = useState('');
   const [tried, setTried] = useState(false);
 
@@ -19,10 +21,10 @@ export function ReceiveScreen({ navigation }: NativeStackScreenProps<RootStackPa
   const valid = problem === null;
 
   return (
-    <SendLayout title="Request Amount" icon={<ReceiveTitleIcon />} onBack={navigation.goBack}>
+    <SendLayout title={t.receive.title} icon={<ReceiveTitleIcon />} onBack={navigation.goBack}>
       <View style={styles.details}>
         <GlassCard style={styles.card}>
-          <Text style={styles.amountLabel}>{problem && (amount > 0 || tried) ? problem : 'Amount to receive (PHPC)'}</Text>
+          <Text style={styles.amountLabel}>{problem && (amount > 0 || tried) ? problem : t.receive.amountLabel}</Text>
           <AmountField value={amountText} onChangeText={setAmountText} />
         </GlassCard>
 

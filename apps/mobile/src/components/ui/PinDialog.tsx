@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MPIN_LENGTH } from '../../config/limits';
 import { colors, fonts } from '../../theme';
 import { CodeBoxes } from './CodeBoxes';
+import { messages } from '../../i18n';
 
 type PinDialogProps = {
   visible: boolean;
@@ -56,16 +57,16 @@ export function PinDialog({ visible, title, message, onSubmit, onCancel }: PinDi
             </Text>
             <Text style={styles.copy}>{message}</Text>
           </View>
-          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={change} secure autoFocus accessibilityLabel="Enter your 4-digit MPIN" />
+          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={change} secure autoFocus accessibilityLabel={messages().pinDialog.a11y} />
           <Text
             style={[styles.status, error ? styles.error : null]}
             accessibilityLiveRegion="polite"
             accessibilityRole={error ? 'alert' : undefined}
           >
-            {busy ? 'Checking…' : (error ?? ' ')}
+            {busy ? messages().common.checking : (error ?? ' ')}
           </Text>
           <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
-            <Text style={styles.cancel}>Cancel</Text>
+            <Text style={styles.cancel}>{messages().common.cancel}</Text>
           </Pressable>
         </View>
       </View>

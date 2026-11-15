@@ -5,6 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { colors, fonts } from '../../theme';
 import { formatPeso } from '../../utils/format';
 import { HoneBillMark } from '../brand/HoneBillMark';
+import { useT } from '../../i18n';
 
 export const QR_CARD_WIDTH = 300;
 const QR_BOX = 220;
@@ -26,13 +27,14 @@ type Props = {
  * so capturing it gives the whole card, ready to save or share.
  */
 export function QrCard({ value, name, amount, cardRef }: Props) {
+  const t = useT();
   const hasAmount = amount !== undefined && amount > 0;
   return (
     <View
       ref={cardRef}
       collapsable={false}
       style={styles.card}
-      accessibilityLabel={hasAmount ? `HoneBill QR card for ${name}, requesting ${formatPeso(amount)}` : `HoneBill QR card for ${name}`}
+      accessibilityLabel={hasAmount ? t.qrCard.a11yAmount(name, formatPeso(amount)) : t.qrCard.a11y(name)}
     >
       <View style={styles.header}>
         <HoneBillMark width={54} />
@@ -40,9 +42,9 @@ export function QrCard({ value, name, amount, cardRef }: Props) {
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.label}>{hasAmount ? 'PAY' : 'SEND MONEY TO'}</Text>
+        <Text style={styles.label}>{hasAmount ? t.qrCard.pay : t.qrCard.sendTo}</Text>
         <Text style={styles.name} numberOfLines={2}>
-          {name || 'HoneBill user'}
+          {name || t.qrCard.user}
         </Text>
 
         {hasAmount ? <Text style={styles.amount}>{formatPeso(amount)}</Text> : null}
@@ -53,7 +55,7 @@ export function QrCard({ value, name, amount, cardRef }: Props) {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Scan with the HoneBill app</Text>
+        <Text style={styles.footerText}>{t.qrCard.scanWith}</Text>
       </View>
     </View>
   );

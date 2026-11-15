@@ -9,6 +9,7 @@ import { colors, fonts } from '../../theme';
 import { HistoryIcon, HomeIcon, InboxIcon, ProfileIcon } from './navIcons';
 import type { NavIconProps } from './navIcons';
 import { ScanOrb } from './ScanOrb';
+import { useT } from '../../i18n';
 
 // Figma: Nav (123:958). The bar is 362x80 with a round notch for the scan button, which is a 69 dp
 // disc ringed by a "Load" arc. The whole component is 362x114 and floats above the screen bottom.
@@ -69,6 +70,7 @@ type BottomNavBarProps = {
 
 /** Floating bottom navigation with a centre scan button. Place it absolutely over the tab screens. */
 export function BottomNavBar({ active, onTabPress, onScanPress, spinning = true }: BottomNavBarProps) {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const dotX = useSharedValue(TABS.find((t) => t.key === active)!.left + DOT_OFFSET);
 
@@ -106,7 +108,7 @@ export function BottomNavBar({ active, onTabPress, onScanPress, spinning = true 
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Scan QR code"
+          accessibilityLabel={t.nav.scanA11y}
           onPress={onScanPress}
           style={({ pressed }) => [styles.scan, pressed && styles.scanPressed]}
         >

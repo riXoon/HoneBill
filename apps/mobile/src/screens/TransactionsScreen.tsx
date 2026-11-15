@@ -22,12 +22,14 @@ import type { HistoryRow, TransactionFilter } from '../types/transaction';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { formatRelative } from '../utils/format';
+import { useT } from '../i18n';
 
 // Figma: Transactions (870:3169), 402x874. Reached from the "History" tab.
 const keyExtractor = (item: HistoryRow) => item.id;
 const Separator = () => <View style={styles.separator} />;
 
 export function TransactionsScreen() {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const openDetail = useCallback((id: string) => navigation.navigate('TransactionDetail', { id }), [navigation]);
@@ -56,14 +58,14 @@ export function TransactionsScreen() {
     <View style={styles.header}>
       <ScreenHeader icon={<HistoryIcon color={colors.coral} size={40} />} title="Transactions" />
       <PromoBanner
-        title={`Hello, ${greetingName(activeAccount)}!`}
-        subtitle={'Check your transaction\nhistory here'}
+        title={t.common.hello(greetingName(activeAccount))}
+        subtitle={t.history.subtitle}
         honi={BANNER_HONI.transactions}
       />
       <FilterChips options={TRANSACTION_FILTERS} value={filter} onChange={setFilter} />
       {showingSaved ? (
         <Text style={styles.savedNotice} accessibilityLiveRegion="polite">
-          {online ? 'Could not refresh.' : "You're offline."} Showing your last update, {formatRelative(new Date(syncedAt))}.
+          {t.history.savedNote(online, formatRelative(new Date(syncedAt)))}
         </Text>
       ) : null}
     </View>

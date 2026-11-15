@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 import * as Sharing from 'expo-sharing';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,10 +8,13 @@ import { captureRef } from 'react-native-view-shot';
 import { QrCard } from '../components/send/QrCard';
 import { SendLayout } from '../components/send/SendLayout';
 import { Button } from '../components/ui/Button';
+import { ResultDialog, type ResultDialogProps } from '../components/ui/ResultDialog';
 import { DownloadIcon, GenerateQrIcon, QrTitleIcon } from '../components/ui/smallIcons';
 import { fullName, useAuth } from '../context/AuthContext';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { reportError } from '../services/errorReporting';
+import { errorHaptic, successHaptic } from '../services/haptics';
 import { colors, fonts } from '../theme';
 
 export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'ReceiveQr'>) {
@@ -21,6 +24,8 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
   const shortId = activeAccount?.shortId ?? '';
   const qrBox = useRef<View>(null);
   const [saving, setSaving] = useState(false);
+  const t = useT();
+  const [outcome, setOutcome] = useState<Pick<ResultDialogProps, 'mood' | 'title' | 'message'> | null>(null);
 
   // A payment request for the user's own short ID, with an amount when one was chosen, which the Send scanner reads.
   // It is not an Offline Relay Voucher (that is a separate, signed SMS payload made when sending offline).
@@ -46,33 +51,36 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
       if (MediaLibrary) {
         const permission = await MediaLibrary.requestPermissionsAsync(true);
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Allow access to your photos to save the QR card.');
+          errorHaptic();
+          setOutcome({ mood: 'fail', title: messages().receiveQr.permissionTitle, message: messages().receiveQr.permissionBody });
           return;
         }
         const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
         // SDK 57: the old top-level saveToLibraryAsync now always throws; Asset.create is its replacement.
         await MediaLibrary.Asset.create(uri);
-        Alert.alert('Saved', 'The QR card is in your gallery.');
+        successHaptic();
+        setOutcome({ mood: 'success', title: messages().receiveQr.savedTitle, message: messages().receiveQr.savedBody });
       } else {
         const uri = await captureRef(qrBox, { format: 'png', quality: 1 });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Save QR card' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: messages().receiveQr.shareTitle });
       }
     } catch (e) {
       reportError(e, { step: 'saveQrCard' });
-      Alert.alert('Could not save', 'Something went wrong while saving the QR card. Please try again.');
+      errorHaptic();
+      setOutcome({ mood: 'fail', title: messages().receiveQr.failTitle, message: messages().receiveQr.failBody });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SendLayout title="My QR Code" icon={<QrTitleIcon />} onBack={navigation.goBack}>
+    <SendLayout title={t.receiveQr.title} icon={<QrTitleIcon />} onBack={navigation.goBack}>
       <View style={styles.stack}>
         {/* Captured as the saved image: the whole card. */}
         <QrCard cardRef={qrBox} value={payload} name={fullName(activeAccount)} amount={amount} />
 
         <Button
-          label={saving ? 'Saving…' : 'Save QR Card'}
+          label={saving ? t.receiveQr.saving : t.receiveQr.save}
           size="large"
           onPress={() => void save()}
           disabled={saving}
@@ -83,17 +91,26 @@ export function ReceiveQrScreen({ navigation, route }: NativeStackScreenProps<Ro
         {!hasAmount ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Generate QR with amount"
+            accessibilityLabel={t.receiveQr.withAmount}
             onPress={() => navigation.navigate('ReceiveAmount')}
             style={({ pressed }) => [styles.withAmount, pressed && styles.pressed]}
           >
             <GenerateQrIcon />
-            <Text style={styles.withAmountText}>Generate QR with amount</Text>
+            <Text style={styles.withAmountText}>{t.receiveQr.withAmount}</Text>
           </Pressable>
         ) : null}
       </View>
 
-      <Text style={styles.caption}>The sender scans this with the HoneBill scanner and your Short ID is filled in for them.</Text>
+      <Text style={styles.caption}>{t.receiveQr.caption}</Text>
+
+      <ResultDialog
+        visible={outcome !== null}
+        mood={outcome?.mood ?? 'success'}
+        title={outcome?.title ?? ''}
+        message={outcome?.message ?? ''}
+        buttonLabel={outcome?.mood === 'fail' ? t.common.ok : t.common.done}
+        onDismiss={() => setOutcome(null)}
+      />
     </SendLayout>
   );
 }

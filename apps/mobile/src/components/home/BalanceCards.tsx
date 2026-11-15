@@ -15,6 +15,7 @@ import type { LoadStatus } from '../../context/WalletDataContext';
 import { SkeletonBar } from '../ui/SkeletonBar';
 import { splitPesos } from '../../utils/format';
 import { colors, fonts } from '../../theme';
+import { useT } from '../../i18n';
 
 // Figma: Cards (483:637). Two 342 dp cards sit one behind the other. Switching shuffles them: the
 // front card slides up, passes over the top and slides down behind the other card, which moves
@@ -134,13 +135,6 @@ function OfflineBadge() {
   );
 }
 
-/** What the status chip says about the figure on the card. */
-const CHIP_LABEL: Record<LoadStatus, string> = {
-  idle: 'Loading',
-  loading: 'Updating',
-  ready: 'Synced',
-  error: 'Not updated',
-};
 
 /** `amount` is `null` until the first balance has been read; the card then shows dashes, never a made-up figure. */
 type BalanceCardProps = { mode: BalanceMode; amount: number | null; status: LoadStatus };
@@ -154,6 +148,7 @@ function BalanceCard({
   hidden,
   onToggleHidden,
 }: BalanceCardProps & { width: number; hidden: boolean; onToggleHidden: () => void }) {
+  const t = useT();
   const online = mode === 'online';
   // Until the first balance arrives a placeholder shows; dashes are only for a read that failed.
   const loadingFirst = amount === null && (status === 'idle' || status === 'loading');
@@ -169,7 +164,7 @@ function BalanceCard({
           <Text style={styles.labelText}>{online ? 'Online Balance' : 'Offline Balance'}</Text>
         </View>
         <View style={styles.chip}>
-          <Text style={styles.chipText}>{CHIP_LABEL[status]}</Text>
+          <Text style={styles.chipText}>{t.balance.chip[status]}</Text>
         </View>
       </View>
 
@@ -179,17 +174,17 @@ function BalanceCard({
           onPress={onToggleHidden}
           hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel={hidden ? 'Show balance' : 'Hide balance'}
+          accessibilityLabel={hidden ? t.balance.show : t.balance.hide}
         >
           {hidden ? <EyeOffIcon /> : <EyeIcon />}
         </Pressable>
         <View style={styles.amountWrap}>
           {hidden ? (
-            <Text style={styles.amount} numberOfLines={1} accessibilityLabel="Balance hidden">
+            <Text style={styles.amount} numberOfLines={1} accessibilityLabel={t.balance.hidden}>
               ₱••••••
             </Text>
           ) : loadingFirst ? (
-            <View accessible accessibilityLabel="Loading balance" style={styles.skeletonWrap}>
+            <View accessible accessibilityLabel={t.balance.loading} style={styles.skeletonWrap}>
               <SkeletonBar style={styles.skeleton} />
             </View>
           ) : (
@@ -216,6 +211,7 @@ type BalanceCardsProps = {
 
 /** Stacked online/offline cards. Only transform is animated; z-order swaps while the leaving card is at its peak. */
 export function BalanceCards({ mode, onlineBalance, offlineBalance, status, onToggle }: BalanceCardsProps) {
+  const tr = useT();
   // Narrower phones get a narrower card (same height), so the stack never runs off the screen.
   const { width: windowWidth } = useWindowDimensions();
   const cardWidth = Math.min(CARD_W, windowWidth - SIDE_ROOM);
@@ -265,7 +261,7 @@ export function BalanceCards({ mode, onlineBalance, offlineBalance, status, onTo
     <Pressable
       onPress={onToggle}
       accessibilityRole="button"
-      accessibilityLabel={`Showing ${mode} balance. Tap to switch to ${mode === 'online' ? 'offline' : 'online'} balance`}
+      accessibilityLabel={tr.balance.switchA11y(mode, mode === 'online' ? 'offline' : 'online')}
       style={[styles.stack, { width: cardWidth + BACK_OFFSET.x }]}
     >
       <Animated.View style={[styles.face, { width: cardWidth }, onlineStyle]}>

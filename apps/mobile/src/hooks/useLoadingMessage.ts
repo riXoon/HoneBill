@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useIsFocused } from '@react-navigation/native';
+import { messages } from '../i18n';
 
-/** Honi's chatter while data is on its way; each line is shown for a few seconds, then the next. */
-const LOADING_MESSAGES = [
-  'Fetching your honey…',
-  'Buzzing over to the server…',
-  'Counting your coins…',
-  'Polishing the honeycomb…',
-  'Almost there, hang tight!',
-] as const;
+/** Honi's chatter while data is on its way (`loading.lines`); each line is shown for a few seconds, then the next. */
 
 const ROTATE_MS = 2600;
 
@@ -23,9 +17,9 @@ export function useLoadingMessage(active: boolean): string {
       setIndex(0);
       return;
     }
-    const id = setInterval(() => setIndex((i) => (i + 1) % LOADING_MESSAGES.length), ROTATE_MS);
+    const id = setInterval(() => setIndex((i) => (i + 1) % messages().loading.lines.length), ROTATE_MS);
     return () => clearInterval(id);
   }, [running]);
 
-  return LOADING_MESSAGES[index];
+  return messages().loading.lines[index];
 }

@@ -8,6 +8,7 @@ import { useBlockBack } from '../../hooks/useBlockBack';
 import { holdLock } from '../../services/lockHold';
 import { colors, fonts } from '../../theme';
 import { Mascot } from '../mascot/Mascot';
+import { messages } from '../../i18n';
 
 export type Processing = {
   /** What is happening, e.g. "Sending your payment". */
@@ -50,7 +51,7 @@ export function ProcessingOverlay({ processing }: { processing: Processing | nul
           {processing.title}
         </Text>
         {processing.step ? <Text style={styles.step}>{processing.step}</Text> : null}
-        <Text style={styles.hint}>{processing.hint ?? 'Please keep the app open. This can take up to a minute.'}</Text>
+        <Text style={styles.hint}>{processing.hint ?? messages().common.keepOpen}</Text>
       </View>
     </Animated.View>
   );
