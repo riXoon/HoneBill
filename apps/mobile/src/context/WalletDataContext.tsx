@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { errorMessage, isAborted } from '../services/api/client';
@@ -14,6 +13,7 @@ import { toTransactions } from '../services/transactionMapper';
 import {
   addOutcomeCounts,
   agePending,
+  clearOtherWalletCaches,
   clearWalletCache,
   EXPIRED_REASON,
   hasOutcomes,
@@ -108,6 +108,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const serverRef = useRef<Transaction[]>([]);
   const pendingRef = useRef<PendingOffline[]>([]);
   const movesRef = useRef<Transaction[]>([]);
+  const syncedAtRef = useRef<number | null>(null);
   const hasData = useRef(false);
 
   const shortId = activeAccount?.shortId ?? null;
@@ -132,8 +133,10 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   );
 
   /**
-   * Turns payments nobody confirmed in time into failed ones, and announces them. Needs no network, so it runs when
-   * the account loads and whenever the app comes back on screen, even with no connection (sync does not run then).
+   * Turns payments nobody confirmed in time into "unconfirmed" ones, and announces them. Runs only right after a
+   * successful history read, never offline: with no connection the phone cannot know whether a payment settled (the
+   * text may have got through), so its money stays held back however long the phone is offline. Once the server has
+   * answered, its balance already reflects whatever did settle, so releasing the hold is safe then.
    */
   const expirePending = useCallback(() => {
     if (!publicKey) return;
@@ -144,13 +147,6 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     void savePending(publicKey, items);
     addOutcomes({ unconfirmed: expired });
   }, [publicKey, addOutcomes]);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') expirePending();
-    });
-    return () => sub.remove();
-  }, [expirePending]);
 
   const refresh = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
@@ -228,8 +224,21 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           void savePending(publicKey, remaining);
         }
         addOutcomes({ settled, failed });
+        // What the server still does not list after 14 days is marked unconfirmed now, with a fresh balance on screen.
+        expirePending();
+        syncedAtRef.current = now;
         void saveSnapshot(publicKey, { balances: balancesRef.current, transactions: next, savedAt: now });
-      } else if (!isAborted(history.reason)) failure = failure ?? history.reason;
+      } else {
+        if (!isAborted(history.reason)) failure = failure ?? history.reason;
+        // A fresh balance is still kept with the history already saved, so it survives a lock or restart.
+        if (balance.status === 'fulfilled') {
+          void saveSnapshot(publicKey, {
+            balances: balancesRef.current,
+            transactions: serverRef.current,
+            savedAt: syncedAtRef.current ?? Date.now(),
+          });
+        }
+      }
 
       if (failure) {
         setError(errorMessage(failure));
@@ -240,7 +249,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         setStatus('ready');
       }
     },
-    [shortId, publicKey, addOutcomes],
+    [shortId, publicKey, addOutcomes, expirePending],
   );
 
   // A different (or no) account means nothing from the previous one may stay on screen. The saved copy for the new
@@ -254,6 +263,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     serverRef.current = [];
     pendingRef.current = [];
     movesRef.current = [];
+    syncedAtRef.current = null;
     setBalances(null);
     setServerTransactions([]);
     setPending([]);
@@ -282,14 +292,13 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           setBalances(snapshot.balances);
           setServerTransactions(snapshot.transactions);
           setSyncedAt(snapshot.savedAt);
+          syncedAtRef.current = snapshot.savedAt;
           hasData.current = true;
         }
         if (savedPending.length > 0) {
           pendingRef.current = savedPending;
           setPending(savedPending);
           hasData.current = true;
-          // Payments that expired while the app was closed are marked and announced now, before any network read.
-          expirePending();
         }
         if (savedMoves.length > 0) {
           movesRef.current = savedMoves;
@@ -304,7 +313,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       cancelled = true;
       request.current?.abort();
     };
-  }, [shortId, publicKey, refresh, addOutcomes, expirePending]);
+  }, [shortId, publicKey, refresh, addOutcomes]);
 
   // The sync service decides when to read fresh data (reconnect, back on screen, interval, pull-to-refresh). After a
   // reconnect or a pull the data is re-read even if recent; the others skip it while it is still fresh.
@@ -376,12 +385,16 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     );
   }, [publicKey]);
 
-  // Signing out (or switching accounts) removes what this phone kept for the account that was there. Queued vouchers
-  // are kept: that money is committed, and they settle the next time this wallet signs in here.
-  const previousKey = useRef<string | null>(null);
+  // A different account signing in removes what this phone kept for any other account. Locking or signing out does
+  // not: the same person comes back with their MPIN or fingerprint, often with no connection, and the saved copy is
+  // what Home shows until the network answers. Queued vouchers are kept: that money is committed, and they settle the
+  // next time that wallet signs in here.
+  const lastSignedInKey = useRef<string | null>(null);
   useEffect(() => {
-    if (previousKey.current && previousKey.current !== publicKey) void clearWalletCache(previousKey.current);
-    previousKey.current = publicKey;
+    if (!publicKey) return;
+    if (lastSignedInKey.current && lastSignedInKey.current !== publicKey) void clearWalletCache(lastSignedInKey.current);
+    lastSignedInKey.current = publicKey;
+    void clearOtherWalletCaches(publicKey);
   }, [publicKey]);
 
   const addPendingOffline = useCallback(

@@ -41,6 +41,11 @@ const honiProfileLottie = require('../../assets/mascot/honi-profile.json');
 const archImage = require('../../assets/profile/arch.png');
 const ARCH_WIDTH = 575;
 const ARCH_HEIGHT = 534;
+/**
+ * The name, phone and Short ID sit above a menu card at a fixed position, so the phone's text-size setting may enlarge
+ * them only this much before they would reach the card.
+ */
+const DETAILS_MAX_FONT_SCALE = 1.2;
 
 /** Figma "Nav icons" avatar glyph (73 dp, white) inside the orange disc. */
 function AvatarGlyph() {
@@ -169,11 +174,24 @@ export function ProfileScreen() {
                 </View>
               </View>
             </View>
+            {/* The menu card sits at a fixed height below, so each line stays one line: a long name shrinks to fit
+                (then ends in "…") instead of wrapping and pushing the phone and Short ID under the card. */}
             <View style={styles.details}>
-              <Text style={styles.name}>{fullName(activeAccount)}</Text>
-              <Text style={styles.phone}>{activeAccount?.phone ? formatPhoneDisplay(activeAccount.phone) : ''}</Text>
+              <Text
+                style={styles.name}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+                ellipsizeMode="tail"
+                maxFontSizeMultiplier={DETAILS_MAX_FONT_SCALE}
+              >
+                {fullName(activeAccount)}
+              </Text>
+              <Text style={styles.phone} numberOfLines={1} maxFontSizeMultiplier={DETAILS_MAX_FONT_SCALE}>
+                {activeAccount?.phone ? formatPhoneDisplay(activeAccount.phone) : ''}
+              </Text>
               <View style={styles.walletIdBox}>
-                <Text style={styles.walletId}>
+                <Text style={styles.walletId} numberOfLines={1} maxFontSizeMultiplier={DETAILS_MAX_FONT_SCALE}>
                   <Text style={styles.walletIdLabel}>Short ID</Text>: {activeAccount?.shortId ?? ''}
                 </Text>
               </View>
@@ -264,7 +282,8 @@ const styles = StyleSheet.create({
   // Figma flips the picture vertically and rotates it -164.26 degrees.
   honiTilt: { width: 201.167, height: 148.701, transform: [{ rotate: '-164.26deg' }, { scaleY: -1 }] },
   honiImage: { position: 'absolute', left: -3, top: 4.22, width: 207.17, height: 140.25 },
-  identity: { position: 'absolute', top: 0, left: '50%', marginLeft: -95, width: 190, alignItems: 'center', gap: 22 },
+  // The full column width (the arch is ~410 dp wide at the name's height), so a long name has room before it shrinks.
+  identity: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', gap: 22 },
   avatar: {
     width: 102,
     height: 102,
@@ -275,8 +294,8 @@ const styles = StyleSheet.create({
   },
   avatarInner: { width: 90, height: 90 },
   avatarGlyph: { position: 'absolute', left: 8, top: 4, width: 73, height: 73 },
-  details: { alignItems: 'center', gap: 4 },
-  name: { fontFamily: fonts.bold, fontSize: 18, color: colors.white },
+  details: { alignSelf: 'stretch', alignItems: 'center', gap: 4 },
+  name: { alignSelf: 'stretch', textAlign: 'center', fontFamily: fonts.bold, fontSize: 18, color: colors.white },
   phone: { fontFamily: fonts.regular, fontSize: 15, color: colors.white },
   walletIdBox: { height: 27, justifyContent: 'flex-end' },
   walletId: { fontFamily: fonts.regular, fontSize: 12, color: colors.white },

@@ -4,6 +4,7 @@ import { ApiError } from './api/client';
 import { checkUser } from './api/users';
 import { fundWallet } from './api/wallet';
 import { reportError } from './errorReporting';
+import { rememberMpin } from './offlineMpin';
 import { getSignupSession } from './signupSession';
 import { markDeviceWalletRegistered } from './wallet/deviceWallet';
 import type { AccountProfile } from '../context/AuthContext';
@@ -64,6 +65,8 @@ export async function completeSignup(signal: AbortSignal): Promise<AccountProfil
   await fundWallet(account.stellarPublicKey, signal).catch((e) => reportError(e, { step: 'fundWallet' }));
   await markDeviceWalletRegistered().catch((e) => reportError(e, { step: 'markDeviceWalletRegistered' }));
   await setAccountPhone(phone);
+  // So the new MPIN also unlocks the app offline, before the first online sign-in.
+  await rememberMpin(phone, account.stellarPublicKey, pin);
   return {
     shortId: account.shortId,
     stellarPublicKey: account.stellarPublicKey,

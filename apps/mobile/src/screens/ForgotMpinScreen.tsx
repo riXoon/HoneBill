@@ -20,6 +20,7 @@ import { lookupUserByPhone } from '../services/api/users';
 import { fieldErrorText } from '../services/completeSignup';
 import { reportError } from '../services/errorReporting';
 import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
+import { forgetMpin } from '../services/offlineMpin';
 import { clearSession, getSessionToken } from '../services/session';
 import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { openWalletSigner } from '../services/wallet/signer';
@@ -138,6 +139,8 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
       const signer = await openWalletSigner(walletKey.current);
       const sessionToken = await getSessionToken(signer, controller.signal);
       await resetPin(phone, chosen.current, smsProof.current, sessionToken, controller.signal);
+      // The forgotten MPIN must stop working offline; the next online sign-in saves the new one.
+      await forgetMpin();
       chosen.current = '';
       smsProof.current = undefined;
       // The session was only for this reset; the person signs in again with the new MPIN.

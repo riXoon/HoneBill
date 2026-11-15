@@ -15,6 +15,7 @@ import { changePin, getChangeAvailability, isChangeCooldown, needsSmsCode } from
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { fieldErrorText } from '../services/completeSignup';
 import { weakMpinReason, type WeakMpinReason } from '../services/mpinPolicy';
+import { forgetMpin, rememberMpin } from '../services/offlineMpin';
 import { pinErrorMessage } from '../services/pinErrors';
 import { colors, fonts } from '../theme';
 import { formatWait } from '../utils/format';
@@ -120,9 +121,14 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
           return;
         }
         current.current = value;
+        // The server just accepted the current MPIN: keep it for offline sign-in in case the change is abandoned.
+        if (activeAccount) void rememberMpin(phone, activeAccount.stellarPublicKey, value);
         goTo('sms');
       } else {
         await changePin(phone, current.current, chosen.current, smsProof.current, controller.signal);
+        // The old MPIN must stop working offline too: save the new one in its place.
+        if (activeAccount) await rememberMpin(phone, activeAccount.stellarPublicKey, chosen.current);
+        else await forgetMpin();
         current.current = '';
         chosen.current = '';
         smsProof.current = undefined;

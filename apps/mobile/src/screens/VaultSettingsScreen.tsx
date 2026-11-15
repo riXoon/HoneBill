@@ -18,6 +18,7 @@ import { authenticateWithBiometrics, isBiometricAvailable } from '../services/bi
 import { reportError } from '../services/errorReporting';
 import { getOfflineSetup } from '../services/offline/offlineConfig';
 import { ensureOfflineReady } from '../services/offline/setup';
+import { rememberMpin } from '../services/offlineMpin';
 import { pinErrorMessage } from '../services/pinErrors';
 import { copySensitive } from '../services/secureClipboard';
 import { getDeviceRecoveryWords } from '../services/wallet/deviceWallet';
@@ -133,6 +134,8 @@ export function VaultSettingsScreen({ navigation }: NativeStackScreenProps<RootS
     } catch (e) {
       return pinErrorMessage(e);
     }
+    // The server just accepted it: keep it for signing in offline too.
+    if (activeAccount) void rememberMpin(phone, activeAccount.stellarPublicKey, pin);
     setAskPin(false);
     await show();
     return null;

@@ -55,7 +55,8 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeAccount } = useAuth();
-  const { balances, transactions, status, error, refresh, syncNow, pendingOffline, outcomes, dismissOutcomes } = useWalletData();
+  const { balances, transactions, status, error, syncedAt, refresh, syncNow, pendingOffline, outcomes, dismissOutcomes } =
+    useWalletData();
   useOfflineSetup();
   const connected = useIsOnline();
   // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
@@ -154,7 +155,10 @@ export function HomeScreen() {
         <View style={styles.topBar}>
           <ProfileIcon color={colors.coral} size={48} />
           <View style={styles.topText}>
-            <Text style={styles.hello}>Hello, {fullName(activeAccount) || greetingName(activeAccount)}</Text>
+            {/* The top bar has a fixed height: a long name shrinks to fit on one line (then ends in "…"), never wraps. */}
+            <Text style={styles.hello} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>
+              Hello, {fullName(activeAccount) || greetingName(activeAccount)}
+            </Text>
             {activeAccount?.shortId ? <ShortIdBadge compact shortId={activeAccount.shortId} /> : null}
             {/* The connection, not the selected card: viewing the Offline Balance while connected is still online. */}
             <View style={styles.statusRow}>
@@ -177,6 +181,10 @@ export function HomeScreen() {
           <Notice tone="info" title={`${formatPeso(Math.max(0, balances.offline - pendingOffline))} available to send`} style={styles.notice}>
             {formatPeso(pendingOffline)} is held for offline payments that are still waiting to settle.
           </Notice>
+        ) : null}
+        {/* Offline, the balance is the last one saved, possibly weeks old: say when it is from. */}
+        {!connected && balances && syncedAt !== null ? (
+          <Text style={styles.savedAt}>Balance as of {formatRelative(new Date(syncedAt))}</Text>
         ) : null}
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -273,4 +281,5 @@ const styles = StyleSheet.create({
   activityList: { gap: 10 },
   error: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 13, color: colors.coral, textAlign: 'center' },
   notice: { maxWidth: 342 },
+  savedAt: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
 });
