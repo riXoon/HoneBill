@@ -8,6 +8,7 @@ import { RELEASE_NOTES } from '../content/releaseNotes';
 import type { RootStackParamList } from '../navigation/types';
 import { markUpdateRead } from '../services/appUpdates';
 import { colors, fonts, radius } from '../theme';
+import { useT } from '../i18n';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -18,6 +19,7 @@ function longDate(iso: string): string {
 
 /** Every release's notes, newest first. Opened from an Inbox update notice (`version` is highlighted) or from Profile. */
 export function WhatsNewScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'WhatsNew'>) {
+  const t = useT();
   const highlighted = route.params?.version;
 
   // Reading the notes counts as reading the Inbox notice for them.
@@ -26,7 +28,7 @@ export function WhatsNewScreen({ navigation, route }: NativeStackScreenProps<Roo
   }, [highlighted]);
 
   return (
-    <SettingsPage title="What's new" subtitle={`You're on HoneBill ${APP_VERSION_LABEL}.`} onBack={navigation.goBack}>
+    <SettingsPage title={t.profile.whatsNew} subtitle={t.whatsNew.onVersion(APP_VERSION_LABEL)} onBack={navigation.goBack}>
       {RELEASE_NOTES.map((note) => (
         <View key={note.version} style={[styles.card, note.version === highlighted && styles.cardHighlighted]}>
           <View style={styles.head}>

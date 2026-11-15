@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { colors } from '../../theme';
+import { messages } from '../../i18n';
 
 type StepDiamondProps = { step: 1 | 2 | 3 | 4 };
 
@@ -20,7 +21,7 @@ const REMAINING: Record<StepDiamondProps['step'], string | null> = {
 export function StepDiamond({ step }: StepDiamondProps) {
   const remaining = REMAINING[step];
   return (
-    <Svg width={49} height={49} viewBox="0 0 49.4844 49.4844" accessibilityLabel={`Step ${step} of 4`}>
+    <Svg width={49} height={49} viewBox="0 0 49.4844 49.4844" accessibilityLabel={messages().onboarding.step(step)}>
       <Path d={DIAMOND} stroke={colors.primary} strokeWidth={6} fill="none" />
       {remaining ? <Path d={remaining} fill={colors.primarySoft} /> : null}
     </Svg>
@@ -57,7 +58,7 @@ export function AuthChrome({ onBack, step }: AuthChromeProps) {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Go back"
+        accessibilityLabel={messages().common.back}
         onPress={onBack}
         style={[styles.back, { top }]}
       >

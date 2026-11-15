@@ -4,6 +4,7 @@ import type { ImageSource } from 'expo-image';
 import LottieView, { type LottieViewProps } from 'lottie-react-native';
 
 import { colors, fonts } from '../../theme';
+import { messages } from '../../i18n';
 
 // Figma "Swipe / Info bar" (739:2586 on Inbox, 879:2878 on Transactions): a 342x120 gradient card with
 // a ghosted hexagon, a greeting, and Honi tilted -16.71 degrees poking out of the top right.
@@ -74,7 +75,7 @@ export function PromoBanner({ title, subtitle, honi }: PromoBannerProps) {
             source={honi.source}
             style={{ width: image.width, height: image.height, transform: [{ rotate: '-16.71deg' }] }}
             contentFit="cover"
-            accessibilityLabel="Honi, the HoneBill mascot"
+            accessibilityLabel={messages().common.mascot}
           />
         )}
       </View>

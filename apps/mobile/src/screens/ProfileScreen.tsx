@@ -32,6 +32,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
 import { isValidStellarPublicKey } from '../services/wallet/stellarKeys';
 import { colors, fonts } from '../theme';
+import { useT } from '../i18n';
 
 // Figma: Profile (942:5362), 402x874. Positions below are read off the frame, relative to the
 // 342 dp column that starts under the title row (frame y 130).
@@ -88,6 +89,7 @@ function MenuRow({ icon, label, trailing, onPress, tinted, accessibilityLabel }:
 }
 
 export function ProfileScreen() {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const navigation = useNavigation();
@@ -97,7 +99,7 @@ export function ProfileScreen() {
   const stored = activeAccount?.stellarPublicKey ?? '';
   const address = isValidStellarPublicKey(stored) ? stored : '';
   // Shortened the way the design prints it: start, ellipsis, end. The copy always takes the full address.
-  const addressShort = address ? `${address.slice(0, 12)}...${address.slice(-10)}` : 'Vault address unavailable';
+  const addressShort = address ? `${address.slice(0, 12)}...${address.slice(-10)}` : t.common.vaultUnavailable;
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
@@ -121,7 +123,7 @@ export function ProfileScreen() {
     setCopied(true);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopied(false), 1800);
-    AccessibilityInfo.announceForAccessibility('Vault address copied');
+    AccessibilityInfo.announceForAccessibility(t.common.vaultCopied);
   };
 
   return (
@@ -140,7 +142,7 @@ export function ProfileScreen() {
           trailing={
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Log out"
+              accessibilityLabel={t.profile.logout}
               hitSlop={7}
               onPress={() => setConfirmingSignOut(true)}
               style={styles.logout}
@@ -159,7 +161,7 @@ export function ProfileScreen() {
           <View pointerEvents="none" style={styles.honiFrame}>
             <View style={styles.honiTilt}>
               {reduceMotion ? (
-                <Image source={honiProfile} style={styles.honiImage} contentFit="cover" accessibilityLabel="Honi, the HoneBill mascot" />
+                <Image source={honiProfile} style={styles.honiImage} contentFit="cover" accessibilityLabel={t.common.mascot} />
               ) : (
                 <LottieView source={honiProfileLottie} autoPlay loop resizeMode="cover" style={styles.honiImage} />
               )}
@@ -232,8 +234,8 @@ export function ProfileScreen() {
             <MenuRow
               tinted
               icon={<View style={styles.glyph}><VaultIcon /></View>}
-              label={copied ? 'Address copied!' : addressShort}
-              accessibilityLabel={address ? 'Copy vault address' : 'Vault address unavailable'}
+              label={copied ? t.profile.addressCopied : addressShort}
+              accessibilityLabel={address ? t.common.copyVault : t.common.vaultUnavailable}
               onPress={address ? copyAddress : undefined}
               trailing={<CopyIcon color={copied ? colors.primary : colors.textMuted} />}
             />
@@ -243,23 +245,23 @@ export function ProfileScreen() {
         {/* The installed version (for bug reports), and the release notes. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`HoneBill version ${APP_VERSION_LABEL}. See what's new`}
+          accessibilityLabel={t.profile.version(APP_VERSION_LABEL)}
           hitSlop={8}
           onPress={() => rootNavigation()?.navigate('WhatsNew')}
           style={({ pressed }) => [styles.version, pressed && { opacity: 0.6 }]}
         >
           <Text style={styles.versionText}>
-            HoneBill {APP_VERSION_LABEL} · <Text style={styles.versionLink}>What's new</Text>
+            HoneBill {APP_VERSION_LABEL} · <Text style={styles.versionLink}>{t.profile.whatsNew}</Text>
           </Text>
         </Pressable>
       </ScrollView>
       <ConfirmDialog
         visible={confirmingSignOut}
         mood="question"
-        title="Sign out?"
-        message="You'll need your MPIN (or fingerprint) to get back in."
-        confirmLabel="Sign out"
-        cancelLabel="Stay signed in"
+        title={t.profile.signOutTitle}
+        message={t.profile.signOutBody}
+        confirmLabel={t.profile.signOut}
+        cancelLabel={t.profile.stay}
         onConfirm={() => void signOut()}
         onCancel={() => setConfirmingSignOut(false)}
       />

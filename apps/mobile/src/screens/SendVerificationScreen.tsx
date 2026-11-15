@@ -11,6 +11,7 @@ import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
+import { messages, useT } from '../i18n';
 import { useSendMode } from '../hooks/useSendMode';
 import { afterNextPaint } from '../utils/async';
 import { formatPeso } from '../utils/format';
@@ -24,7 +25,6 @@ import { sendOnline } from '../services/walletActions';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 3 - Verification (870:2796), 402x874.
-const DEFAULT_MEMO = 'Offline transaction';
 
 function AccountRow({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
@@ -59,6 +59,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const connected = useIsOnline();
+  const t = useT();
   // Which funds this spends is the view the payment was started from, not whether the phone has internet.
   const online = useSendMode(mode) === 'online';
   const { activeAccount } = useAuth();
@@ -89,7 +90,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       return;
     }
     if (!connected) {
-      Alert.alert('No internet connection', 'An online payment needs a connection. Switch to the Offline view on Home to pay with a voucher.');
+      Alert.alert(messages().verify.noInternetTitle, messages().verify.noInternetBody);
       return;
     }
     if (!activeAccount || !recipient.stellarPublicKey || running.current) return;
@@ -103,7 +104,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
     } catch (error) {
       if (error instanceof PendingTransactionError) void refresh({ force: true });
       if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendOnline' });
-      Alert.alert('Payment not sent', errorMessage(error));
+      Alert.alert(messages().verify.notSentTitle, errorMessage(error));
     } finally {
       running.current = false;
       setBusy(false);
@@ -111,26 +112,26 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   };
 
   const canAuthorize = confirmed && enough && !busy && (!online || Boolean(recipient.stellarPublicKey));
-  const swipeLabel = busy ? 'SENDING…' : 'SWIPE TO  AUTHORIZE';
+  const swipeLabel = busy ? t.verify.sending : t.verify.swipe;
 
   return (
     <SendLayout
-      title="Verification"
+      title={t.verify.title}
       icon={<CheckTitleIcon />}
       onBack={navigation.goBack}
       gap={12}
-      processing={busy ? { title: `Sending ${formatPeso(amount)} to ${recipient.name}` } : null}
+      processing={busy ? { title: t.verify.processing(formatPeso(amount), recipient.name) } : null}
       footer={
         <SwipeToEnter
           label={swipeLabel}
           accessibilityLabel={
             busy
-              ? 'Sending, please wait'
+              ? t.verify.sendingA11y
               : !enough
-                ? 'Swipe to authorize, not enough balance'
+                ? t.verify.notEnoughA11y
                 : confirmed
-                  ? 'Swipe to authorize'
-                  : 'Swipe to authorize, confirm the details first'
+                  ? t.verify.swipeA11y
+                  : t.verify.confirmFirstA11y
           }
           disabled={!canAuthorize}
           busy={busy}
@@ -139,8 +140,8 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       }
     >
       <View style={styles.total}>
-        <Text style={styles.totalLabel}>TOTAL TRANSFER AMOUNT</Text>
-        <Text style={styles.totalAmount} accessibilityLabel={`Total transfer amount ${formatPeso(amount)}`}>
+        <Text style={styles.totalLabel}>{t.verify.totalLabel}</Text>
+        <Text style={styles.totalAmount} accessibilityLabel={t.verify.totalA11y(formatPeso(amount))}>
           {formatPeso(amount)}
         </Text>
         <View style={styles.escrow}>
@@ -151,40 +152,38 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
 
       {!enough ? (
         <Text style={styles.problem} accessibilityLiveRegion="polite">
-          {available === null
-            ? 'Balance unavailable'
-            : `Not enough ${online ? 'online' : 'offline'} balance. Go back and lower the amount.`}
+          {available === null ? t.amount.unavailable : t.verify.notEnough(online ? 'online' : 'offline')}
         </Text>
       ) : null}
 
       <GlassCard style={styles.panel}>
-        <Text style={styles.caption}>RECIPIENT ACCOUNT</Text>
+        <Text style={styles.caption}>{t.verify.recipientCaption}</Text>
         <AccountRow icon={<RecipientIcon />} title={recipient.name} subtitle={`Short ID: ${recipient.shortId}`} />
         {recipient.unverified ? (
-          <Notice tone="warning" title="ID not checked">
-            You're offline, so this ID could not be confirmed. Make sure it is right before you authorize.
+          <Notice tone="warning" title={t.verify.uncheckedTitle}>
+            {t.verify.uncheckedBody}
           </Notice>
         ) : null}
-        <Text style={styles.caption}>SENDER ACCOUNT</Text>
+        <Text style={styles.caption}>{t.verify.senderCaption}</Text>
         <AccountRow
           icon={<OfflineFundsBadge color={colors.surface} />}
-          title={online ? 'My Wallet' : 'My Vault Wallet'}
+          title={online ? t.verify.myWallet : t.verify.myVault}
           subtitle={online ? 'Online funds' : 'Offline funds'}
         />
         <View style={styles.memo}>
           <Text style={styles.caption}>NOTE / MEMO</Text>
-          <Text style={styles.memoText}>{note || DEFAULT_MEMO}</Text>
+          <Text style={styles.memoText}>{note || t.verify.defaultMemo}</Text>
         </View>
       </GlassCard>
 
       <GlassCard style={styles.summary}>
         <View style={styles.breakdown}>
-          <SummaryRow label="Amount sent" value={formatPeso(amount)} />
+          <SummaryRow label={t.verify.amountSent} value={formatPeso(amount)} />
           {fee > 0 ? <SummaryRow label="Offline fee" value={formatPeso(fee)} /> : null}
         </View>
         <View style={styles.divider} />
         <View style={styles.totalRow}>
-          <Text style={styles.totalRowLabel}>Total deducted</Text>
+          <Text style={styles.totalRowLabel}>{t.verify.totalDeducted}</Text>
           <Text style={styles.totalRowValue}>{formatPeso(total)}</Text>
         </View>
         <View style={styles.divider} />
@@ -198,7 +197,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
           style={styles.confirm}
         >
           <View style={[styles.box, confirmed && styles.boxChecked]}>{confirmed ? <CheckIcon /> : null}</View>
-          <Text style={styles.confirmText}>I confirm that the recipient details and amount are correct.</Text>
+          <Text style={styles.confirmText}>{t.verify.confirm}</Text>
         </Pressable>
       </GlassCard>
     </SendLayout>

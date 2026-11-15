@@ -30,9 +30,11 @@ import { useSendMode } from '../hooks/useSendMode';
 import type { Recipient } from '../types/recipient';
 import type { SendMode } from '../types/send';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 // Figma: QR Scan (870:3349), 402x874.
 export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'QrScan'>) {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const { activeAccount } = useAuth();
@@ -68,13 +70,13 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
 
       const shortId = parseRecipientQr(data);
       if (!shortId) {
-        Alert.alert('Not a HoneBill code', 'This QR code is not a HoneBill payment code.', [{ text: 'OK', onPress: release }], {
+        Alert.alert(messages().qrScan.notHoneBillTitle, messages().qrScan.notHoneBillBody, [{ text: messages().common.ok, onPress: release }], {
           onDismiss: release,
         });
         return;
       }
       if (shortId === activeAccount?.shortId) {
-        Alert.alert('Your own code', "You can't send money to yourself.", [{ text: 'OK', onPress: release }], {
+        Alert.alert(messages().qrScan.ownTitle, messages().qrScan.ownBody, [{ text: messages().common.ok, onPress: release }], {
           onDismiss: release,
         });
         return;
@@ -98,9 +100,9 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
         if (mode === 'offline') goToAmount(unverifiedRecipient(shortId));
         else {
           Alert.alert(
-            "You're offline",
-            'Switch to "Send via offline" to pay this code by SMS.',
-            [{ text: 'OK', onPress: release }],
+            messages().qrScan.offlineTitle,
+            messages().qrScan.offlineBody,
+            [{ text: messages().common.ok, onPress: release }],
             { onDismiss: release },
           );
         }
@@ -116,7 +118,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
           goToAmount(recipient);
           return;
         }
-        Alert.alert('No account found', 'We could not find an account for this QR code.', [{ text: 'OK', onPress: release }], {
+        Alert.alert(messages().qrScan.noAccountTitle, messages().qrScan.noAccountBody, [{ text: messages().common.ok, onPress: release }], {
           onDismiss: release,
         });
       } catch (e) {
@@ -127,7 +129,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
           goToAmount(unverifiedRecipient(shortId));
           return;
         }
-        Alert.alert('Could not check the code', errorMessage(e), [{ text: 'OK', onPress: release }], { onDismiss: release });
+        Alert.alert(messages().qrScan.checkFailed, errorMessage(e), [{ text: messages().common.ok, onPress: release }], { onDismiss: release });
       } finally {
         setChecking(false);
       }
@@ -147,12 +149,12 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
       const results = await Camera.scanFromURLAsync(picked.assets[0].uri, ['qr']);
       const code = results.find((r) => parseRecipientQr(r.data))?.data ?? results[0]?.data;
       if (!code) {
-        Alert.alert('No QR code found', 'We could not find a QR code in that image. Pick a clear, uncropped QR card.');
+        Alert.alert(messages().qrScan.noQrTitle, messages().qrScan.noQrBody);
         return;
       }
       await handleCode(code);
     } catch {
-      Alert.alert('Could not read the image', 'Something went wrong while reading the QR code. Please try again.');
+      Alert.alert(messages().qrScan.readFailedTitle, messages().qrScan.readFailedBody);
     } finally {
       setUploading(false);
     }
@@ -172,7 +174,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
         <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t.common.back}
             hitSlop={8}
             onPress={() => navigation.goBack()}
             style={styles.back}
@@ -181,7 +183,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
           </Pressable>
           <View style={styles.title}>
             <Text style={styles.titleText} accessibilityRole="header">
-              Scan the QR Code
+              {t.qrScan.title}
             </Text>
             <QrTitleIcon />
           </View>
@@ -190,7 +192,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
         <View style={styles.modeRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Sending ${mode}. Tap to switch to ${mode === 'online' ? 'offline' : 'online'}`}
+            accessibilityLabel={t.qrScan.modeA11y(mode, mode === 'online' ? 'offline' : 'online')}
             onPress={() => setChosenMode(mode === 'online' ? 'offline' : 'online')}
             style={styles.modePill}
           >
@@ -229,10 +231,10 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
             <InfoIcon />
             <Text style={styles.hintText}>
               {checking || uploading
-                ? 'Checking the code…'
+                ? t.qrScan.checking
                 : blocked
-                  ? 'Camera access is off. Tap to open Settings.'
-                  : 'Point your camera at the QR code, or upload a saved one.'}
+                  ? t.qrScan.cameraOff
+                  : t.qrScan.point}
             </Text>
           </Pressable>
 
@@ -244,13 +246,13 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Upload QR from gallery"
+              accessibilityLabel={t.qrScan.uploadA11y}
               accessibilityState={{ disabled: uploading, busy: uploading }}
               onPress={() => void uploadFromGallery()}
               style={[styles.generate, uploading && { opacity: 0.5 }]}
             >
               <GalleryIcon color={colors.primary} size={24} />
-              <Text style={styles.generateText}>{uploading ? 'Reading…' : 'Upload QR'}</Text>
+              <Text style={styles.generateText}>{uploading ? t.qrScan.reading : 'Upload QR'}</Text>
             </Pressable>
           </View>
         </View>

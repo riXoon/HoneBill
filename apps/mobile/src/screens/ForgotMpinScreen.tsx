@@ -11,6 +11,7 @@ import { SmsCodeStep } from '../components/ui/SmsCodeStep';
 import { WeakPinDialog } from '../components/ui/WeakPinDialog';
 import { MPIN_LENGTH } from '../config/limits';
 import { useIsOnline } from '../hooks/useIsOnline';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
 import { needsSmsCode, resetPin } from '../services/api/auth';
@@ -36,14 +37,15 @@ import { colors, fonts } from '../theme';
  */
 type Step = 'checking' | 'blocked' | 'nowallet' | 'sms' | 'new' | 'confirm' | 'saving';
 
-const COPY = {
-  new: { subtitle: 'Choose a new 4-digit MPIN.', label: 'New 4-digit MPIN' },
-  confirm: { subtitle: 'Enter the new MPIN once more to confirm.', label: 'Confirm new 4-digit MPIN' },
-} as const;
 
 export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'ForgotMpin'>) {
   const { phone } = route.params;
   const connected = useIsOnline();
+  const t = useT();
+  const COPY = {
+    new: { subtitle: t.forgotMpin.newSubtitle, label: t.forgotMpin.newLabel },
+    confirm: { subtitle: t.forgotMpin.confirmSubtitle, label: t.forgotMpin.confirmLabel },
+  };
   const [step, setStep] = useState<Step>('checking');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
   // Find the account for this number and whether this phone holds its wallet. Needs the internet.
   useEffect(() => {
     if (!connected) {
-      block("You're offline. Connect to the internet to reset your MPIN.");
+      block(messages().forgotMpin.offline);
       return;
     }
     const controller = new AbortController();
@@ -93,7 +95,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
       try {
         const account = await lookupUserByPhone(phone, controller.signal);
         if (!account) {
-          block('No account was found for this number.');
+          block(messages().forgotMpin.noAccount);
           return;
         }
         walletKey.current = account.stellarPublicKey;
@@ -151,7 +153,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
       if (needsSmsCode(e)) {
         // The code's proof expired (30 minutes) while the new MPIN was being chosen: verify the number again.
         smsProof.current = undefined;
-        goTo('sms', 'Your code expired. We sent a new one.');
+        goTo('sms', messages().forgotMpin.codeExpired);
       } else if (e instanceof ApiError && e.status === 403) {
         goTo('nowallet');
       } else if (e instanceof ApiError && e.status === 400) {
@@ -181,7 +183,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
     if (step === 'confirm') {
       if (value !== chosen.current) {
         chosen.current = '';
-        goTo('new', 'The two MPINs did not match. Choose your new MPIN again.');
+        goTo('new', messages().forgotMpin.mismatch);
         return;
       }
       void save();
@@ -193,41 +195,40 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
     if (value.length === MPIN_LENGTH) submit(value);
   };
 
-  const processing = step === 'saving' ? { title: 'Resetting your MPIN' } : null;
+  const processing = step === 'saving' ? { title: t.forgotMpin.saving } : null;
 
   let body;
   let subtitle: string;
   if (step === 'checking') {
-    subtitle = 'Checking your account…';
+    subtitle = t.forgotMpin.checkingSubtitle;
     body = (
       <Text style={styles.status} accessibilityLiveRegion="polite">
-        One moment…
+        {t.common.oneMoment}
       </Text>
     );
   } else if (step === 'blocked') {
-    subtitle = 'Your MPIN was not reset.';
+    subtitle = t.forgotMpin.blockedSubtitle;
     body = (
       <>
-        <Notice tone="warning" title="We couldn't continue">
+        <Notice tone="warning" title={t.forgotMpin.blockedTitle}>
           {blockedText}
         </Notice>
-        <Button label="Back to sign in" size="large" onPress={navigation.goBack} />
+        <Button label={t.forgotMpin.backToSignIn} size="large" onPress={navigation.goBack} />
       </>
     );
   } else if (step === 'nowallet') {
-    subtitle = "This phone doesn't hold your wallet yet.";
+    subtitle = t.forgotMpin.noWalletSubtitle;
     body = (
       <>
-        <Notice tone="warning" title="Restore your wallet first">
-          To keep your money safe, an MPIN can only be reset from a phone that holds your wallet. Restore it with your
-          12-word recovery phrase, then tap "Forgot MPIN?" again.
+        <Notice tone="warning" title={t.forgotMpin.noWalletTitle}>
+          {t.forgotMpin.noWalletBody}
         </Notice>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <Button label={busy ? 'Please wait…' : 'Restore my wallet'} size="large" onPress={() => void restoreWallet()} disabled={busy} />
+        <Button label={busy ? t.common.pleaseWait : t.forgotMpin.restoreWallet} size="large" onPress={() => void restoreWallet()} disabled={busy} />
       </>
     );
   } else if (step === 'sms') {
-    subtitle = 'Confirm it\'s you with the code we text to your number.';
+    subtitle = t.forgotMpin.smsSubtitle;
     body = (
       <>
         {error ? <Notice tone="info">{error}</Notice> : null}
@@ -246,10 +247,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
     body = (
       <>
         {step === 'new' ? (
-          <Notice tone="info">
-            You'll sign in with this new MPIN. For your security, your email can't be changed for 24 hours after an
-            MPIN reset.
-          </Notice>
+          <Notice tone="info">{t.forgotMpin.emailHold}</Notice>
         ) : null}
         <View style={styles.codeBlock}>
           <CodeBoxes
@@ -275,7 +273,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
 
   return (
     <View style={styles.root}>
-      <SettingsPage title="Forgot MPIN" subtitle={`${subtitle} (${formatPhoneDisplay(phone)})`} onBack={navigation.goBack}>
+      <SettingsPage title={t.forgotMpin.title} subtitle={`${subtitle} (${formatPhoneDisplay(phone)})`} onBack={navigation.goBack}>
         {body}
         <WeakPinDialog
           reason={weak}

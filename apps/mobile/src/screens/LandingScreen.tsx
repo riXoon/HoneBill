@@ -6,6 +6,8 @@ import Svg, { Path } from 'react-native-svg';
 
 import { AppBackground } from '../components/ui/AppBackground';
 import { Button } from '../components/ui/Button';
+import { LanguageSwitch } from '../components/ui/LanguageSwitch';
+import { useT } from '../i18n';
 import { Mascot } from '../components/mascot/Mascot';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
@@ -32,10 +34,13 @@ function UsersIcon() {
 
 export function LandingScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'Landing'>) {
   const insets = useSafeAreaInsets();
+  const t = useT();
 
   return (
     <View style={styles.root}>
       <AppBackground />
+      {/* First thing a new user can change: the language of everything after this screen. */}
+      <LanguageSwitch compact style={[styles.language, { top: Math.max(24, insets.top) + 8 }]} />
 
       <View style={[styles.content, { paddingTop: Math.max(24, insets.top), paddingBottom: Math.max(24, insets.bottom) }]}>
         <View style={styles.hero}>
@@ -49,7 +54,7 @@ export function LandingScreen({ navigation }: NativeStackScreenProps<RootStackPa
         </View>
 
         <View style={styles.actions}>
-          <Button label="Create an account" icon={<UsersIcon />} onPress={() => navigation.navigate('InputNumber')} />
+          <Button label={t.landing.createAccount} icon={<UsersIcon />} onPress={() => navigation.navigate('InputNumber')} />
           <Button label="Sign In" variant="outline" onPress={() => navigation.navigate('Login')} />
         </View>
       </View>
@@ -66,4 +71,5 @@ const styles = StyleSheet.create({
   logo: { width: 178, height: 140, marginTop: -72 },
   tagline: { marginTop: 8, width: '100%', maxWidth: 300, textAlign: 'center', fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   actions: { width: '100%', maxWidth: 302, gap: 12 },
+  language: { position: 'absolute', right: 16, zIndex: 1 },
 });

@@ -6,6 +6,7 @@ import { colors, fonts } from '../../theme';
 import { AppBackground } from '../ui/AppBackground';
 import { ProcessingOverlay, type Processing } from '../ui/ProcessingOverlay';
 import { ChevronLeftIcon } from '../ui/smallIcons';
+import { messages } from '../../i18n';
 
 type SendLayoutProps = {
   title: string;
@@ -46,7 +47,7 @@ export function SendLayout({ title, icon, onBack, gap = 20, footer, centered = f
         bounces={false}
       >
         <View style={styles.topBar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8} onPress={onBack} style={styles.back}>
+          <Pressable accessibilityRole="button" accessibilityLabel={messages().common.back} hitSlop={8} onPress={onBack} style={styles.back}>
             <ChevronLeftIcon />
           </Pressable>
           <View style={styles.title}>

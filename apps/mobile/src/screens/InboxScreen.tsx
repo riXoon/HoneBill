@@ -20,12 +20,14 @@ import { markUpdateRead } from '../services/appUpdates';
 import { INBOX_FILTERS, filterInbox } from '../types/inbox';
 import type { InboxFilter, InboxItem } from '../types/inbox';
 import { colors, fonts } from '../theme';
+import { messages, useT } from '../i18n';
 
 // Figma: Inbox (870:3123), 402x874.
 const keyExtractor = (item: InboxItem) => item.id;
 const Separator = () => <View style={styles.separator} />;
 
 export function InboxScreen() {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<InboxFilter>('All');
   const slide = useFilterSlide(INBOX_FILTERS.indexOf(filter));
@@ -44,9 +46,9 @@ export function InboxScreen() {
         // The tabs live inside the root stack, so the notes screen is opened from the parent navigator.
         navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('WhatsNew', { version: target.version });
       } else if (target.url) {
-        void Linking.openURL(target.url).catch(() => Alert.alert('Could not open the download', target.url ?? ''));
+        void Linking.openURL(target.url).catch(() => Alert.alert(messages().common.openDownloadFailed, target.url ?? ''));
       } else {
-        Alert.alert('Update available', 'Ask HoneBill support for the download link of the new version.');
+        Alert.alert(messages().inbox.updateAvailable, messages().inbox.askSupport);
       }
     },
     [navigation],
@@ -57,7 +59,7 @@ export function InboxScreen() {
       <SlideRow>
         <Pressable
           accessibilityRole={item.update ? 'button' : undefined}
-          accessibilityLabel={`${item.unread ? 'Unread. ' : ''}${item.title}. ${item.body}`}
+          accessibilityLabel={`${item.unread ? t.inbox.unread : ''}${item.title}. ${item.body}`}
           disabled={!item.update}
           onPress={() => open(item)}
           style={({ pressed }) => pressed && styles.pressed}
@@ -66,20 +68,20 @@ export function InboxScreen() {
         </Pressable>
       </SlideRow>
     ),
-    [open],
+    [open, t],
   );
 
   const header = (
     <View style={styles.header}>
       <ScreenHeader icon={<InboxIcon color={colors.coral} size={40} />} title="Inbox" />
       <PromoBanner
-        title={`Hello, ${greetingName(activeAccount)}!`}
-        subtitle="Check your updates here"
+        title={t.common.hello(greetingName(activeAccount))}
+        subtitle={t.inbox.subtitle}
         honi={BANNER_HONI.inbox}
       />
       <FilterChips options={INBOX_FILTERS} value={filter} onChange={setFilter} />
       <View style={styles.sectionTitle}>
-        <Text style={styles.sectionText}>Latest</Text>
+        <Text style={styles.sectionText}>{t.inbox.latest}</Text>
       </View>
     </View>
   );
@@ -96,7 +98,7 @@ export function InboxScreen() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <SlideRow>
-            <EmptyState message={'Nothing to see here!\nYour updates will land here.'} />
+            <EmptyState message={t.inbox.empty} />
           </SlideRow>
         }
         contentContainerStyle={[

@@ -17,6 +17,7 @@ import { useWalletData } from '../context/WalletDataContext';
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { useRecentRecipients } from '../hooks/useRecentRecipients';
 import { useSendMode } from '../hooks/useSendMode';
+import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatWhole } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
@@ -27,6 +28,7 @@ const FADE_MS = 250;
 
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
+  const t = useT();
   const { balances, pendingOffline } = useWalletData();
   const online = useSendMode(route.params.mode) === 'online';
   const [amountText, setAmountText] = useState(route.params.amount ? route.params.amount.toFixed(2) : '');
@@ -49,7 +51,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
 
   // Without a balance read from the server there is nothing to check an amount against.
-  const problem = available === null ? 'Balance unavailable' : amountProblem(amount, Math.max(0, available - fee));
+  const problem = available === null ? t.amount.unavailable : amountProblem(amount, Math.max(0, available - fee));
   const valid = problem === null;
 
   return (
@@ -60,8 +62,8 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
       gap={12}
       footer={
         <SwipeToEnter
-          label="SWIPE TO  PROCEED"
-          accessibilityLabel={valid ? `Swipe to proceed with ${formatPeso(amount)}` : 'Swipe to proceed, enter a valid amount first'}
+          label={t.send.swipe}
+          accessibilityLabel={valid ? t.send.swipeA11y(formatPeso(amount)) : t.send.swipeInvalidA11y}
           disabled={!valid}
           onComplete={() => navigation.navigate('SendVerification', { recipientId: recipient.id, amount, note: note.trim(), mode: route.params.mode })}
         />
@@ -88,7 +90,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           {recipient.unverified ? null : (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={favorite ? `Remove ${recipient.name} from favorites` : `Add ${recipient.name} to favorites`}
+              accessibilityLabel={favorite ? t.send.removeFavorite(recipient.name) : t.send.addFavorite(recipient.name)}
               accessibilityState={{ selected: favorite }}
               hitSlop={6}
               onPress={() => void toggleFavorite(recipient)}
@@ -117,20 +119,20 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
         </View>
 
         <BalanceBar
-          caption={`Balance after: ${balanceAfter === null ? '--' : `₱${formatWhole(Math.max(0, balanceAfter))}`}`}
+          caption={t.send.balanceAfter(balanceAfter === null ? '--' : `₱${formatWhole(Math.max(0, balanceAfter))}`)}
           ratio={available && balanceAfter !== null ? balanceAfter / available : 0}
         />
 
         <AmountField value={amountText} onChangeText={setAmountText} />
 
         <View>
-          <Text style={styles.hint}>Available Balance: PHP {available === null ? '--' : formatWhole(available)}</Text>
+          <Text style={styles.hint}>{t.send.available(available === null ? '--' : formatWhole(available))}</Text>
         </View>
       </GlassCard>
 
       <GlassCard style={styles.noteCard}>
         <View style={styles.noteHeader}>
-          <Text style={styles.noteLabel}>Note (Optional)</Text>
+          <Text style={styles.noteLabel}>{t.send.noteLabel}</Text>
           <Text style={styles.noteLabel}>
             {note.length}/{NOTE_MAX}
           </Text>
@@ -142,8 +144,8 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
             maxLength={NOTE_MAX}
             onFocus={noteFocus.onFocus}
             onBlur={noteFocus.onBlur}
-            accessibilityLabel="Note, optional"
-            placeholder="e.g. Lunch, rent, pasalubong"
+            accessibilityLabel={t.send.noteA11y}
+            placeholder={t.send.notePlaceholder}
             placeholderTextColor={colors.textMuted}
             style={styles.noteInput}
           />

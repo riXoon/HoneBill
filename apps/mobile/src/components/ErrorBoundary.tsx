@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { reportError } from '../services/errorReporting';
+import { messages } from '../i18n';
 
 type Props = { children: React.ReactNode };
 type State = { error: Error | null; resetKey: number };
@@ -35,9 +36,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return (
         <SafeAreaView style={styles.container}>
           <View style={styles.content} accessibilityRole="alert">
-            <Text style={styles.title}>Something went wrong</Text>
+            <Text style={styles.title}>{messages().crash.title}</Text>
             <Text style={styles.body}>
-              HoneBill hit an unexpected problem. Your wallet and any offline payments are safe on this device.
+              {messages().crash.body}
             </Text>
             {__DEV__ && (
               <ScrollView style={styles.devBox}>
@@ -45,7 +46,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
               </ScrollView>
             )}
             <Pressable accessibilityRole="button" onPress={this.handleReset} style={styles.button}>
-              <Text style={styles.buttonText}>Try again</Text>
+              <Text style={styles.buttonText}>{messages().common.tryAgain}</Text>
             </Pressable>
           </View>
         </SafeAreaView>

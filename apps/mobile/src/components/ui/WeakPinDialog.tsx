@@ -1,15 +1,10 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../../i18n';
 import { colors, fonts } from '../../theme';
 import type { WeakMpinReason } from '../../services/mpinPolicy';
 import { Mascot } from '../mascot/Mascot';
 import { Button } from './Button';
-
-const DETAIL: Record<WeakMpinReason, string> = {
-  repeated: 'Four of the same digit, like 1111 or 2222, is one of the first things anyone tries.',
-  sequence: 'Digits in a row, like 1234 or 4321, are among the most common PINs and easy to guess.',
-  common: 'That combination is one of the most commonly used PINs, so it is easy to guess.',
-};
 
 type WeakPinDialogProps = {
   /** Why the PIN was rejected; null hides the dialog. */
@@ -19,22 +14,21 @@ type WeakPinDialogProps = {
 
 /** Frosted card on a dimmed backdrop, with Honi's alert pose, asking the user to pick a harder PIN. */
 export function WeakPinDialog({ reason, onDismiss }: WeakPinDialogProps) {
+  const t = useT();
   return (
     <Modal visible={reason !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Dismiss" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel={t.common.dismiss} />
         <View style={styles.card} accessibilityViewIsModal>
           <Mascot mood="alert" width={150} />
           <View style={styles.message}>
             <Text style={styles.heading} accessibilityRole="header">
-              PIN not allowed
+              {t.weakPin.title}
             </Text>
-            <Text style={styles.copy}>{reason ? DETAIL[reason] : ''}</Text>
-            <Text style={styles.copy}>
-              For your security, please create another PIN that is hard to guess and that only you know.
-            </Text>
+            <Text style={styles.copy}>{reason ? t.weakPin[reason] : ''}</Text>
+            <Text style={styles.copy}>{t.weakPin.advice}</Text>
           </View>
-          <Button label="Create another PIN" size="large" onPress={onDismiss} />
+          <Button label={t.weakPin.button} size="large" onPress={onDismiss} />
         </View>
       </View>
     </Modal>

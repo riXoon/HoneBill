@@ -18,6 +18,7 @@ import { checkUser } from '../services/api/users';
 import { reportError } from '../services/errorReporting';
 import { restoreDeviceWallet } from '../services/wallet/deviceWallet';
 import { isValidMnemonic, publicKeyFromMnemonic } from '../services/wallet/stellarKeys';
+import { messages, useT } from '../i18n';
 import { colors, fonts, radius } from '../theme';
 
 // Sign-in on a phone that does not hold the account's wallet: the 12 words saved at sign-up bring it back.
@@ -29,6 +30,7 @@ function normalize(text: string): string[] {
 }
 
 export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'VerifySeedPhrase'>) {
+  const t = useT();
   const { phone } = route.params;
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
@@ -58,19 +60,19 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
       const copied = await Clipboard.getStringAsync();
       if (copied) onChangeText(copied);
     } catch {
-      setError('Could not read the clipboard. Paste into the box manually.');
+      setError(messages().recovery.clipboardFailed);
     }
   };
 
   const verify = async () => {
     if (busy) return;
     if (words.length !== WORD_COUNT) {
-      setError(`Enter all ${WORD_COUNT} words. You have ${words.length}.`);
+      setError(messages().recovery.wordCount(WORD_COUNT, words.length));
       return;
     }
     const mnemonic = words.join(' ');
     if (!isValidMnemonic(mnemonic)) {
-      setError('These words are not a valid recovery phrase. Check the spelling and the order.');
+      setError(messages().recovery.invalid);
       return;
     }
 
@@ -82,11 +84,11 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
     try {
       const [account, publicKey] = await Promise.all([checkUser(phone, controller.signal), publicKeyFromMnemonic(mnemonic)]);
       if (!account.exists) {
-        setError('No account found for this number.');
+        setError(messages().login.noAccount);
         return;
       }
       if (account.stellarPublicKey !== publicKey) {
-        setError('This recovery phrase does not belong to this account.');
+        setError(messages().recovery.notThisAccount);
         return;
       }
       await restoreDeviceWallet(mnemonic);
@@ -115,11 +117,8 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <GradientTitle>Verify Seed Phrase</GradientTitle>
-          <Text style={styles.subtitle}>
-            This phone does not have your wallet yet. Enter the 12-word recovery phrase you saved when you created your
-            account. Paste all 12 words in one go. Never share these words with anyone.
-          </Text>
+          <GradientTitle>{t.recovery.verifyTitle}</GradientTitle>
+          <Text style={styles.subtitle}>{t.recovery.verifyIntro}</Text>
         </View>
 
         <View style={[styles.box, fieldStateStyle(focused, text.length > 0)]}>
@@ -128,8 +127,8 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
             onChangeText={onChangeText}
             onFocus={onFocus}
             onBlur={onBlur}
-            accessibilityLabel="Recovery phrase"
-            placeholder="Paste your 12 words here"
+            accessibilityLabel={t.recovery.phraseA11y}
+            placeholder={t.recovery.pastePlaceholder}
             placeholderTextColor={colors.textMuted}
             multiline
             autoCapitalize="none"
@@ -147,7 +146,7 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
         <Text style={styles.count}>
           {words.length} / {WORD_COUNT} words
         </Text>
-        <Button label="Paste from clipboard" variant="outline" onPress={() => void paste()} disabled={busy} />
+        <Button label={t.recovery.paste} variant="outline" onPress={() => void paste()} disabled={busy} />
 
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -155,7 +154,7 @@ export function VerifySeedPhraseScreen({ navigation, route }: NativeStackScreenP
           </Text>
         ) : null}
 
-        <Button label={busy ? 'Restoring…' : 'Restore wallet'} size="large" onPress={() => void verify()} disabled={busy} />
+        <Button label={busy ? t.recovery.restoring : t.recovery.restore} size="large" onPress={() => void verify()} disabled={busy} />
 
         <View style={styles.mascot} pointerEvents="none">
           <Mascot mood="question" width={200} />

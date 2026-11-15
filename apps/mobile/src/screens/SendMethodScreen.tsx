@@ -16,30 +16,22 @@ import { reportError } from '../services/errorReporting';
 import { buildOfflineVoucher } from '../services/offline/voucher';
 import { findRecipientById } from '../services/recipientDirectory';
 import { pesosToStroops } from '../services/walletActions';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 4 - Method (870:3236), 402x874.
 const MASCOT_WIDTH = 126;
-const OPTIONS: { method: DispatchMethod; mood: MascotMood; title: string; body: string; badge: string }[] = [
-  {
-    method: 'sms',
-    mood: 'phone',
-    title: 'Send using my phone',
-    body: 'Standard SMS charges apply. Active text promo required.',
-    badge: 'SMS DISPATCH',
-  },
-  {
-    method: 'relay',
-    mood: 'alert',
-    title: 'get help sending',
-    body: "Don't have text load? Show your screen to a partner so they can scan it and send the text for you",
-    badge: 'OFFLINE RELAY',
-  },
-];
+type Option = { method: DispatchMethod; mood: MascotMood; title: string; body: string; badge: string };
 
 export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendMethod'>) {
   const draft = route.params;
+  const t = useT();
+  // The badges are labels, kept in English like the other product words.
+  const OPTIONS: Option[] = [
+    { method: 'sms', mood: 'phone', title: t.sendMethod.smsTitle, body: t.sendMethod.smsBody, badge: 'SMS DISPATCH' },
+    { method: 'relay', mood: 'alert', title: t.sendMethod.relayTitle, body: t.sendMethod.relayBody, badge: 'OFFLINE RELAY' },
+  ];
 
   useEffect(() => {
     if (!findRecipientById(draft.recipientId)) navigation.goBack();
@@ -123,8 +115,8 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       awaitingSend.current = false;
       if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendBySms' });
       Alert.alert(
-        'Could not prepare the payment',
-        error instanceof UserFacingError ? errorMessage(error) : 'No messaging app could be opened. No money has been moved.',
+        messages().sendMethod.prepareFailedTitle,
+        error instanceof UserFacingError ? errorMessage(error) : messages().sendMethod.noMessagingApp,
       );
     } finally {
       setBuilding(false);
@@ -135,13 +127,13 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   // rather than showing a receipt for a payment that was never sent.
   const dispatch = (method: DispatchMethod) => {
     if (method === 'sms') void sendBySms();
-    else Alert.alert('Not available yet', 'Getting help to send is not available yet. No money has been moved.');
+    else Alert.alert(messages().sendMethod.relayUnavailableTitle, messages().sendMethod.relayUnavailableBody);
   };
 
   return (
-    <SendLayout title="Method" icon={<SwapIcon />} onBack={navigation.goBack}>
+    <SendLayout title={t.sendMethod.title} icon={<SwapIcon />} onBack={navigation.goBack}>
       <Text style={styles.question} accessibilityRole="header">
-        How do you want to send this?
+        {t.sendMethod.question}
       </Text>
 
       <View style={styles.options}>
@@ -160,7 +152,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
                 </View>
                 <View style={styles.text}>
                   <View style={styles.copy}>
-                    <Text style={styles.title} numberOfLines={1}>
+                    <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                       {o.title}
                     </Text>
                     <Text style={styles.body}>{o.body}</Text>
@@ -180,10 +172,10 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       <ConfirmDialog
         visible={confirmingSend}
         mood="phone"
-        title="Did you send the text?"
-        message="Your payment is only made once the message has been sent."
-        confirmLabel="Yes, I sent it"
-        cancelLabel="Not yet"
+        title={t.sendMethod.sentTitle}
+        message={t.sendMethod.sentBody}
+        confirmLabel={t.sendMethod.sentYes}
+        cancelLabel={t.sendMethod.sentNo}
         onConfirm={() => {
           setConfirmingSend(false);
           if (voucher.current) finish(voucher.current);
@@ -211,9 +203,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primarySoft,
   },
-  text: { flex: 1, height: 100, justifyContent: 'space-between', paddingHorizontal: 10 },
+  text: { flex: 1, minHeight: 100, justifyContent: 'space-between', gap: 8, paddingHorizontal: 10 },
   copy: { gap: 8 },
-  title: { fontFamily: fonts.regular, fontSize: 14, color: colors.text, textTransform: 'capitalize' },
+  title: { fontFamily: fonts.regular, fontSize: 14, color: colors.text },
   body: { fontFamily: fonts.regular, fontSize: 11, color: colors.textMuted },
   badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: colors.text },
   badgeText: { fontFamily: fonts.regular, fontSize: 11, color: colors.surface, textAlign: 'center' },

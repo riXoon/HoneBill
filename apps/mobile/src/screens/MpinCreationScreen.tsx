@@ -20,6 +20,7 @@ import { createDeviceWallet, type NewWallet } from '../services/wallet/deviceWal
 import { colors, fonts } from '../theme';
 import { useScale } from '../theme/responsive';
 import { afterNextPaint } from '../utils/async';
+import { messages, useT } from '../i18n';
 
 // Figma: MPIN Creation (870:2965), 402x874.
 
@@ -40,6 +41,7 @@ function LockIcon() {
 }
 
 export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'MpinCreation'>) {
+  const t = useT();
   const scale = useScale();
   const [pin, setPin] = useState('');
   const [weak, setWeak] = useState<WeakMpinReason | null>(null);
@@ -69,7 +71,7 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
 
     const session = getSignupSession();
     if (!session?.details) {
-      Alert.alert('Session expired', 'Please verify your number again to continue.', [{ text: 'OK', onPress: startOver }]);
+      Alert.alert(messages().common.sessionExpired, messages().onboarding.verifyAgain, [{ text: messages().common.ok, onPress: startOver }]);
       return;
     }
 
@@ -88,7 +90,7 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
       reportError(e, { step: 'createWallet' });
       setPin('');
       setAttempt((n) => n + 1);
-      setError('We could not create your secure wallet on this device. Please try again.');
+      setError(messages().onboarding.walletFailed);
     } finally {
       setBusy(false);
     }
@@ -106,12 +108,12 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
 
       <AuthScroll style={styles.content}>
         <View style={styles.titleBlock}>
-          <GradientTitle>Secure Your Account</GradientTitle>
-          <Text style={styles.subtitle}>Create a 4-digit PIN to protect your device</Text>
+          <GradientTitle>{t.onboarding.mpinTitle}</GradientTitle>
+          <Text style={styles.subtitle}>{t.onboarding.mpinSubtitle}</Text>
         </View>
 
         <View style={styles.codeBlock}>
-          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel="New 4-digit PIN" />
+          <CodeBoxes key={attempt} length={MPIN_LENGTH} value={pin} onChange={setPin} secure autoFocus accessibilityLabel={t.onboarding.mpinA11y} />
           {error ? (
             <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
               {error}
@@ -120,7 +122,7 @@ export function MpinCreationScreen({ navigation }: NativeStackScreenProps<RootSt
         </View>
 
         <Button
-          label={busy ? 'Creating your vault…' : 'Confirm 4-digit pin'}
+          label={busy ? t.onboarding.creatingVault : t.onboarding.confirmPin}
           size="large"
           icon={busy ? undefined : <LockIcon />}
           onPress={() => void confirm()}

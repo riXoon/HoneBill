@@ -1,5 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useT, type Messages } from '../../i18n';
 import { colors, fonts } from '../../theme';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
 import { Button } from './Button';
@@ -11,24 +12,11 @@ import { Button } from './Button';
  */
 export type ConnectivityNotice = 'offline' | 'restored';
 
-const CONTENT: Record<ConnectivityNotice, { mood: MascotMood; title: string; lines: string[] }> = {
-  offline: {
-    mood: 'alert',
-    title: "You're offline",
-    lines: [
-      'Online features, like your Online Balance and moving money between your balances, are unavailable until your internet connection returns.',
-      'You can still pay and receive with your Offline Balance.',
-    ],
-  },
-  restored: {
-    mood: 'success',
-    title: "You're back online",
-    lines: [
-      'Online features are available again, and your balances and transactions are being updated.',
-      'Tap your balance cards to switch to your Online Balance.',
-    ],
-  },
-};
+function contentFor(notice: ConnectivityNotice, t: Messages): { mood: MascotMood; title: string; lines: string[] } {
+  return notice === 'offline'
+    ? { mood: 'alert', title: t.connectivity.offlineTitle, lines: t.connectivity.offlineLines }
+    : { mood: 'success', title: t.connectivity.restoredTitle, lines: t.connectivity.restoredLines };
+}
 
 type ConnectivityNoticeDialogProps = {
   /** Which notice to show; `null` hides the dialog. */
@@ -39,11 +27,12 @@ type ConnectivityNoticeDialogProps = {
 /** Same frosted card as the other notices: Honi, a heading, a short explanation and "Got it". */
 export function ConnectivityNoticeDialog({ notice, onDismiss }: ConnectivityNoticeDialogProps) {
   // Keep the last content while the fade-out runs, so the card does not go blank as it closes.
-  const content = CONTENT[notice ?? 'offline'];
+  const t = useT();
+  const content = contentFor(notice ?? 'offline', t);
   return (
     <Modal visible={notice !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Dismiss" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel={t.common.dismiss} />
         <View style={styles.card} accessibilityViewIsModal accessibilityLiveRegion="polite">
           <Mascot mood={content.mood} width={150} />
           <View style={styles.message}>
@@ -56,7 +45,7 @@ export function ConnectivityNoticeDialog({ notice, onDismiss }: ConnectivityNoti
               </Text>
             ))}
           </View>
-          <Button label="Got it" size="large" onPress={onDismiss} />
+          <Button label={t.connectivity.gotIt} size="large" onPress={onDismiss} />
         </View>
       </View>
     </Modal>

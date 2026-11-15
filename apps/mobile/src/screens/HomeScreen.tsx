@@ -15,7 +15,6 @@ import { Mascot } from '../components/mascot/Mascot';
 import { AppBackground } from '../components/ui/AppBackground';
 import { NAV_BAR_HEIGHT } from '../components/ui/BottomNavBar';
 import { ConnectivityNoticeDialog } from '../components/ui/ConnectivityNoticeDialog';
-import { EMPTY_TRANSACTIONS_MESSAGE } from '../components/ui/EmptyState';
 import { SpeechBubble } from '../components/ui/SpeechBubble';
 import { useLoadingMessage } from '../hooks/useLoadingMessage';
 import { useOfflineSetup } from '../hooks/useOfflineSetup';
@@ -24,6 +23,7 @@ import { ShortIdBadge } from '../components/send/ShortIdBadge';
 import { fullName, greetingName, useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
+import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { useScale } from '../theme/responsive';
@@ -59,6 +59,7 @@ export function HomeScreen() {
     useWalletData();
   useOfflineSetup();
   const connected = useIsOnline();
+  const t = useT();
   // Tapping the cards switches the view, and the view decides which funds Send spends. Losing the connection moves to
   // Offline (the only view that can pay); getting it back leaves the choice to the user. While offline, the Online view
   // and anything else that needs the internet is refused with a notice instead.
@@ -157,14 +158,14 @@ export function HomeScreen() {
           <View style={styles.topText}>
             {/* The top bar has a fixed height: a long name shrinks to fit on one line (then ends in "…"), never wraps. */}
             <Text style={styles.hello} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} maxFontSizeMultiplier={1.2}>
-              Hello, {fullName(activeAccount) || greetingName(activeAccount)}
+              {t.home.hello(fullName(activeAccount) || greetingName(activeAccount))}
             </Text>
             {activeAccount?.shortId ? <ShortIdBadge compact shortId={activeAccount.shortId} /> : null}
             {/* The connection, not the selected card: viewing the Offline Balance while connected is still online. */}
             <View style={styles.statusRow}>
               <View style={[styles.dot, { backgroundColor: connected ? colors.statusOnline : colors.statusOffline }]} />
               <Text style={styles.status} accessibilityLiveRegion="polite">
-                {connected ? 'You are online' : 'You are offline'}
+                {connected ? t.home.online : t.home.offline}
               </Text>
             </View>
           </View>
@@ -178,17 +179,17 @@ export function HomeScreen() {
           onToggle={toggle}
         />
         {!online && pendingOffline > 0 && balances ? (
-          <Notice tone="info" title={`${formatPeso(Math.max(0, balances.offline - pendingOffline))} available to send`} style={styles.notice}>
-            {formatPeso(pendingOffline)} is held for offline payments that are still waiting to settle.
+          <Notice tone="info" title={t.home.availableToSend(formatPeso(Math.max(0, balances.offline - pendingOffline)))} style={styles.notice}>
+            {t.home.held(formatPeso(pendingOffline))}
           </Notice>
         ) : null}
         {/* Offline, the balance is the last one saved, possibly weeks old: say when it is from. */}
         {!connected && balances && syncedAt !== null ? (
-          <Text style={styles.savedAt}>Balance as of {formatRelative(new Date(syncedAt))}</Text>
+          <Text style={styles.savedAt}>{t.home.balanceAsOf(formatRelative(new Date(syncedAt)))}</Text>
         ) : null}
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
-            {balances ? 'Could not refresh. Pull down to try again.' : error}
+            {balances ? t.home.refreshFailed : error}
           </Text>
         ) : null}
         <OutcomeNotice
@@ -247,7 +248,7 @@ export function HomeScreen() {
             <Mascot mood="idlePlain" />
             {/* In Honi's layer so it is drawn over him, not under: its tail points at his head, between the heading and the antennae. */}
             <View style={[styles.honiBubble, { bottom: 193 * scale }]}>
-              <SpeechBubble message={loadingFirst ? chatter : EMPTY_TRANSACTIONS_MESSAGE} delay={450} />
+              <SpeechBubble message={loadingFirst ? chatter : t.history.empty} delay={450} />
             </View>
           </Animated.View>
         ) : null}

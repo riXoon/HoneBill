@@ -16,6 +16,7 @@ import { sendOtp, verifyOtp } from '../services/api/otp';
 import { setSignupSession } from '../services/signupSession';
 import { colors, fonts, radius } from '../theme';
 import { useScale } from '../theme/responsive';
+import { messages, useT } from '../i18n';
 
 // Figma: OTP (870:2988), 402x874. The backend sends 6-digit codes (the design drew 4 boxes).
 const OTP_LENGTH = 6;
@@ -24,13 +25,13 @@ const RESEND_SECONDS = 30;
 
 function verifyErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 401 && error.attemptsRemaining !== undefined) {
-    const left = error.attemptsRemaining;
-    return `Incorrect code. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
+    return messages().smsCode.wrongCode(error.attemptsRemaining);
   }
   return errorMessage(error);
 }
 
 export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Otp'>) {
+  const t = useT();
   const scale = useScale();
   const { phone } = route.params;
   const recover = route.params.purpose === 'recover';
@@ -53,7 +54,7 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
   const verify = async () => {
     if (busy) return;
     if (code.length !== OTP_LENGTH) {
-      setError(`Enter the ${OTP_LENGTH}-digit code.`);
+      setError(messages().smsCode.enterCode(OTP_LENGTH));
       return;
     }
 
@@ -112,14 +113,14 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
 
       <AuthScroll style={styles.content}>
         <View style={styles.header}>
-          <GradientTitle>Verify OTP</GradientTitle>
+          <GradientTitle>{t.onboarding.otpTitle}</GradientTitle>
           <Text style={styles.subtitle}>
-            We sent a verification code to your mobile number: {formatPhoneDisplay(phone)}
+            {t.onboarding.otpSent(formatPhoneDisplay(phone))}
           </Text>
         </View>
 
         <View style={styles.codeBlock}>
-          <CodeBoxes length={OTP_LENGTH} value={code} onChange={setCode} autoFocus accessibilityLabel="One-time code" />
+          <CodeBoxes length={OTP_LENGTH} value={code} onChange={setCode} autoFocus accessibilityLabel={t.onboarding.otpA11y} />
           {error ? (
             <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
               {error}
@@ -142,15 +143,16 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
           >
             {canResend ? (
               <Text style={styles.resendHint}>
-                Didn't get an OTP? <Text style={styles.resendAction}>Resend</Text>
+                {t.onboarding.noOtp}
+                <Text style={styles.resendAction}>{t.smsCode.resend}</Text>
               </Text>
             ) : (
               <Text style={styles.resendWaiting}>
-                {resending ? 'Sending a new code…' : `Resend code in ${cooldown}s`}
+                {resending ? t.onboarding.sendingNew : t.smsCode.resendIn(cooldown)}
               </Text>
             )}
           </Pressable>
-          <Button label={busy ? 'Please wait…' : 'Verify'} size="large" onPress={() => void verify()} disabled={busy} />
+          <Button label={busy ? t.common.pleaseWait : t.smsCode.verify} size="large" onPress={() => void verify()} disabled={busy} />
         </View>
       </AuthScroll>
       {/* After the scroll area, so the back button is drawn (and tapped) on top of it. */}

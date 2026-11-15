@@ -7,6 +7,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { AppBackground } from '../components/ui/AppBackground';
 import { Keypad, keypadRowHeight } from '../components/ui/Keypad';
+import { LanguageSwitch } from '../components/ui/LanguageSwitch';
 import { HiveEntrance } from '../components/transition/HiveEntrance';
 import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { PinDots } from '../components/ui/PinDots';
@@ -24,6 +25,8 @@ import { sendOtp } from '../services/api/otp';
 import { lookupUserByPhone } from '../services/api/users';
 import { authenticateWithBiometrics, isBiometricAvailable } from '../services/biometrics';
 import { getConnectivity } from '../services/connectivity';
+import { messages, useT } from '../i18n';
+import { pinErrorMessage as sharedPinErrorMessage } from '../services/pinErrors';
 import { checkMpinOffline, forgetMpin, rememberMpin, type OfflineMpinResult } from '../services/offlineMpin';
 import { getDevicePublicKey } from '../services/wallet/deviceWallet';
 import { colors, fonts, radius } from '../theme';
@@ -63,35 +66,30 @@ function isNoConnection(error: unknown): boolean {
 }
 
 function minutesText(seconds: number): string {
-  const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  return messages().time.minutes(Math.max(1, Math.ceil(seconds / 60)));
 }
 
 function offlinePinMessage(result: Exclude<OfflineMpinResult, { ok: true }>, canUseFingerprint: boolean): string {
+  const t = messages();
   switch (result.reason) {
     case 'wrong':
-      return `Incorrect MPIN. ${result.attemptsRemaining} ${result.attemptsRemaining === 1 ? 'try' : 'tries'} left.`;
+      return t.pin.wrong(result.attemptsRemaining);
     case 'locked':
-      return `Too many incorrect tries. Try again in ${minutesText(result.retryAfterSeconds)}.`;
+      return t.pin.locked(minutesText(result.retryAfterSeconds));
     // Nothing saved yet: the MPIN works offline only after the server has accepted it once on this phone.
     case 'unavailable':
-      return canUseFingerprint
-        ? "You're offline. To use your MPIN offline, sign in with it once while online. For now, use your fingerprint."
-        : "You're offline. To use your MPIN offline, sign in with it once while online.";
+      return canUseFingerprint ? t.login.offlineNotSetUpFingerprint : t.login.offlineNotSetUp;
   }
 }
 
+/** The shared MPIN messages, plus the one only sign-in needs: no MPIN on the server for this number. */
 function pinErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 401 && error.attemptsRemaining !== undefined) {
-      const left = error.attemptsRemaining;
-      return `Incorrect MPIN. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
-    }
-    if (error.status === 423) return `Too many incorrect tries. Try again in ${minutesText(error.retryAfter ?? 900)}.`;
-    if (error.status === 404) return 'No MPIN is set for this number. Tap the number to use another.';
-  }
-  return errorMessage(error);
+  if (error instanceof ApiError && error.status === 404) return messages().login.noMpinForNumber;
+  return sharedPinErrorMessage(error);
 }
+
+type SignInStep = 'pin' | 'account' | 'wallet';
+const STEP_TEXT = { pin: 'stepPin', account: 'stepAccount', wallet: 'stepWallet' } as const;
 
 export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Login'>) {
   // Right after an MPIN change, the person signs in with the new MPIN: no automatic fingerprint prompt (the keypad
@@ -111,7 +109,8 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
   const [phone, setPhone] = useState<string | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   /** What the sign-in loading screen says is happening. */
-  const [signInStep, setSignInStep] = useState('Checking your MPIN…');
+  const [signInStep, setSignInStep] = useState<SignInStep>('pin');
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
 
@@ -172,10 +171,10 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
       if (!profile || profile.phone !== signInPhone || profile.stellarPublicKey !== result.publicKey) {
         return offlinePinMessage({ ok: false, reason: 'unavailable' }, canUseFingerprint);
       }
-      setSignInStep('Checking your wallet…');
+      setSignInStep('wallet');
       // Restoring a missing wallet needs an SMS code, so it waits for a connection.
       if (!(await holdsWalletFor(profile.stellarPublicKey))) {
-        return "This phone doesn't have your wallet yet. Connect to the internet to restore it.";
+        return messages().login.noWallet;
       }
       await login(profile);
       void enterHive();
@@ -189,7 +188,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
       if (!phone) return;
       const controller = new AbortController();
       request.current = controller;
-      setSignInStep('Checking your MPIN…');
+      setSignInStep('pin');
       setBusy(true);
       setError(null);
       const offline = async () => {
@@ -207,7 +206,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
         let account: Awaited<ReturnType<typeof lookupUserByPhone>>;
         try {
           await verifyPin(phone, value, controller.signal);
-          setSignInStep('Opening your account…');
+          setSignInStep('account');
           // The PIN route returns no profile, so fetch the account it unlocked.
           account = await lookupUserByPhone(phone, controller.signal);
         } catch (e) {
@@ -216,10 +215,10 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
           await offline();
           return;
         }
-        if (!account) throw new ApiError('http', 404, 'No account found for this number.');
+        if (!account) throw new ApiError('http', 404, messages().login.noAccount);
         // The MPIN proves the account, not that this phone holds its wallet (a new device, or a re-created account).
         // Without the key nothing can be signed, so restore it from the recovery phrase before opening Home.
-        setSignInStep('Checking your wallet…');
+        setSignInStep('wallet');
         if (!(await holdsWalletFor(account.stellarPublicKey))) {
           await startRecovery(phone, controller.signal);
           return;
@@ -265,7 +264,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
     // Checking the wallet key takes a moment (it is derived from the stored phrase), so show "Signing in…" first.
     const controller = new AbortController();
     request.current = controller;
-    setSignInStep('Checking your wallet…');
+    setSignInStep('wallet');
     setBusy(true);
     setError(null);
     try {
@@ -309,6 +308,8 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
   return (
     <View style={styles.root}>
       <AppBackground />
+      {/* Returning users start here, so the language can be changed before signing in too. */}
+      <LanguageSwitch compact style={[styles.language, { top: Math.max(24, insets.top) + 8 }]} />
 
       <View style={[styles.main, { paddingTop: topPad }]}>
         <Image source={logoHorizontal} style={styles.logo} contentFit="contain" accessibilityLabel="HoneBill" />
@@ -321,12 +322,12 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
         <View style={styles.inputSection}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={phone ? `Signing in as ${formatPhoneDisplay(phone)}. Use another number` : 'Enter your phone number'}
+            accessibilityLabel={phone ? t.login.signingInAs(formatPhoneDisplay(phone)) : t.login.enterPhoneA11y}
             onPress={changeNumber}
             disabled={busy || entering}
             style={styles.phonePill}
           >
-            <Text style={styles.phone}>{phone ? formatPhoneDisplay(phone) : phone === null ? 'Enter your number' : ' '}</Text>
+            <Text style={styles.phone}>{phone ? formatPhoneDisplay(phone) : phone === null ? t.login.enterNumber : ' '}</Text>
             <View style={styles.swap}>
               <SwapIcon />
             </View>
@@ -337,7 +338,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
             </Text>
           ) : (
             <Text style={styles.prompt}>
-              {busy || entering ? 'Signing in…' : pinChanged ? 'MPIN changed. Enter your new MPIN' : locked ? 'Locked for your security. Enter your MPIN' : 'Enter your MPIN'}
+              {busy || entering ? t.login.signingIn : pinChanged ? t.login.mpinChanged : locked ? t.login.locked : t.login.enterMpin}
             </Text>
           )}
           <PinDots length={MPIN_LENGTH} filled={pin.length} />
@@ -345,12 +346,12 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
           {phone && !busy && !entering ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Forgot MPIN? Reset it"
+              accessibilityLabel={t.login.forgotA11y}
               hitSlop={10}
               onPress={() => navigation.navigate('ForgotMpin', { phone })}
               style={({ pressed }) => pressed && styles.forgotPressed}
             >
-              <Text style={styles.forgot}>Forgot MPIN?</Text>
+              <Text style={styles.forgot}>{t.login.forgot}</Text>
             </Pressable>
           ) : (
             <View style={styles.forgotSpace} />
@@ -363,7 +364,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
       </View>
 
       {/* Covers the screen (and blocks Back) while the MPIN or fingerprint sign-in is checked. */}
-      <ProcessingOverlay processing={busy ? { title: 'Signing you in', step: signInStep, hint: 'One moment…' } : null} />
+      <ProcessingOverlay processing={busy ? { title: t.login.overlayTitle, step: t.login[STEP_TEXT[signInStep]], hint: t.common.oneMoment } : null} />
 
       {/* Created only on success, so signing in carries none of its cost until then. */}
       {entering ? <HiveEntrance progress={progress} /> : null}
@@ -397,7 +398,8 @@ const styles = StyleSheet.create({
   },
   phone: { fontFamily: fonts.regular, fontSize: 18, color: colors.coral, textAlign: 'center' },
   swap: { position: 'absolute', right: 26, top: 0, bottom: 0, justifyContent: 'center' },
-  prompt: { width: '100%', maxWidth: 200, textAlign: 'center', fontFamily: fonts.light, fontSize: 16, color: colors.primary },
+  prompt: { width: '100%', maxWidth: 280, textAlign: 'center', fontFamily: fonts.light, fontSize: 16, color: colors.primary },
   error: { width: '100%', maxWidth: 280, textAlign: 'center', fontFamily: fonts.regular, fontSize: 15, color: colors.coral },
   keypad: { width: '100%' },
+  language: { position: 'absolute', right: 16, zIndex: 1 },
 });

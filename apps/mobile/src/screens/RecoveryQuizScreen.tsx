@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { reportError } from '../services/errorReporting';
 import { getDeviceRecoveryWords } from '../services/wallet/deviceWallet';
 import { QUIZ_LENGTH, buildRecoveryQuiz, type QuizQuestion } from '../services/wallet/recoveryQuiz';
+import { messages, useT } from '../i18n';
 import { colors, fonts, radius } from '../theme';
 
 // Figma "Confirm Seed Phrase" (1131:4178): one word per question, typed in. QUIZ_LENGTH questions in a row; the card
@@ -32,11 +33,6 @@ const OUT_TIMING = { duration: SWAP_MS, easing: Easing.in(Easing.cubic) };
 /** The old card while it leaves: a lookalike that cannot be touched, so the real TextInput never remounts. */
 type Ghost = { position: number; text: string };
 
-const ORDINAL_SUFFIX = ['th', 'st', 'nd', 'rd'];
-function ordinal(n: number): string {
-  const v = n % 100;
-  return `${n}${ORDINAL_SUFFIX[(v - 20) % 10] ?? ORDINAL_SUFFIX[v] ?? ORDINAL_SUFFIX[0]}`;
-}
 
 /** Alert glyph (Figma Alert, 12x12), same as TextField's. */
 function AlertIcon() {
@@ -55,13 +51,14 @@ function AlertIcon() {
 }
 
 function QuizCard({ position, error, children }: { position: number; error: string | null; children: ReactNode }) {
+  const t = useT();
   return (
     <>
       <Text style={styles.question} accessibilityRole="header">
-        What was your {ordinal(position)} word?
+        {t.recovery.question(position)}
       </Text>
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Word #{position}</Text>
+        <Text style={styles.label}>{t.recovery.wordLabel(position)}</Text>
         {children}
         {/* Always reserve the row so the layout does not jump when an error appears. */}
         <View style={[styles.alert, !error && styles.alertHidden]} accessibilityLiveRegion="polite">
@@ -94,9 +91,9 @@ function AnswerField({
         onFocus={onFocus}
         onBlur={onBlur}
         onSubmitEditing={onSubmit}
-        placeholder="Enter the word"
+        placeholder={messages().recovery.wordPlaceholder}
         placeholderTextColor={colors.textMuted}
-        accessibilityLabel={`Word number ${position}`}
+        accessibilityLabel={messages().recovery.wordInputA11y(position)}
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
@@ -112,6 +109,7 @@ function AnswerField({
 }
 
 export function RecoveryQuizScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'RecoveryQuiz'>) {
+  const t = useT();
   const insets = useSafeAreaInsets();
   const [quiz, setQuiz] = useState<Quiz>({ status: 'loading' });
   const [words, setWords] = useState<string[] | null>(null);
@@ -182,12 +180,12 @@ export function RecoveryQuizScreen({ navigation }: NativeStackScreenProps<RootSt
     if (quiz.status !== 'ready') return;
     const typed = answer.trim().toLowerCase();
     if (!typed) {
-      setError('Input is required');
+      setError(messages().recovery.required);
       return;
     }
     if (typed !== quiz.questions[step].answer) {
       // Fresh positions, so a wrong guess cannot be walked through the same questions.
-      setError('That is not the right word. Check your written copy and try again with new questions.');
+      setError(messages().recovery.wrongWord);
       setStep(0);
       setAnswer('');
       if (words) setQuiz({ status: 'ready', questions: buildRecoveryQuiz(words) });
@@ -228,17 +226,15 @@ export function RecoveryQuizScreen({ navigation }: NativeStackScreenProps<RootSt
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <GradientTitle>Confirm Seed Phrase</GradientTitle>
+          <GradientTitle>{t.recovery.quizTitle}</GradientTitle>
           <Text style={styles.subtitle}>
-            {question
-              ? `Enter the word at position #${question.position} to verify your recovery phrase. Never share these words with anyone.`
-              : 'Enter a word from your recovery phrase to verify it. Never share these words with anyone.'}
+            {question ? t.recovery.quizIntroAt(question.position) : t.recovery.quizIntro}
           </Text>
         </View>
 
         {question ? (
           <>
-            <View style={styles.progress} accessible accessibilityLabel={`Question ${step + 1} of ${QUIZ_LENGTH}`}>
+            <View style={styles.progress} accessible accessibilityLabel={t.recovery.progressA11y(step + 1, QUIZ_LENGTH)}>
               {Array.from({ length: QUIZ_LENGTH }, (_, i) => (
                 <View key={i} style={[styles.bar, i <= step && styles.barDone]} />
               ))}
@@ -271,17 +267,17 @@ export function RecoveryQuizScreen({ navigation }: NativeStackScreenProps<RootSt
               ) : null}
             </View>
 
-            <Button label="Verify" size="large" onPress={verify} />
+            <Button label={t.recovery.verify} size="large" onPress={verify} />
           </>
         ) : quiz.status === 'done' ? null : quiz.status === 'loading' ? (
-          <Text style={styles.status}>Preparing your questions…</Text>
+          <Text style={styles.status}>{t.recovery.preparing}</Text>
         ) : (
           <View style={styles.errorBlock}>
             <Text style={styles.status} accessibilityRole="alert">
-              We could not read your recovery phrase from this device.
+              {t.recovery.readFailed}
             </Text>
             <Pressable accessibilityRole="button" onPress={load} hitSlop={8}>
-              <Text style={styles.link}>Try again</Text>
+              <Text style={styles.link}>{t.common.tryAgain}</Text>
             </Pressable>
           </View>
         )}

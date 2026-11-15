@@ -12,6 +12,7 @@ import { SendLayout } from '../components/send/SendLayout';
 import { DownloadIcon, ReceiptIcon } from '../components/ui/smallIcons';
 import { Button } from '../components/ui/Button';
 import { formatPeso, formatReceiptDate, shortRef, voucherRef } from '../utils/format';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
 import { reportError } from '../services/errorReporting';
@@ -36,6 +37,7 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
   const { recipientId, amount, reference, issuedAt, method } = route.params;
   const recipient = findRecipientById(recipientId);
   const { activeAccount } = useAuth();
+  const t = useT();
   // An online transfer is final here; an offline voucher only settles once the gateway (or the app online) submits it.
   const byText = method !== 'online';
   // A voucher's reference matches the texts the gateway sends about it.
@@ -68,14 +70,14 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
     setSharing(true);
     try {
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Sharing unavailable', 'This phone cannot share files from the app.');
+        Alert.alert(messages().receipt.shareUnavailableTitle, messages().receipt.shareUnavailableBody);
         return;
       }
       const uri = await captureRef(receiptRef, { format: 'png', quality: 1 });
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share receipt', UTI: 'public.png' });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: messages().receipt.share, UTI: 'public.png' });
     } catch (e) {
       reportError(e, { step: 'shareReceipt' });
-      Alert.alert('Could not share', 'Something went wrong while preparing the receipt. Please try again.');
+      Alert.alert(messages().receipt.shareFailedTitle, messages().receipt.shareFailedBody);
     } finally {
       setSharing(false);
     }
@@ -85,12 +87,12 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
 
   return (
     <SendLayout
-      title="Sent"
+      title={t.receipt.title}
       icon={<ReceiptIcon />}
       onBack={goHome}
       gap={12}
       centered
-      footer={<Button label="Return to Home" size="large" onPress={goHome} />}
+      footer={<Button label={t.receipt.returnHome} size="large" onPress={goHome} />}
     >
       <GlassCard>
         {/* Captured as the shared picture. It has its own solid fill, so the image does not come out transparent. */}
@@ -99,20 +101,18 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
 
           <View style={styles.message}>
             <Text style={styles.heading} accessibilityRole="header">
-              Receipt Created
+              {t.receipt.heading}
             </Text>
             <Text style={styles.copy}>
-              {byText
-                ? `Your payment was sent by SMS.\nYou will get a text with Ref ${ref} when it goes through or fails.`
-                : 'Your transaction is successful.\nSent via Honebill'}
+              {byText ? t.receipt.bySms(ref) : t.receipt.online}
             </Text>
           </View>
 
           <View style={styles.voucher}>
             <View style={styles.details}>
-              <DetailRow label="Recipient" value={recipient.name} strong={false} />
+              <DetailRow label={t.receipt.recipient} value={recipient.name} strong={false} />
               <DetailRow label="Short ID" value={recipient.shortId} />
-              <DetailRow label="Amount sent" value={formatPeso(amount)} />
+              <DetailRow label={t.receipt.amountSent} value={formatPeso(amount)} />
               <DetailRow label="Ref. Number" value={ref} />
               <DetailRow label="Stellar Ledger" value={method === 'online' ? SETTLED : PENDING} />
             </View>
@@ -133,7 +133,7 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Share receipt"
+          accessibilityLabel={t.receipt.share}
           accessibilityState={{ disabled: sharing, busy: sharing }}
           disabled={sharing}
           hitSlop={8}

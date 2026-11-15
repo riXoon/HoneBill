@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
+import { messages, useLanguage } from '../../i18n';
 
 // Each action is a 62 dp dark circle plus a label.
 export type QuickActionKey = 'send' | 'receive' | 'topup' | 'online' | 'offline';
@@ -74,8 +75,8 @@ const ACTIONS: { key: QuickActionKey; label: string; Icon: () => React.JSX.Eleme
   { key: 'send', label: 'Send', Icon: SendIcon },
   { key: 'receive', label: 'Receive', Icon: ReceiveIcon },
   { key: 'topup', label: 'Top-up', Icon: TopUpIcon },
-  { key: 'offline', label: 'Transfer to Offline Balance', Icon: OfflineIcon },
-  { key: 'online', label: 'Transfer to Online Balance', Icon: OnlineIcon },
+  { key: 'offline', get label() { return messages().quickActions.toOffline; }, Icon: OfflineIcon },
+  { key: 'online', get label() { return messages().quickActions.toOnline; }, Icon: OnlineIcon },
 ];
 
 const COLUMN = 88;
@@ -88,6 +89,8 @@ type QuickActionsProps = {
 };
 
 export function QuickActions({ online, onPress }: QuickActionsProps) {
+  // Re-renders the row when the language changes, so the transfer labels above are read again.
+  useLanguage();
   // Online hides "Transfer to Online". Offline hides "Transfer to Offline" and Top-up.
   const actions = ACTIONS.filter(({ key }) => (online ? key !== 'online' : key !== 'offline' && key !== 'topup'));
   // Four columns of 88 dp would overflow the 342 dp row, so they shrink to fit.

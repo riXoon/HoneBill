@@ -3,12 +3,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Button } from '../components/ui/Button';
+import { LanguageSwitch } from '../components/ui/LanguageSwitch';
 import { Notice } from '../components/ui/Notice';
 import { PinDialog } from '../components/ui/PinDialog';
 import { SettingsPage } from '../components/ui/SettingsPage';
 import { SmsCodeStep } from '../components/ui/SmsCodeStep';
 import { TextField } from '../components/ui/TextField';
 import { fullName, useAuth } from '../context/AuthContext';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPhoneDisplay } from '../services/accountPhone';
 import { getChangeAvailability, isChangeCooldown, needsSmsCode } from '../services/api/auth';
@@ -19,10 +21,8 @@ import { pinErrorMessage } from '../services/pinErrors';
 import { colors, fonts } from '../theme';
 import { formatWait } from '../utils/format';
 
-const REQUIRED = 'Input is required';
 const EMAIL_MAX = 254;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const EMAIL_TAKEN = 'This email is already used by another account.';
 
 /** The form, then (after the MPIN and the 24-hour check) the SMS code; saving happens once the code checks out. */
 type Step = 'form' | 'sms' | 'saving';
@@ -30,6 +30,7 @@ type Message = { tone: 'warning' | 'error'; title: string; text: string };
 
 export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'AccountSettings'>) {
   const { activeAccount } = useAuth();
+  const t = useT();
   // The server never sends the email back, so the field starts empty.
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
@@ -64,11 +65,11 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
     setMessage(null);
     const mail = email.trim();
     if (!mail) {
-      setEmailError(REQUIRED);
+      setEmailError(messages().common.required);
       return;
     }
     if (mail.length > EMAIL_MAX || !EMAIL_PATTERN.test(mail)) {
-      setEmailError('Enter a valid email address');
+      setEmailError(messages().common.invalidEmail);
       return;
     }
     setEmailError(undefined);
@@ -78,7 +79,7 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
 
   /** After the MPIN: is a change allowed now, and is the address free? Only then is an SMS sent. */
   const checkPin = async (value: string): Promise<string | null> => {
-    if (!phone) return 'This account has no phone number on this device.';
+    if (!phone) return messages().common.noPhone;
     let availability;
     try {
       availability = await getChangeAvailability(phone, value, pendingEmail.current);
@@ -89,16 +90,16 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
     if (availability.email.retryAfter > 0) {
       setMessage({
         tone: 'warning',
-        title: 'Please try again later',
+        title: messages().common.tryLater,
         text:
           availability.email.reason === 'reset'
-            ? `For your security, your email can't be changed for ${formatWait(availability.email.retryAfter)} after an MPIN reset.`
-            : `You changed your email recently. You can change it again in ${formatWait(availability.email.retryAfter)}.`,
+            ? messages().accountSettings.resetHold(formatWait(availability.email.retryAfter))
+            : messages().accountSettings.recentChange(formatWait(availability.email.retryAfter)),
       });
       return null;
     }
     if (availability.emailTaken) {
-      setEmailError(EMAIL_TAKEN);
+      setEmailError(messages().accountSettings.emailTaken);
       return null;
     }
     pin.current = value;
@@ -117,10 +118,10 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
     } catch (e) {
       if (isAborted(e) || !mounted.current) return;
       if (e instanceof ApiError && e.status === 409) {
-        setEmailError(fieldErrorText(e) ?? EMAIL_TAKEN);
+        setEmailError(fieldErrorText(e) ?? messages().accountSettings.emailTaken);
         backToForm(null);
       } else if (isChangeCooldown(e)) {
-        backToForm({ tone: 'warning', title: 'Please try again later', text: errorMessage(e) });
+        backToForm({ tone: 'warning', title: messages().common.tryLater, text: errorMessage(e) });
       } else if (needsSmsCode(e)) {
         setSmsRound((n) => n + 1);
         setStep('sms');
@@ -128,7 +129,7 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
         setEmailError(fieldErrorText(e) ?? errorMessage(e));
         backToForm(null);
       } else {
-        backToForm({ tone: 'error', title: 'Your email was not saved', text: pinErrorMessage(e) });
+        backToForm({ tone: 'error', title: messages().accountSettings.notSaved, text: pinErrorMessage(e) });
       }
       return;
     }
@@ -140,10 +141,10 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
 
   if (step !== 'form' && phone) {
     return (
-      <SettingsPage title="Account Settings" subtitle="Confirm it's you with the code we text to your number." onBack={() => backToForm(null)}>
+      <SettingsPage title="Account Settings" subtitle={t.forgotMpin.smsSubtitle} onBack={() => backToForm(null)}>
         {step === 'saving' ? (
           <Text style={styles.saving} accessibilityLiveRegion="polite">
-            Saving your email…
+            {t.accountSettings.saving}
           </Text>
         ) : (
           <SmsCodeStep key={smsRound} phone={phone} onVerified={(proof) => void save(proof)} />
@@ -153,13 +154,19 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
   }
 
   return (
-    <SettingsPage title="Account Settings" subtitle="You can update the email on your account." onBack={navigation.goBack}>
-      <Notice tone="info">
-        For your security, we'll text a code to your number to confirm, and you can change your email once every 24 hours.
-      </Notice>
+    <SettingsPage title="Account Settings" subtitle={t.accountSettings.subtitle} onBack={navigation.goBack}>
+      {/* Changes at once, with no MPIN: it only affects how the app reads on this phone. */}
+      <View style={styles.language}>
+        <Text style={styles.languageTitle} accessibilityRole="header">
+          {t.language.title}
+        </Text>
+        <LanguageSwitch />
+        <Text style={styles.note}>{t.language.hint}</Text>
+      </View>
+      <Notice tone="info">{t.accountSettings.notice}</Notice>
       <View style={styles.form}>
         <TextField
-          label="New email address"
+          label={t.accountSettings.newEmail}
           placeholder="name@example.com"
           value={email}
           onChangeText={(value) => {
@@ -175,10 +182,10 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
         />
 
         <View style={styles.facts}>
-          <Fact label="Name" value={fullName(activeAccount)} />
-          <Fact label="Mobile number" value={phone ? formatPhoneDisplay(phone) : 'Not available'} />
+          <Fact label={t.accountSettings.name} value={fullName(activeAccount)} />
+          <Fact label={t.onboarding.mobileNumber} value={phone ? formatPhoneDisplay(phone) : t.accountSettings.notAvailable} />
           <Fact label="Short ID" value={activeAccount?.shortId ?? ''} />
-          <Text style={styles.note}>Your name, number and Short ID cannot be changed here.</Text>
+          <Text style={styles.note}>{t.accountSettings.cannotChange}</Text>
         </View>
       </View>
 
@@ -189,15 +196,15 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
       ) : null}
       {saved ? (
         <Text style={styles.success} accessibilityLiveRegion="polite">
-          Saved! Your email is updated.
+          {t.accountSettings.saved}
         </Text>
       ) : null}
-      <Button label="Save email" size="large" onPress={review} />
+      <Button label={t.accountSettings.save} size="large" onPress={review} />
 
       <PinDialog
         visible={askPin}
-        title="Confirm with your MPIN"
-        message="Enter your 4-digit MPIN. We'll then text a code to your number."
+        title={t.common.confirmMpinTitle}
+        message={t.accountSettings.pinMessage}
         onSubmit={checkPin}
         onCancel={() => setAskPin(false)}
       />
@@ -216,6 +223,8 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   form: { gap: 4 },
+  language: { gap: 8 },
+  languageTitle: { fontFamily: fonts.medium, fontSize: 15, color: colors.text },
   facts: { marginTop: 8, gap: 10 },
   fact: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   factLabel: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },

@@ -1,3 +1,5 @@
+import { messages } from '../i18n';
+
 /** 100000 -> { whole: "100,000", cents: "00" } */
 export function splitPesos(amount: number): { whole: string; cents: string } {
   const [whole, cents] = amount.toFixed(2).split('.');
@@ -38,12 +40,9 @@ export function voucherRef(nonce: string): string {
 
 /** 82800 -> "23 hours", 3600 -> "1 hour", 90 -> "2 minutes": a wait, rounded up (matches the backend's wording). */
 export function formatWait(seconds: number): string {
-  if (seconds >= 3600) {
-    const hours = Math.ceil(seconds / 3600);
-    return `${hours} hour${hours === 1 ? '' : 's'}`;
-  }
-  const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const t = messages().time;
+  if (seconds >= 3600) return t.hours(Math.ceil(seconds / 3600));
+  return t.minutes(Math.max(1, Math.ceil(seconds / 60)));
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -73,12 +72,13 @@ export function formatReceiptDate(date: Date): string {
 /** "just now", "25m ago", "3h ago", "2d ago", then the date. */
 export function formatRelative(date: Date, now: Date = new Date()): string {
   const seconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
-  if (seconds < 60) return 'just now';
+  const t = messages().time;
+  if (seconds < 60) return t.justNow;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t.minutesAgo(minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t.hoursAgo(hours);
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
+  if (days < 7) return t.daysAgo(days);
   return formatDayHeading(date);
 }

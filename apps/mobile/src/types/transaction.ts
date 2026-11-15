@@ -1,3 +1,5 @@
+import { messages } from '../i18n';
+import { en } from '../i18n/en';
 import { formatDayHeading, shortRef, voucherRef } from '../utils/format';
 
 export type TransactionSource = 'wallet' | 'offline';
@@ -33,15 +35,31 @@ export type Transaction = {
  * other kinds only show the reason, since a failed top-up or cash-out is not guaranteed to have moved nothing.
  */
 export function failureText(tx: Pick<Transaction, 'source' | 'failureReason'>): string {
-  const reason = tx.failureReason ?? '';
+  const t = messages().tx;
+  const reason = readableReason(tx.failureReason ?? '');
   // An expired payment was never answered, so nobody knows that no money moved; its reason says how to check.
-  if (tx.source !== 'offline' || reason === EXPIRED_REASON) return reason;
-  return reason ? `${reason} No money was taken.` : 'No money was taken.';
+  if (tx.source !== 'offline' || tx.failureReason === EXPIRED_REASON) return reason;
+  return reason ? `${reason} ${t.noMoneyTaken}` : t.noMoneyTaken;
 }
 
-/** Shown on an offline payment nobody confirmed within 14 days; the phone stops trying to settle it then too. */
-export const EXPIRED_REASON =
-  'It was not confirmed within 14 days, so it will not be tried again. Check your balance before sending it again.';
+/**
+ * Shown on an offline payment nobody confirmed within 14 days; the phone stops trying to settle it then too. Stored on
+ * the payment in English, so it is recognised whatever language the app was in; `failureText` shows it translated.
+ */
+export const EXPIRED_REASON = en.tx.expired;
+
+type ReasonKey = keyof typeof en.tx.reasons;
+
+/**
+ * A stored reason in the reader's language. This phone's own reasons (expired, or the server's refusal of a voucher)
+ * are saved in English and translated here; a reason the server wrote is shown as it came.
+ */
+function readableReason(reason: string): string {
+  const t = messages().tx;
+  if (reason === EXPIRED_REASON) return t.expired;
+  const key = (Object.keys(en.tx.reasons) as ReasonKey[]).find((k) => en.tx.reasons[k] === reason);
+  return key ? t.reasons[key] : reason;
+}
 
 /** A reference a person can read: an offline voucher's matches the texts the gateway sends about it. */
 export function displayRef(tx: Pick<Transaction, 'source' | 'ref' | 'nonce'>): string {

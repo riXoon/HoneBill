@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
+import { messages } from '../../i18n';
 
 /** The design's key rows are 80 dp on an 874 dp screen; a shorter phone gets shorter rows (never under 52 dp, a comfortable tap). */
 export function keypadRowHeight(windowHeight: number): number {
@@ -84,14 +85,14 @@ export const Keypad = memo(function Keypad({ onDigit, onDelete, onBiometric }: K
       ))}
       <View style={[styles.row, rowStyle]}>
         {onBiometric ? (
-          <Key label="Sign in with fingerprint" onPress={onBiometric}>
+          <Key label={messages().keypad.fingerprint} onPress={onBiometric}>
             <FingerprintIcon />
           </Key>
         ) : (
           <Key />
         )}
         <Key label="0" onPress={() => onDigit('0')} />
-        <Key label="Delete" onPress={onDelete}>
+        <Key label={messages().keypad.delete} onPress={onDelete}>
           <DeleteIcon />
         </Key>
       </View>

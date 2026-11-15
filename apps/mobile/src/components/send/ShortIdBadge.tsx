@@ -3,6 +3,7 @@ import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-nati
 import * as Clipboard from 'expo-clipboard';
 
 import { colors, fonts } from '../../theme';
+import { useT } from '../../i18n';
 
 type Props = {
   shortId: string;
@@ -14,6 +15,7 @@ type Props = {
 
 /** The short ID is what a sender types or scans to pay someone, so it is shown large, spaced and high-contrast. Tap to copy. */
 export function ShortIdBadge({ shortId, label = 'SHORT ID', compact = false }: Props) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -27,7 +29,7 @@ export function ShortIdBadge({ shortId, label = 'SHORT ID', compact = false }: P
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1800);
-    AccessibilityInfo.announceForAccessibility('Short ID copied');
+    AccessibilityInfo.announceForAccessibility(t.shortId.copiedAnnounce);
   };
 
   const spoken = shortId.split('').join(' ');
@@ -39,10 +41,10 @@ export function ShortIdBadge({ shortId, label = 'SHORT ID', compact = false }: P
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={`Short ID: ${spoken}`}
-        accessibilityHint="Copies the short ID"
+        accessibilityHint={t.shortId.hint}
         style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
       >
-        <Text style={[styles.pillLabel, copied && styles.copied]}>{copied ? 'Copied!' : 'Short ID'}</Text>
+        <Text style={[styles.pillLabel, copied && styles.copied]}>{copied ? t.common.copied : 'Short ID'}</Text>
         <Text style={styles.pillValue} numberOfLines={1}>
           {shortId}
         </Text>
@@ -54,10 +56,10 @@ export function ShortIdBadge({ shortId, label = 'SHORT ID', compact = false }: P
       onPress={() => void copy()}
       accessibilityRole="button"
       accessibilityLabel={`${label}: ${spoken}`}
-      accessibilityHint="Copies the short ID"
+      accessibilityHint={t.shortId.hint}
       style={({ pressed }) => [styles.box, pressed && styles.pressed]}
     >
-      <Text style={[styles.label, copied && styles.copied]}>{copied ? 'COPIED!' : label}</Text>
+      <Text style={[styles.label, copied && styles.copied]}>{copied ? t.common.copied.toUpperCase() : label}</Text>
       <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
         {shortId}
       </Text>

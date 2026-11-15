@@ -19,6 +19,7 @@ import { forgetMpin, rememberMpin } from '../services/offlineMpin';
 import { pinErrorMessage } from '../services/pinErrors';
 import { colors, fonts } from '../theme';
 import { formatWait } from '../utils/format';
+import { messages, useT } from '../i18n';
 
 /**
  * current → (24-hour check) → sms → new → confirm. A refused change ends on `blocked` with the reason; a finished one
@@ -27,13 +28,14 @@ import { formatWait } from '../utils/format';
 type Step = 'current' | 'sms' | 'new' | 'confirm' | 'blocked';
 type PinStep = Exclude<Step, 'sms' | 'blocked'>;
 
-const COPY: Record<PinStep, { subtitle: string; label: string }> = {
-  current: { subtitle: 'First, enter your current 4-digit MPIN.', label: 'Current 4-digit MPIN' },
-  new: { subtitle: 'Now choose a new 4-digit MPIN.', label: 'New 4-digit MPIN' },
-  confirm: { subtitle: 'Enter the new MPIN once more to confirm.', label: 'Confirm new 4-digit MPIN' },
-};
 
 export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'ChangeMpin'>) {
+  const t = useT();
+  const COPY: Record<PinStep, { subtitle: string; label: string }> = {
+    current: { subtitle: t.changeMpin.currentSubtitle, label: t.changeMpin.currentLabel },
+    new: { subtitle: t.changeMpin.newSubtitle, label: t.forgotMpin.newLabel },
+    confirm: { subtitle: t.forgotMpin.confirmSubtitle, label: t.forgotMpin.confirmLabel },
+  };
   const { activeAccount, logout } = useAuth();
   const phone = activeAccount?.phone ?? null;
   const [step, setStep] = useState<Step>('current');
@@ -83,7 +85,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
   const submit = async (value: string) => {
     if (busy || value.length !== MPIN_LENGTH) return;
     if (!phone) {
-      setError('This account has no phone number on this device.');
+      setError(messages().common.noPhone);
       return;
     }
 
@@ -94,7 +96,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
         return;
       }
       if (value === current.current) {
-        goTo('new', 'Your new MPIN must be different from the current one.');
+        goTo('new', messages().changeMpin.mustDiffer);
         return;
       }
       chosen.current = value;
@@ -104,7 +106,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
 
     if (step === 'confirm' && value !== chosen.current) {
       chosen.current = '';
-      goTo('new', 'The two MPINs did not match. Choose your new MPIN again.');
+      goTo('new', messages().forgotMpin.mismatch);
       return;
     }
 
@@ -117,7 +119,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
         // Checks the PIN and the 24-hour rule together, before an SMS is sent or a new MPIN is typed.
         const availability = await getChangeAvailability(phone, value, undefined, controller.signal);
         if (availability.pin.retryAfter > 0) {
-          block(`You changed your MPIN recently. You can change it again in ${formatWait(availability.pin.retryAfter)}.`);
+          block(messages().changeMpin.recent(formatWait(availability.pin.retryAfter)));
           return;
         }
         current.current = value;
@@ -141,7 +143,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
       } else if (needsSmsCode(e)) {
         // The code's proof expired (30 minutes) while the new MPIN was being chosen: verify the number again.
         smsProof.current = undefined;
-        goTo('sms', 'Your code expired. We sent a new one.');
+        goTo('sms', messages().forgotMpin.codeExpired);
       } else if (step === 'confirm' && e instanceof ApiError && e.status === 400) {
         goTo('new', fieldErrorText(e) ?? errorMessage(e));
       } else if (step === 'confirm' && e instanceof ApiError && (e.status === 401 || e.status === 423)) {
@@ -165,18 +167,18 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
 
   if (step === 'blocked') {
     return (
-      <SettingsPage title="Change MPIN" subtitle="Your MPIN was not changed." onBack={navigation.goBack}>
-        <Notice tone="warning" title="Please try again later">
+      <SettingsPage title="Change MPIN" subtitle={t.changeMpin.notChanged} onBack={navigation.goBack}>
+        <Notice tone="warning" title={t.common.tryLater}>
           {blockedReason}
         </Notice>
-        <Button label="Back to settings" size="large" onPress={navigation.goBack} />
+        <Button label={t.changeMpin.backToSettings} size="large" onPress={navigation.goBack} />
       </SettingsPage>
     );
   }
 
   if (step === 'sms' && phone) {
     return (
-      <SettingsPage title="Change MPIN" subtitle="Confirm it's you with the code we text to your number." onBack={navigation.goBack}>
+      <SettingsPage title="Change MPIN" subtitle={t.forgotMpin.smsSubtitle} onBack={navigation.goBack}>
         {error ? <Notice tone="info">{error}</Notice> : null}
         <SmsCodeStep
           key={round}
@@ -194,10 +196,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
   return (
     <SettingsPage title="Change MPIN" subtitle={COPY[pinStep].subtitle} onBack={navigation.goBack}>
       {pinStep === 'current' ? (
-        <Notice tone="info">
-          For your security, we'll text a code to your number to confirm, and you can change your MPIN once every 24
-          hours. You'll sign in again with the new MPIN.
-        </Notice>
+        <Notice tone="info">{t.changeMpin.notice}</Notice>
       ) : null}
       <View style={styles.codeBlock}>
         <CodeBoxes
@@ -214,7 +213,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
           accessibilityLiveRegion="polite"
           accessibilityRole={error ? 'alert' : undefined}
         >
-          {busy ? 'Checking…' : (error ?? ' ')}
+          {busy ? t.common.checking : (error ?? ' ')}
         </Text>
       </View>
       <WeakPinDialog

@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useIsOnline } from '../hooks/useIsOnline';
 import { useRecentRecipients } from '../hooks/useRecentRecipients';
 import { useSendMode } from '../hooks/useSendMode';
+import { messages, useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import type { Recipient } from '../types/recipient';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
@@ -40,6 +41,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
   /** A complete ID that could not be checked because there is no connection; the user may still pay it by voucher. */
   const [unverifiedId, setUnverifiedId] = useState<string | null>(null);
   const connected = useIsOnline();
+  const t = useT();
   // No connection (or Send opened from the Offline view) means this payment is an offline voucher.
   const offlineSend = useSendMode(route.params?.mode) === 'offline';
 
@@ -70,12 +72,12 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
   const lookupRecipient = async (id: string) => {
     if (id === activeAccount?.shortId) {
       setInvalid(true);
-      setLookupError("You can't send to yourself.");
+      setLookupError(messages().send.self);
       return;
     }
     if (!connected) {
       if (offlineSend) offerUnverified(id);
-      else setLookupError('No internet connection, so this ID cannot be checked. Connect, or send offline instead.');
+      else setLookupError(messages().send.noInternetCheck);
       return;
     }
     const controller = new AbortController();
@@ -86,7 +88,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
       if (found) goToAmount(found);
       else {
         setInvalid(true);
-        setLookupError('No account found for this ID.');
+        setLookupError(messages().send.noAccountForId);
       }
     } catch (e) {
       if (isAborted(e)) return;
@@ -128,7 +130,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
   return (
     <SendLayout title="Send" icon={<MoneyOutIcon />} onBack={navigation.goBack}>
       <GlassCard style={styles.sendTo}>
-        <Text style={styles.label}>Send to</Text>
+        <Text style={styles.label}>{t.send.sendTo}</Text>
         <OutlinedField invalid={invalid} focused={idFocus.focused} filled={shortId.length > 0}>
           <Text style={styles.idTag}>ID</Text>
           <TextInput
@@ -139,7 +141,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
             autoCapitalize="none"
             autoCorrect={false}
             maxLength={SHORT_ID_LENGTH}
-            accessibilityLabel="Recipient short ID"
+            accessibilityLabel={t.send.recipientIdA11y}
             accessibilityHint={lookupError ?? undefined}
             onFocus={idFocus.onFocus}
             onBlur={idFocus.onBlur}
@@ -153,28 +155,27 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
           </Text>
         ) : checking ? (
           <Text style={styles.checking} accessibilityLiveRegion="polite">
-            Checking ID…
+            {t.send.checkingId}
           </Text>
         ) : unverifiedId ? (
           <Notice
             tone="warning"
-            title="Check this ID before you continue"
+            title={t.send.uncheckedTitle}
             action={
               <Button
-                label={`Continue with ${unverifiedId}`}
+                label={t.send.continueWith(unverifiedId)}
                 variant="outline"
                 onPress={() => goToAmount(unverifiedRecipient(unverifiedId))}
               />
             }
           >
-            You're offline, so we can't confirm ID {unverifiedId}. Ask the recipient to confirm it. A wrong ID will usually
-            make the payment fail.
+            {t.send.uncheckedBody(unverifiedId)}
           </Notice>
         ) : null}
       </GlassCard>
 
       <View style={styles.methodsSection}>
-        <Text style={styles.sectionLabel}>Methods</Text>
+        <Text style={styles.sectionLabel}>{t.send.methods}</Text>
         <GlassCard style={styles.methods}>
           <View style={styles.bankRow}>
             <View style={styles.bankIcon}>
@@ -218,17 +219,17 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
 
       <View style={styles.recipients}>
         <View style={styles.tabs} accessibilityRole="tablist">
-          {TABS.map((t) => {
-            const selected = t === tab;
+          {TABS.map((name) => {
+            const selected = name === tab;
             return (
               <Pressable
-                key={t}
+                key={name}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
-                onPress={() => setTab(t)}
+                onPress={() => setTab(name)}
                 style={[styles.tab, selected && styles.tabActive]}
               >
-                <Text style={[styles.tabText, selected && styles.tabTextActive]}>{t}</Text>
+                <Text style={[styles.tabText, selected && styles.tabTextActive]}>{name}</Text>
               </Pressable>
             );
           })}
@@ -246,7 +247,7 @@ export function SendToScreen({ navigation, route }: NativeStackScreenProps<RootS
             {recipients.length === 0 ? (
               <SlideRow>
                 <Text style={styles.empty}>
-                  {tab === 'Recent' ? 'No recent recipients yet.' : 'No favorites yet. Tap a star to add one.'}
+                  {tab === 'Recent' ? t.send.noRecents : t.send.noFavorites}
                 </Text>
               </SlideRow>
             ) : (

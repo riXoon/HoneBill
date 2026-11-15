@@ -18,12 +18,14 @@ import { sendOtp } from '../services/api/otp';
 import { checkUser } from '../services/api/users';
 import { colors, fonts, radius } from '../theme';
 import { useScale } from '../theme/responsive';
+import { messages, useT } from '../i18n';
 
 // Figma: Input Number (870:3025), 402x874.
 const COUNTRY_CODE = '+63';
 const PHONE_LENGTH = 10;
 
 export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'InputNumber'>) {
+  const t = useT();
   const scale = useScale();
   // `signin` reuses this screen to find an existing account: no OTP on a phone that already holds its wallet, OTP + recovery phrase otherwise.
   const signin = route.params?.mode === 'signin';
@@ -59,7 +61,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
       const account = await checkUser(fullPhone, controller.signal);
       if (signin) {
         if (!account.exists) {
-          setError('No account found for this number.');
+          setError(messages().login.noAccount);
           return;
         }
         // Only a phone that already holds this account's wallet may skip straight to the MPIN. Any other phone
@@ -74,7 +76,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
         return;
       }
       if (account.exists) {
-        setError('This number already has an account. Go back and sign in.');
+        setError(messages().onboarding.hasAccount);
         return;
       }
       await sendOtp(fullPhone, controller.signal);
@@ -92,11 +94,11 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
 
       <AuthScroll style={styles.content}>
         <View style={styles.titleBlock}>
-          <GradientTitle size={30}>Enter your phone number</GradientTitle>
+          <GradientTitle size={30}>{t.onboarding.phoneTitle}</GradientTitle>
           <Text style={styles.subtitle}>
             {signin
-              ? 'Enter the mobile number linked to your HoneBill account'
-              : 'Link your mobile number to set up your online and offline accounts'}
+              ? t.onboarding.phoneSignin
+              : t.onboarding.phoneSignup}
           </Text>
         </View>
 
@@ -117,7 +119,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
               keyboardType="number-pad"
               textContentType="telephoneNumber"
               autoComplete="tel"
-              accessibilityLabel="Mobile number"
+              accessibilityLabel={t.onboarding.mobileNumber}
               editable={!busy}
               onFocus={phoneFocus.onFocus}
               onBlur={phoneFocus.onBlur}
@@ -136,7 +138,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: termsAccepted }}
-              accessibilityLabel="Terms and Conditions. Opens the terms to read."
+              accessibilityLabel={t.onboarding.termsA11y}
               onPress={() =>
                 termsAccepted
                   ? navigation.setParams({ termsAccepted: false })
@@ -148,7 +150,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
                 {termsAccepted ? <CheckIcon /> : null}
               </View>
               <Text style={styles.consentText}>
-                {termsAccepted ? 'You agreed to the ' : 'Read and agree to the '}
+                {termsAccepted ? t.onboarding.agreed : t.onboarding.readAgree}
                 <Text
                   style={styles.consentLink}
                   onPress={() => navigation.navigate('Terms', { mode: termsAccepted ? undefined : 'accept' })}
@@ -159,7 +161,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
             </Pressable>
           )}
           <Button
-            label={busy ? 'Please wait…' : signin ? 'Continue' : termsAccepted ? 'Send OTP' : 'Read Terms to Continue'}
+            label={busy ? t.common.pleaseWait : signin ? t.common.continue : termsAccepted ? 'Send OTP' : t.onboarding.readTerms}
             size="large"
             onPress={() => void submit()}
             disabled={busy}

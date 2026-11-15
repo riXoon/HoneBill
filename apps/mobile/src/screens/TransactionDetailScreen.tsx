@@ -12,6 +12,7 @@ import { colors, fonts } from '../theme';
 import { Notice, type NoticeTone } from '../components/ui/Notice';
 import { EXPIRED_REASON, SOURCE_LABEL, displayRef, failureText, type TransactionStatus } from '../types/transaction';
 import { formatAmount, formatReceiptDate } from '../utils/format';
+import { useT } from '../i18n';
 
 // Detail page for one Transactions row. Built from the Receipt voucher (870:2835) so it shares the brand look.
 /** An offline payment still unconfirmed after this gets the "connect to check" hint. */
@@ -33,6 +34,7 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 }
 
 export function TransactionDetailScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'TransactionDetail'>) {
+  const t = useT();
   const { transactions } = useWalletData();
   const tx = transactions.find((t) => t.id === route.params.id);
   if (!tx) return null;
@@ -49,7 +51,7 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
       ? 'Failed'
       : tx.status === 'pending'
         ? offline
-          ? 'Sent by SMS, waiting for confirmation'
+          ? t.txDetail.sentBySms
           : 'Pending'
         : offline
           ? 'Synced'
@@ -60,23 +62,23 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
       ? failureText(tx)
       : offline && tx.status === 'pending' && !incoming
         ? waitingLong
-          ? 'Still not confirmed. Connect to the internet to check, or look for a text from HoneBill with this reference.'
-          : `You will get a text from HoneBill with Ref ${ref} when it goes through or fails.`
+          ? t.txDetail.stillNotConfirmed
+          : t.txDetail.willText(ref)
         : null;
   // Never answered is a warning (check the balance); rejected is an error; still waiting is information.
   const unconfirmed = tx.status === 'failed' && tx.failureReason === EXPIRED_REASON;
   const noteTone: NoticeTone = unconfirmed ? 'warning' : tx.status === 'failed' ? 'error' : 'info';
   const noteTitle = unconfirmed
-    ? 'Could not be confirmed'
+    ? t.txDetail.couldNotConfirm
     : tx.status === 'failed'
-      ? 'This payment did not go through'
+      ? t.txDetail.didNotGoThrough
       : waitingLong
-        ? 'Still waiting'
-        : 'Waiting for confirmation';
+        ? t.txDetail.stillWaiting
+        : t.txDetail.waiting;
 
   const share = () =>
     void Share.share({
-      message: `HoneBill receipt\n${incoming ? 'Received' : 'Sent'} ${amount}\n${tx.description}\nStatus: ${STATUS_LABEL[tx.status]}\nRef No. ${ref}\n${when}`,
+      message: t.txDetail.shareMessage(incoming ? t.txDetail.received : t.txDetail.sent, amount, tx.description, STATUS_LABEL[tx.status], ref, when),
     });
   // Opens Help & Feedback with this payment attached, so the team can trace it without asking.
   const report = () => navigation.navigate('Feedback', { transactionId: tx.id });
@@ -89,9 +91,9 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
       gap={12}
       footer={
         <View style={styles.actions}>
-          <Button label="Share receipt" size="large" variant="outline" icon={<DownloadIcon color={colors.primary} />} onPress={share} />
+          <Button label={t.receipt.share} size="large" variant="outline" icon={<DownloadIcon color={colors.primary} />} onPress={share} />
           <Text style={styles.report} accessibilityRole="button" onPress={report}>
-            Report a problem
+            {t.txDetail.report}
           </Text>
         </View>
       }
@@ -105,7 +107,7 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.amount} accessibilityLabel={`${incoming ? 'Received' : 'Sent'} ${amount}`}>
+          <Text style={styles.amount} accessibilityLabel={`${incoming ? t.txDetail.received : t.txDetail.sent} ${amount}`}>
             {signed}
           </Text>
           <Text style={styles.when}>{when}</Text>
@@ -119,10 +121,10 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
 
         <View style={styles.voucher}>
           <View style={styles.details}>
-            <DetailRow label="Type" value={incoming ? 'Received' : 'Sent'} />
-            <DetailRow label="Source" value={SOURCE_LABEL[tx.source]} />
-            <DetailRow label="Description" value={tx.description} strong={false} />
-            <DetailRow label="Amount" value={amount} />
+            <DetailRow label={t.txDetail.type} value={incoming ? t.txDetail.received : t.txDetail.sent} />
+            <DetailRow label={t.txDetail.source} value={SOURCE_LABEL[tx.source]} />
+            <DetailRow label={t.txDetail.description} value={tx.description} strong={false} />
+            <DetailRow label={t.txDetail.amount} value={amount} />
             <DetailRow label={offline ? 'Sync Status' : 'Stellar Ledger'} value={ledger} />
           </View>
           <View style={styles.divider} />

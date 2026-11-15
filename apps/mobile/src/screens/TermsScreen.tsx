@@ -20,6 +20,7 @@ import { CheckIcon, ContactCardIcon, LockIcon, ReceiptIcon, SwapIcon } from '../
 import { TERMS_ACK, TERMS_CLOSING, TERMS_KEY_POINTS, TERMS_SECTIONS, type TermsClause } from '../content/terms';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts, radius } from '../theme';
+import { useT } from '../i18n';
 
 const KEY_POINT_ICONS = {
   custody: LockIcon,
@@ -63,6 +64,7 @@ function Clause({ clause }: { clause: TermsClause }) {
 }
 
 export function TermsScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'Terms'>) {
+  const t = useT();
   const accepting = route.params?.mode === 'accept';
   const insets = useSafeAreaInsets();
 
@@ -141,9 +143,9 @@ export function TermsScreen({ navigation, route }: NativeStackScreenProps<RootSt
   };
 
   const hint = !reachedEnd
-    ? `Scroll to the end to continue · Section ${currentSection} of ${SECTION_COUNT}`
+    ? t.terms.scrollHint(currentSection, SECTION_COUNT)
     : !agreed
-      ? 'Tick the box above to continue'
+      ? t.terms.tickHint
       : null;
 
   return (
@@ -155,8 +157,8 @@ export function TermsScreen({ navigation, route }: NativeStackScreenProps<RootSt
         <GradientTitle size={28}>Terms & Conditions</GradientTitle>
         <Text style={styles.subtitle}>
           {accepting
-            ? `A ${READ_MINUTES}-minute read. HoneBill is a self-custody wallet, so please read all of it.`
-            : `About a ${READ_MINUTES}-minute read.`}
+            ? t.terms.readAccepting(READ_MINUTES)
+            : t.terms.read(READ_MINUTES)}
         </Text>
         <View style={styles.progressRow}>
           <View style={styles.track} onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
@@ -194,7 +196,7 @@ export function TermsScreen({ navigation, route }: NativeStackScreenProps<RootSt
               </View>
             );
           })}
-          <Text style={styles.keyNote}>These are only highlights. The full terms below are what you agree to.</Text>
+          <Text style={styles.keyNote}>{t.terms.highlights}</Text>
         </View>
 
         {TERMS_SECTIONS.map((section, i) => (
@@ -243,7 +245,7 @@ export function TermsScreen({ navigation, route }: NativeStackScreenProps<RootSt
               {hint}
             </Text>
           ) : null}
-          <Button label="I Agree" size="large" onPress={accept} disabled={!canAgree} />
+          <Button label={t.terms.agree} size="large" onPress={accept} disabled={!canAgree} />
         </View>
       ) : (
         <View style={{ height: Math.max(16, insets.bottom) }} />

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../../config/env';
+import { messages } from '../../i18n';
 
 /** `http`: the server answered with an error. `network`: no answer. `aborted`: the caller cancelled. */
 export type ApiErrorKind = 'http' | 'network' | 'timeout' | 'aborted' | 'config';
@@ -45,7 +46,7 @@ export function isAborted(error: unknown): boolean {
 export function errorMessage(error: unknown): string {
   return error instanceof ApiError || error instanceof UserFacingError
     ? error.message
-    : 'Something went wrong. Please try again.';
+    : messages().errors.generic;
 }
 
 type RequestOptions = {
@@ -71,7 +72,7 @@ function messageFromBody(body: ErrorBody | null, status: number): string {
   if (Array.isArray(reason) && reason.length > 0) return reason.join(', ');
   const text = body?.error;
   if (typeof text === 'string' && text) return text;
-  return `Request failed (${status}).`;
+  return messages().errors.requestFailed(status);
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {
@@ -110,9 +111,9 @@ export async function apiRequest<T>(method: 'GET' | 'POST' | 'PATCH', path: stri
         signal: controller.signal,
       });
     } catch {
-      if (timedOut) throw new ApiError('timeout', 0, 'The server took too long to respond. Please try again.');
+      if (timedOut) throw new ApiError('timeout', 0, messages().errors.timeout);
       if (options.signal?.aborted) throw new ApiError('aborted', 0, 'Request cancelled.');
-      throw new ApiError('network', 0, 'Cannot reach the server. Check your connection and try again.');
+      throw new ApiError('network', 0, messages().errors.network);
     }
 
     // A proxy error page or an empty body must not crash the screen, so parse defensively.
