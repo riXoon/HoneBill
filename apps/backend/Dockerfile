@@ -6,9 +6,20 @@ WORKDIR /app
 # Install Dependencies
 FROM base AS deps
 # Copy all package*.json files across all workspaces.
-COPY package*.json ./
-# Reuse cache packages (don't re-install everything)
-RUN npm install --ignore-scripts --workspace=backend --include-workspace-root
+COPY package.json package-lock.json ./
+# Copy on each workspaces
+COPY apps/backend/package.json ./apps/backend/
+COPY apps/mobile/package.json ./apps/mobile/
+COPY packages/pijin_core/package.json ./packages/pijin_core/
+# Temporarily run this to check if workspaces exists
+RUN cat package.json
+RUN npm pkg get workspaces
+# Install dependencies for the backend workspace
+RUN npm ci --ignore-scripts \
+  --workspace=./apps/backend \
+  --workspace=./packages/pijin_core \
+  --workspace=./apps/mobile \
+  --include-workspace-root
 
 #Build the backend workspace
 FROM deps AS build
@@ -21,6 +32,7 @@ RUN npm run build --workspace=backend
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/backend/node_modules ./apps/backend/node_modules
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 COPY --from=build /app/apps/backend/package.json ./apps/backend/package.json
 COPY --from=build /app/apps/backend/prisma ./apps/backend/prisma
