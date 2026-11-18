@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot, type MascotMood } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
+import { RelayQrDialog } from '../components/send/RelayQrDialog';
 import { SendLayout } from '../components/send/SendLayout';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
-import { SMS_GATEWAY_NUMBER } from '../config/env';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import type { DispatchMethod } from '../types/send';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
 import { buildOfflineVoucher } from '../services/offline/voucher';
+import { MissingGatewayError, openVoucherSms, relayQrPayload } from '../services/offline/voucherFormat';
 import { findRecipientById } from '../services/recipientDirectory';
 import { pesosToStroops } from '../services/walletActions';
 import { messages, useT } from '../i18n';
@@ -45,11 +46,13 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   const awaitingSend = useRef(false);
   /** Shows the "Did you send the text?" dialog. */
   const [confirmingSend, setConfirmingSend] = useState(false);
+  /** The QR shown for a partner to scan and text ("Get Help Sending"); null while it is closed. */
+  const [relayQr, setRelayQr] = useState<string | null>(null);
 
   const { addPendingOffline } = useWalletData();
 
   const finish = useCallback(
-    (signed: string) => {
+    (signed: string, method: DispatchMethod) => {
       // The voucher's fifth field is its nonce, unique to this payment, so it serves as the reference.
       const nonce = signed.split(':')[4] ?? signed;
       const issuedAt = Date.now();
@@ -77,7 +80,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
         },
         signed,
       );
-      navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt });
+      navigation.navigate('SendReceipt', { ...draft, method, reference: nonce, issuedAt });
     },
     [navigation, draft, addPendingOffline],
   );
@@ -92,43 +95,77 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     return () => sub.remove();
   }, []);
 
-  const sendBySms = async () => {
-    if (!activeAccount || building) return;
-    if (!SMS_GATEWAY_NUMBER) {
-      Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
-      return;
-    }
+  /**
+   * Signs the voucher once per draft. Both methods share it, so switching from one to the other (or retrying) never
+   * makes a second voucher: the contract settles a nonce once, so a repeat can never pay twice.
+   */
+  const prepareVoucher = async (): Promise<string | null> => {
+    if (!activeAccount) return null;
     const recipient = findRecipientById(draft.recipientId);
-    if (!recipient) return;
+    if (!recipient) return null;
+    voucher.current ??= await buildOfflineVoucher({
+      walletPublicKey: activeAccount.stellarPublicKey,
+      senderShortId: activeAccount.shortId,
+      receiverShortId: recipient.shortId,
+      amountStroops: BigInt(pesosToStroops(draft.amount)),
+    });
+    return voucher.current;
+  };
+
+  const showPrepareError = (error: unknown, step: string, fallback: string) => {
+    if (!(error instanceof UserFacingError)) reportError(error, { step });
+    Alert.alert(messages().sendMethod.prepareFailedTitle, error instanceof UserFacingError ? errorMessage(error) : fallback);
+  };
+
+  const sendBySms = async () => {
+    if (building) return;
     setBuilding(true);
     try {
-      voucher.current ??= await buildOfflineVoucher({
-        walletPublicKey: activeAccount.stellarPublicKey,
-        senderShortId: activeAccount.shortId,
-        receiverShortId: recipient.shortId,
-        amountStroops: BigInt(pesosToStroops(draft.amount)),
-      });
+      const signed = await prepareVoucher();
+      if (!signed) return;
       awaitingSend.current = true;
-      const separator = Platform.OS === 'ios' ? '&' : '?';
-      await Linking.openURL(`sms:${SMS_GATEWAY_NUMBER}${separator}body=${encodeURIComponent(voucher.current)}`);
+      await openVoucherSms(signed);
     } catch (error) {
       awaitingSend.current = false;
-      if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendBySms' });
-      Alert.alert(
-        messages().sendMethod.prepareFailedTitle,
-        error instanceof UserFacingError ? errorMessage(error) : messages().sendMethod.noMessagingApp,
-      );
+      if (error instanceof MissingGatewayError) {
+        Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
+        return;
+      }
+      showPrepareError(error, 'sendBySms', messages().sendMethod.noMessagingApp);
     } finally {
       setBuilding(false);
     }
   };
 
-  // Relaying lets a partner text the voucher for the user. The partner's scan-and-send side is not built, so say so
-  // rather than showing a receipt for a payment that was never sent.
+  // No text load: show the signed voucher as a QR. A partner scans it in HoneBill and their phone texts it for the user.
+  const relay = async () => {
+    if (building) return;
+    setBuilding(true);
+    try {
+      const signed = await prepareVoucher();
+      if (signed) setRelayQr(relayQrPayload(signed));
+    } catch (error) {
+      if (error instanceof MissingGatewayError) {
+        Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
+        return;
+      }
+      showPrepareError(error, 'relayVoucher', messages().sendMethod.relayFailed);
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   const dispatch = (method: DispatchMethod) => {
     if (method === 'sms') void sendBySms();
-    else Alert.alert(messages().sendMethod.relayUnavailableTitle, messages().sendMethod.relayUnavailableBody);
+    else void relay();
   };
+
+  const recipient = findRecipientById(draft.recipientId);
+  const recipientLabel = !recipient
+    ? ''
+    : recipient.unverified
+      ? t.sendMethod.relayTo(`ID ${recipient.shortId}`)
+      : t.sendMethod.relayTo(recipient.name);
 
   return (
     <SendLayout title={t.sendMethod.title} icon={<SwapIcon />} onBack={navigation.goBack}>
@@ -178,9 +215,20 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
         cancelLabel={t.sendMethod.sentNo}
         onConfirm={() => {
           setConfirmingSend(false);
-          if (voucher.current) finish(voucher.current);
+          if (voucher.current) finish(voucher.current, 'sms');
         }}
         onCancel={() => setConfirmingSend(false)}
+      />
+      <RelayQrDialog
+        visible={relayQr !== null}
+        value={relayQr}
+        amount={draft.amount}
+        recipientLabel={recipientLabel}
+        onDone={() => {
+          setRelayQr(null);
+          if (voucher.current) finish(voucher.current, 'relay');
+        }}
+        onClose={() => setRelayQr(null)}
       />
     </SendLayout>
   );
