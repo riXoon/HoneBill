@@ -483,7 +483,9 @@ export const fil: Messages = {
     relayCancel: 'Isara',
     relayFailed: 'Nagkaproblema sa paghahanda ng QR code. Walang perang nailipat.',
     sentTitle: 'Na-send mo na ba ang text?',
-    sentBody: 'Matutuloy lang ang payment kapag na-send na ang text message.',
+    sentBody:
+      'Matutuloy ang payment kapag na-send na ang text. Habang hindi pa ito kumpirmado ng HoneBill, nakatabi muna ang halaga para hindi ito magastos nang dalawang beses.',
+    sentFor: (amount, name) => `${amount} para kay ${name}. `,
     sentYes: 'Oo, na-send ko na',
     sentNo: 'Hindi pa',
   },

@@ -479,7 +479,9 @@ export const en = {
     relayCancel: 'Close',
     relayFailed: 'Something went wrong while preparing the QR code. No money has been moved.',
     sentTitle: 'Did you send the text?',
-    sentBody: 'Your payment is only made once the message has been sent.',
+    sentBody:
+      'Your payment is made once the text is sent. Until HoneBill confirms it, the amount stays set aside so it cannot be spent twice.',
+    sentFor: (amount: string, name: string) => `${amount} to ${name}. `,
     sentYes: 'Yes, I sent it',
     sentNo: 'Not yet',
   },

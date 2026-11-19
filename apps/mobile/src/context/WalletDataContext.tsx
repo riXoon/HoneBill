@@ -63,6 +63,15 @@ type WalletData = {
    * it also settles over the internet whenever the phone is online.
    */
   addPendingOffline: (payment: PendingOffline, voucher: string) => void;
+  /**
+   * Holds an offline payment's money the moment its voucher leaves the app (the messaging app opens with it, or its
+   * QR is shown), whatever the person answers afterwards: from then on the voucher can settle at any time (sent later
+   * from drafts, forwarded, relayed), so what can be spent must already exclude it. Not queued: only a confirmed send
+   * is settled over the internet. Only the server's answer releases it (see `refresh`).
+   */
+  holdOffline: (payment: PendingOffline) => void;
+  /** Undoes `holdOffline` for a voucher that provably never left the app (the messaging app failed to open). */
+  releaseOfflineHold: (nonce: string) => void;
   /** Lists a move between the user's own wallets right away, until the server's history has it. */
   addMoves: (entries: Transaction[]) => void;
   /**
@@ -397,18 +406,10 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     void clearOtherWalletCaches(publicKey);
   }, [publicKey]);
 
-  const addPendingOffline = useCallback(
-    (payment: PendingOffline, voucher: string) => {
+  const holdOffline = useCallback(
+    (payment: PendingOffline) => {
       if (!publicKey) return;
       const nonce = normalizeNonce(payment.nonce);
-      try {
-        enqueueVoucher(publicKey, voucher, payment.nonce);
-        // Settle now if there is a connection; the text to the gateway is still on its way as the other path.
-        syncService.requestSync();
-      } catch (error) {
-        // The text to the gateway still settles it; only the internet path is lost.
-        reportError(error, { step: 'enqueueVoucher' });
-      }
       if (pendingRef.current.some((p) => normalizeNonce(p.nonce) === nonce)) return;
       const next = [payment, ...pendingRef.current];
       pendingRef.current = next;
@@ -417,6 +418,36 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       void savePending(publicKey, next);
     },
     [publicKey],
+  );
+
+  const releaseOfflineHold = useCallback(
+    (nonce: string) => {
+      if (!publicKey) return;
+      const key = normalizeNonce(nonce);
+      const next = pendingRef.current.filter((p) => !(normalizeNonce(p.nonce) === key && p.status === 'pending'));
+      if (next.length === pendingRef.current.length) return;
+      pendingRef.current = next;
+      setPending(next);
+      void savePending(publicKey, next);
+    },
+    [publicKey],
+  );
+
+  const addPendingOffline = useCallback(
+    (payment: PendingOffline, voucher: string) => {
+      if (!publicKey) return;
+      try {
+        enqueueVoucher(publicKey, voucher, payment.nonce);
+        // Settle now if there is a connection; the text to the gateway is still on its way as the other path.
+        syncService.requestSync();
+      } catch (error) {
+        // The text to the gateway still settles it; only the internet path is lost.
+        reportError(error, { step: 'enqueueVoucher' });
+      }
+      // Usually already held (when the voucher left the app); a repeat changes nothing.
+      holdOffline(payment);
+    },
+    [publicKey, holdOffline],
   );
 
   const addMoves = useCallback(
@@ -463,12 +494,28 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       refresh,
       syncNow,
       addPendingOffline,
+      holdOffline,
+      releaseOfflineHold,
       addMoves,
       pendingOffline,
       outcomes,
       dismissOutcomes,
     }),
-    [balances, transactions, status, error, syncedAt, refresh, addPendingOffline, addMoves, pendingOffline, outcomes, dismissOutcomes],
+    [
+      balances,
+      transactions,
+      status,
+      error,
+      syncedAt,
+      refresh,
+      addPendingOffline,
+      holdOffline,
+      releaseOfflineHold,
+      addMoves,
+      pendingOffline,
+      outcomes,
+      dismissOutcomes,
+    ],
   );
 
   return <WalletDataContext.Provider value={value}>{children}</WalletDataContext.Provider>;
