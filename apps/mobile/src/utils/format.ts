@@ -1,9 +1,19 @@
 import { messages } from '../i18n';
 
-/** 100000 -> { whole: "100,000", cents: "00" } */
+/**
+ * 100000 -> { whole: "100,000", cents: "00" }; 10.499 -> { whole: "10", cents: "49" }.
+ *
+ * Always to the centavo, and anything below a centavo is cut off, never rounded up: balances come from the ledger
+ * with 7 decimals, and rounding up would show more than can be spent (the backend's texts cut off the same way). The
+ * tiny nudge only absorbs float error, so 10.29 stored as 10.28999999 still reads 10.29.
+ */
 export function splitPesos(amount: number): { whole: string; cents: string } {
-  const [whole, cents] = amount.toFixed(2).split('.');
-  return { whole: whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','), cents };
+  const negative = amount < 0;
+  const centavos = Math.floor(Math.abs(amount) * 100 + 1e-6);
+  const whole = Math.floor(centavos / 100)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return { whole: `${negative && centavos > 0 ? '-' : ''}${whole}`, cents: String(centavos % 100).padStart(2, '0') };
 }
 
 /** 1000 -> "₱1,000.00" */
@@ -12,9 +22,10 @@ export function formatPeso(amount: number): string {
   return `₱${whole}.${cents}`;
 }
 
-/** 1000 -> "1,000" (the whole-peso form used by the balance hints). */
-export function formatWhole(amount: number): string {
-  return splitPesos(amount).whole;
+/** 1000.5 -> "1,000.50": pesos without the sign, for texts that already say "PHP". */
+export function formatPesoPlain(amount: number): string {
+  const { whole, cents } = splitPesos(amount);
+  return `${whole}.${cents}`;
 }
 
 /** Pesos for PHPC, otherwise the amount with its asset code (e.g. "12.50 USDC"). */

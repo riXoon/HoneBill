@@ -5,7 +5,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useWalletData } from '../../context/WalletDataContext';
 import { useT } from '../../i18n';
 import { colors, fonts } from '../../theme';
-import { formatPeso, formatWhole } from '../../utils/format';
+import { formatPeso, formatPesoPlain } from '../../utils/format';
 import { Mascot, type MascotMood } from '../mascot/Mascot';
 import { ResultDialog, type ResultDialogProps } from '../ui/ResultDialog';
 import { InfoIcon } from '../ui/smallIcons';
@@ -95,7 +95,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
         </View>
 
         <BalanceBar
-          caption={t.transfer.balanceAfter(NAMES[to], destinationAfter === null ? '--' : `₱${formatWhole(destinationAfter)}`)}
+          caption={t.transfer.balanceAfter(NAMES[to], destinationAfter === null ? '--' : formatPeso(destinationAfter))}
           ratio={destinationAfter !== null && total > 0 ? destinationAfter / total : 0}
         />
 
@@ -103,7 +103,7 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
 
         <View>
           <Text style={styles.hint}>
-            {t.transfer.available(NAMES[from], available === null ? '--' : formatWhole(available))}
+            {t.transfer.available(NAMES[from], available === null ? '--' : formatPesoPlain(available))}
           </Text>
         </View>
       </GlassCard>

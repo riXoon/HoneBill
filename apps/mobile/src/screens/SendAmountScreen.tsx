@@ -19,7 +19,7 @@ import { useRecentRecipients } from '../hooks/useRecentRecipients';
 import { useSendMode } from '../hooks/useSendMode';
 import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
-import { formatPeso, formatWhole } from '../utils/format';
+import { formatPeso, formatPesoPlain } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
 import { colors, fonts } from '../theme';
 
@@ -119,14 +119,14 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
         </View>
 
         <BalanceBar
-          caption={t.send.balanceAfter(balanceAfter === null ? '--' : `₱${formatWhole(Math.max(0, balanceAfter))}`)}
+          caption={t.send.balanceAfter(balanceAfter === null ? '--' : formatPeso(Math.max(0, balanceAfter)))}
           ratio={available && balanceAfter !== null ? balanceAfter / available : 0}
         />
 
         <AmountField value={amountText} onChangeText={setAmountText} />
 
         <View>
-          <Text style={styles.hint}>{t.send.available(available === null ? '--' : formatWhole(available))}</Text>
+          <Text style={styles.hint}>{t.send.available(available === null ? '--' : formatPesoPlain(available))}</Text>
         </View>
       </GlassCard>
 

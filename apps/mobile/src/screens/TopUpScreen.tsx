@@ -14,7 +14,7 @@ import { useTopUp } from '../hooks/useTopUp';
 import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
-import { formatPeso, formatWhole } from '../utils/format';
+import { formatPeso, formatPesoPlain } from '../utils/format';
 
 
 /**
@@ -65,7 +65,7 @@ export function TopUpScreen({ navigation }: NativeStackScreenProps<RootStackPara
           {problem ?? ' '}
         </Text>
         <AmountField value={amountText} onChangeText={busy ? () => undefined : setAmountText} />
-        <Text style={styles.hint}>{t.topUp.onlineBalance(balances ? formatWhole(balances.online) : '--')}</Text>
+        <Text style={styles.hint}>{t.topUp.onlineBalance(balances ? formatPesoPlain(balances.online) : '--')}</Text>
       </GlassCard>
 
       <View style={styles.noteRow}>
