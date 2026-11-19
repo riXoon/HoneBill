@@ -65,7 +65,7 @@ describe('SettlementJobRunner texts', () => {
       {
         to: '+639170000001',
         message:
-          'HoneBill: Your offline payment of PHP 100.00 to ID def456 did not go through. No account has this ID. No money was taken. Ref: QUJDRE',
+          'HoneBill: Your offline payment of PHP 100.00 to ID def456 did not go through. No account has this ID. Check the ID (capital and small letters matter). No money was taken. Ref: QUJDRE',
         dedupKey: 'settlement-failed:QUJDREVGRw==:sender',
       },
     ]);
@@ -76,6 +76,28 @@ describe('SettlementJobRunner texts', () => {
     await expect(runner.run(job)).resolves.toEqual({ status: 'FAILED', txHash: 'h' });
     expect(texts()).toHaveLength(1);
     expect(texts()[0].message).toContain('did not go through');
+  });
+
+  it('says why when the ledger rejects the payment with a known reason', async () => {
+    const { runner, texts } = makeRunner(async () => ({
+      status: 'FAILED',
+      txHash: 'h',
+      reason: 'Your Offline balance was not enough for the amount plus the PHP 0.50 fee.',
+    }));
+    await runner.run(job);
+    expect(texts()[0].message).toContain('Offline balance was not enough');
+  });
+
+  it('repeats the stored reason when the voucher had already failed', async () => {
+    const { runner, texts } = makeRunner(async () => {
+      throw new ApiResponseException(409, {
+        txHash: null,
+        status: 'FAILED',
+        reason: 'This payment was already used once, so it cannot be used again.',
+      });
+    });
+    await expect(runner.run(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(texts()[0].message).toContain('already used once');
   });
 
   it('sends nothing for a failure that will be retried', async () => {

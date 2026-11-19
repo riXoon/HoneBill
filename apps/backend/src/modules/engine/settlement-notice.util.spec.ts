@@ -56,12 +56,19 @@ describe('settlement notices', () => {
   });
 
   it('turns failures into plain reasons without leaking internals', () => {
-    expect(userFailureReason(new Error('Recipient account not found'))).toBe('No account has this ID.');
-    expect(userFailureReason('Recipient account not found')).toBe('No account has this ID.');
-    expect(userFailureReason(new Error('HostError: Error(Contract, 6)'))).toBe('Insufficient balance.');
-    expect(userFailureReason(new Error('Invalid voucher signature'))).toMatch(/could not be verified/);
+    expect(userFailureReason(new Error('Recipient account not found'))).toMatch(/^No account has this ID\./);
+    expect(userFailureReason('Recipient account not found')).toMatch(/^No account has this ID\./);
+    expect(userFailureReason(new Error('HostError: Error(Contract, 6)'))).toMatch(/Offline balance was not enough/);
+    expect(userFailureReason(new Error('HostError: Error(Contract, 5)'))).toMatch(/already used once/);
+    expect(userFailureReason(new Error('Invalid voucher signature'))).toMatch(/another phone/);
     expect(userFailureReason('Token is inactive')).toBe('This currency is not accepted right now.');
-    expect(userFailureReason('AAAAAAAAAGT/////AAAAAQ==')).toBe('The network did not accept this payment.');
-    expect(userFailureReason(null)).toBe('The network did not accept this payment.');
+    expect(userFailureReason(new Error('Malformed SMS payload: expected 6 parts, got 5'))).toMatch(/changed or cut off/);
+    expect(userFailureReason('AAAAAAAAAGT/////AAAAAQ==')).toBe('The network rejected it while recording it.');
+    expect(userFailureReason(null)).toBe('The network rejected it while recording it.');
+  });
+
+  it('keeps a reason that is already written for the sender', () => {
+    const reason = userFailureReason('Recipient account not found');
+    expect(userFailureReason(reason)).toBe(reason);
   });
 });

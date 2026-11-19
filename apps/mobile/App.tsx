@@ -18,8 +18,10 @@ import { AuthProvider } from './src/context/AuthContext';
 import { WalletDataProvider } from './src/context/WalletDataContext';
 import { ConnectionRestoredNotice } from './src/components/ConnectionRestoredNotice';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { SmsDispatchPrompt } from './src/components/send/SmsDispatchPrompt';
 import { useAutoLock } from './src/hooks/useAutoLock';
 import { installGlobalErrorHandler } from './src/services/errorReporting';
+import { getLanguage } from './src/i18n';
 import { getAccountPhone } from './src/services/accountPhone';
 import { foregrounded$ } from './src/services/appLifecycle';
 import { checkForUpdate, initAppUpdates } from './src/services/appUpdates';
@@ -60,6 +62,11 @@ import type { RootStackParamList } from './src/navigation/types';
 import { fonts } from './src/theme';
 
 installGlobalErrorHandler();
+// Opens the key-value store (expo-sqlite kv-store) synchronously, before any async read or write can start. Otherwise
+// the first async call (app updates, in an effect) and the first sync call (the language, on first render) race: both
+// open the database and the second replaces the first, leaving calls on a dropped handle that Android rejects with
+// "NativeDatabase.prepareAsync ... NullPointerException". The language is needed for the first frame anyway.
+getLanguage();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // No database, sync or Stellar code runs at startup; data is fetched per account after sign-in.
@@ -105,6 +112,8 @@ function RootNavigator({ initialRoute }: { initialRoute: 'Landing' | 'Login' }) 
         {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}
         <Stack.Screen name="SendReceipt" component={SendReceiptScreen} options={{ gestureEnabled: false }} />
       </Stack.Navigator>
+      {/* "Did you send the text?" for an offline payment, asked again after a lock or restart. */}
+      <SmsDispatchPrompt navigation={navigationRef} />
     </NavigationContainer>
   );
 }

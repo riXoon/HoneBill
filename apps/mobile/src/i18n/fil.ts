@@ -220,6 +220,9 @@ export const fil: Messages = {
     point: 'Itapat ang camera sa QR code, o mag-upload ng naka-save na QR.',
     uploadA11y: 'Mag-upload ng QR mula sa gallery',
     reading: 'Binabasa…',
+    relayFailedTitle: 'Hindi mabuksan ang messages',
+    relayFailedBody: 'Walang mabuksang messaging app, kaya hindi na-send ang payment. Pakisubukan ulit.',
+    relayNoGatewayBody: 'Walang naka-set na payment number sa phone na ito, kaya hindi ma-send ang payment mula rito.',
   },
 
   txDetail: {
@@ -471,10 +474,18 @@ export const fil: Messages = {
     relayBody: 'Walang load? Ipakita ang iyong screen sa isang partner para ma-scan nila ito at sila ang mag-text para sa iyo.',
     prepareFailedTitle: 'Hindi maihanda ang payment',
     noMessagingApp: 'Walang mabuksang messaging app. Walang perang nailipat.',
-    relayUnavailableTitle: 'Hindi pa available',
-    relayUnavailableBody: 'Hindi pa available ang pagpapatulong sa pag-send. Walang perang nailipat.',
+    relayQrTitle: 'Ipa-scan ito sa partner mo',
+    relayQrBody:
+      'I-scan ito ng partner mo gamit ang HoneBill o ang camera ng phone niya, tapos i-tap niya ang Send sa text na magbubukas. Load niya ang gagamitin, at hindi niya mababago ang halaga o kung sino ang tatanggap.',
+    relayQrA11y: 'Payment QR code na ipa-scan sa partner mo',
+    relayTo: (name) => `para kay ${name}`,
+    relayDone: 'Na-send na ng partner ko',
+    relayCancel: 'Isara',
+    relayFailed: 'Nagkaproblema sa paghahanda ng QR code. Walang perang nailipat.',
     sentTitle: 'Na-send mo na ba ang text?',
-    sentBody: 'Matutuloy lang ang payment kapag na-send na ang text message.',
+    sentBody:
+      'Matutuloy ang payment kapag na-send na ang text. Habang hindi pa ito kumpirmado ng HoneBill, nakatabi muna ang halaga para hindi ito magastos nang dalawang beses.',
+    sentFor: (amount, name) => `${amount} para kay ${name}. `,
     sentYes: 'Oo, na-send ko na',
     sentNo: 'Hindi pa',
   },

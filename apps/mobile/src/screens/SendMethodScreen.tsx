@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { Mascot, type MascotMood } from '../components/mascot/Mascot';
 import { GlassCard } from '../components/send/GlassCard';
+import { RelayQrDialog } from '../components/send/RelayQrDialog';
 import { SendLayout } from '../components/send/SendLayout';
-import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { ChevronForwardIcon, SwapIcon } from '../components/ui/smallIcons';
-import { SMS_GATEWAY_NUMBER } from '../config/env';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import type { DispatchMethod } from '../types/send';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
 import { buildOfflineVoucher } from '../services/offline/voucher';
+import { MissingGatewayError, openVoucherSms, relayQrPayload } from '../services/offline/voucherFormat';
+import {
+  clearUnansweredDispatch,
+  pendingPayment,
+  saveUnansweredDispatch,
+  voucherNonce,
+} from '../services/offline/smsDispatch';
 import { findRecipientById } from '../services/recipientDirectory';
 import { pesosToStroops } from '../services/walletActions';
 import { messages, useT } from '../i18n';
@@ -42,93 +48,134 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   // The signed voucher for this draft. Kept so a retry texts the same voucher (same nonce) instead of signing a
   // second one: the contract settles a nonce once, so a repeat can never pay twice.
   const voucher = useRef<string | null>(null);
-  const awaitingSend = useRef(false);
-  /** Shows the "Did you send the text?" dialog. */
-  const [confirmingSend, setConfirmingSend] = useState(false);
+  /** The QR shown for a partner to scan and text ("Get Help Sending"); null while it is closed. */
+  const [relayQr, setRelayQr] = useState<string | null>(null);
 
-  const { addPendingOffline } = useWalletData();
+  const { addPendingOffline, holdOffline, releaseOfflineHold } = useWalletData();
+  /** When the voucher first left the app (messaging app opened, or QR shown): its hold's time, and the payment's. */
+  const heldAt = useRef<number | null>(null);
 
+  /**
+   * Holds the voucher's money before it leaves the app. From the moment the messaging app holds the text (or a partner
+   * can scan the QR) it can settle at any time, whatever the person answers later, so what can be spent must already
+   * exclude it. Released only by the server's answer once online, or right away if the messaging app never opened.
+   */
+  const holdVoucher = (signed: string): number => {
+    const at = heldAt.current ?? Date.now();
+    holdOffline(pendingPayment(voucherNonce(signed), draft.amount, findRecipientById(draft.recipientId) ?? null, at));
+    return at;
+  };
+
+  // Only the relay ends here. "Did you send the text?" for the SMS method is asked by `SmsDispatchPrompt` above the
+  // screens, so the auto-lock or the phone closing the app while the person is in the messaging app cannot lose it.
   const finish = useCallback(
-    (signed: string) => {
-      // The voucher's fifth field is its nonce, unique to this payment, so it serves as the reference.
-      const nonce = signed.split(':')[4] ?? signed;
-      const issuedAt = Date.now();
-      const recipient = findRecipientById(draft.recipientId);
-      // The server lists this only after it has settled the text, which can be long after (the sender may have no
-      // data). Showing it as pending now means the sender's History is not blank about a payment they just made.
-      // The voucher is also queued, so the phone settles it over the internet once it is online.
-      addPendingOffline(
-        {
-          id: `pending:${nonce}`,
-          timestamp: issuedAt,
-          source: 'offline',
-          direction: 'out',
-          amount: draft.amount,
-          assetCode: 'PHPC',
-          description: !recipient
-            ? 'Sent to recipient'
-            : recipient.unverified
-              ? `Sent to ID ${recipient.shortId}`
-              : `Sent to ${recipient.name}`,
-          status: 'pending',
-          ref: nonce,
-          nonce,
-          ...(recipient ? { counterpartyShortId: recipient.shortId } : {}),
-        },
-        signed,
-      );
-      navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt });
+    (signed: string, method: DispatchMethod) => {
+      const nonce = voucherNonce(signed);
+      const issuedAt = heldAt.current ?? Date.now();
+      // Already held; now also queued, so the phone settles it over the internet once it is online.
+      addPendingOffline(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt), signed);
+      navigation.navigate('SendReceipt', { ...draft, method, reference: nonce, issuedAt });
     },
     [navigation, draft, addPendingOffline],
   );
 
-  // The text app cannot say whether the message went out, so when the user comes back, ask.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' || !awaitingSend.current || !voucher.current) return;
-      awaitingSend.current = false;
-      setConfirmingSend(true);
+  /**
+   * Signs the voucher once per draft. Both methods share it, so switching from one to the other (or retrying) never
+   * makes a second voucher: the contract settles a nonce once, so a repeat can never pay twice.
+   */
+  const prepareVoucher = async (): Promise<string | null> => {
+    if (!activeAccount) return null;
+    const recipient = findRecipientById(draft.recipientId);
+    if (!recipient) return null;
+    voucher.current ??= await buildOfflineVoucher({
+      walletPublicKey: activeAccount.stellarPublicKey,
+      senderShortId: activeAccount.shortId,
+      receiverShortId: recipient.shortId,
+      amountStroops: BigInt(pesosToStroops(draft.amount)),
     });
-    return () => sub.remove();
-  }, []);
+    return voucher.current;
+  };
+
+  const showPrepareError = (error: unknown, step: string, fallback: string) => {
+    if (!(error instanceof UserFacingError)) reportError(error, { step });
+    Alert.alert(messages().sendMethod.prepareFailedTitle, error instanceof UserFacingError ? errorMessage(error) : fallback);
+  };
 
   const sendBySms = async () => {
-    if (!activeAccount || building) return;
-    if (!SMS_GATEWAY_NUMBER) {
-      Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
-      return;
-    }
-    const recipient = findRecipientById(draft.recipientId);
-    if (!recipient) return;
+    if (building) return;
     setBuilding(true);
     try {
-      voucher.current ??= await buildOfflineVoucher({
-        walletPublicKey: activeAccount.stellarPublicKey,
-        senderShortId: activeAccount.shortId,
-        receiverShortId: recipient.shortId,
-        amountStroops: BigInt(pesosToStroops(draft.amount)),
-      });
-      awaitingSend.current = true;
-      const separator = Platform.OS === 'ios' ? '&' : '?';
-      await Linking.openURL(`sms:${SMS_GATEWAY_NUMBER}${separator}body=${encodeURIComponent(voucher.current)}`);
+      const signed = await prepareVoucher();
+      if (!signed || !activeAccount) return;
+      const alreadyLeft = heldAt.current !== null;
+      // Saved before the messaging app opens, so the question survives a lock or the app being closed meanwhile.
+      const dispatch = {
+        publicKey: activeAccount.stellarPublicKey,
+        voucher: signed,
+        nonce: voucherNonce(signed),
+        draft,
+        recipient: findRecipientById(draft.recipientId) ?? null,
+        openedAt: heldAt.current ?? Date.now(),
+      };
+      await saveUnansweredDispatch(dispatch);
+      heldAt.current = dispatch.openedAt;
+      holdVoucher(signed);
+      try {
+        await openVoucherSms(signed);
+      } catch (error) {
+        // The messaging app never opened: nothing to ask about. If the voucher never left the app before either
+        // (an earlier text or QR), it can never settle, so its money is free again.
+        await clearUnansweredDispatch(dispatch.publicKey, dispatch.nonce);
+        if (!alreadyLeft) {
+          heldAt.current = null;
+          releaseOfflineHold(dispatch.nonce);
+        }
+        throw error;
+      }
     } catch (error) {
-      awaitingSend.current = false;
-      if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendBySms' });
-      Alert.alert(
-        messages().sendMethod.prepareFailedTitle,
-        error instanceof UserFacingError ? errorMessage(error) : messages().sendMethod.noMessagingApp,
-      );
+      if (error instanceof MissingGatewayError) {
+        Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
+        return;
+      }
+      showPrepareError(error, 'sendBySms', messages().sendMethod.noMessagingApp);
     } finally {
       setBuilding(false);
     }
   };
 
-  // Relaying lets a partner text the voucher for the user. The partner's scan-and-send side is not built, so say so
-  // rather than showing a receipt for a payment that was never sent.
+  // No text load: show the signed voucher as a QR. A partner scans it in HoneBill and their phone texts it for the user.
+  const relay = async () => {
+    if (building) return;
+    setBuilding(true);
+    try {
+      const signed = await prepareVoucher();
+      if (!signed) return;
+      const payload = relayQrPayload(signed);
+      // A partner can scan it as soon as it is on screen, so it is held from now on, even if the dialog is closed.
+      heldAt.current = holdVoucher(signed);
+      setRelayQr(payload);
+    } catch (error) {
+      if (error instanceof MissingGatewayError) {
+        Alert.alert('Not available', 'The payment number is not set. Add EXPO_PUBLIC_SMS_GATEWAY_NUMBER to .env.');
+        return;
+      }
+      showPrepareError(error, 'relayVoucher', messages().sendMethod.relayFailed);
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   const dispatch = (method: DispatchMethod) => {
     if (method === 'sms') void sendBySms();
-    else Alert.alert(messages().sendMethod.relayUnavailableTitle, messages().sendMethod.relayUnavailableBody);
+    else void relay();
   };
+
+  const recipient = findRecipientById(draft.recipientId);
+  const recipientLabel = !recipient
+    ? ''
+    : recipient.unverified
+      ? t.sendMethod.relayTo(`ID ${recipient.shortId}`)
+      : t.sendMethod.relayTo(recipient.name);
 
   return (
     <SendLayout title={t.sendMethod.title} icon={<SwapIcon />} onBack={navigation.goBack}>
@@ -169,18 +216,16 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
           </Pressable>
         ))}
       </View>
-      <ConfirmDialog
-        visible={confirmingSend}
-        mood="phone"
-        title={t.sendMethod.sentTitle}
-        message={t.sendMethod.sentBody}
-        confirmLabel={t.sendMethod.sentYes}
-        cancelLabel={t.sendMethod.sentNo}
-        onConfirm={() => {
-          setConfirmingSend(false);
-          if (voucher.current) finish(voucher.current);
+      <RelayQrDialog
+        visible={relayQr !== null}
+        value={relayQr}
+        amount={draft.amount}
+        recipientLabel={recipientLabel}
+        onDone={() => {
+          setRelayQr(null);
+          if (voucher.current) finish(voucher.current, 'relay');
         }}
-        onCancel={() => setConfirmingSend(false)}
+        onClose={() => setRelayQr(null)}
       />
     </SendLayout>
   );

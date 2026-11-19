@@ -56,20 +56,47 @@ export function formatVoucherAmount(stroops: bigint, symbol: string, decimals = 
   return `${label} ${whole.toLocaleString('en-US')}.${cents.toString().padStart(2, '0')}`;
 }
 
-const GENERIC_FAILURE = 'The network did not accept this payment.';
+/**
+ * Only when nothing more specific is known (e.g. the ledger rejected the transaction without saying why). Every
+ * other reason below names the cause and, where the sender can do something, what to do. Keep them short: the whole
+ * text is already about 110 characters, and every 153 more is another SMS part.
+ */
+const GENERIC_FAILURE = 'The network rejected it while recording it.';
 
-/** Overrides for reasons whose technical wording means little to the person who paid. */
+/**
+ * Reasons as the sender reads them, keyed by `normalizeSettlementUserFailure`'s labels. They say why, never how the
+ * system works inside. Plain ASCII only (see the file comment).
+ */
 const FRIENDLIER: Record<string, string> = {
-  'Recipient was not found.': 'No account has this ID.',
+  'Recipient was not found.': 'No account has this ID. Check the ID (capital and small letters matter).',
+  'Invalid recipient ID.': 'The ID is not valid. Check it (capital and small letters matter).',
+  'Insufficient balance.': 'Your Offline balance was not enough for the amount plus the PHP 0.50 fee.',
+  'Voucher has already been used.': 'This payment was already used once, so it cannot be used again.',
+  'Voucher has expired.': 'This payment is too old to use.',
+  'Invalid transaction amount.': 'The amount is not valid.',
   'Offline device key is not enrolled.': 'This phone is not set up for offline payments yet. Open the app once with internet.',
-  'Invalid voucher signature.': 'The payment could not be verified. Open the app once with internet, then try again.',
+  // Both an edited text and a voucher from a phone replaced by another sign-in end here; the check cannot tell them apart.
+  'Invalid voucher signature.':
+    'It could not be verified: the text was changed, or this phone is no longer set up for your offline payments (e.g. after signing in on another phone). Open the app with internet, then pay again.',
   'Sender account is not registered.': 'Your account was not found.',
+  'Missing token trustline.': 'An account in this payment cannot receive PHPC yet.',
+  'Unauthorized transaction.': 'This payment was not authorized.',
+  'Unauthorized relayer.': 'The payment service could not process it right now.',
+  'Transaction rejected by contract.': GENERIC_FAILURE,
 };
+
+/** The text did not arrive whole or was edited, so the payment inside it could not be read. */
+const UNREADABLE = 'The text was changed or cut off, so it could not be read.';
+const UNREADABLE_PATTERN =
+  /malformed sms payload|invalid base62|amount encoding|invalid token id|shortid must be|amount must be|exceeds i128|invalid base64 characters|must decode to \d+ bytes/i;
 
 /** A failure (an error, or a stored `failReason`) as one short sentence for the sender. Never leaks internals. */
 export function userFailureReason(failure: unknown): string {
   if (failure === null || failure === undefined || failure === '') return GENERIC_FAILURE;
   const error = failure instanceof Error ? failure : new Error(String(failure));
+  // Already a sentence written for the sender (e.g. passed on from an earlier decision): keep it.
+  if (Object.values(FRIENDLIER).includes(error.message) || error.message === UNREADABLE) return error.message;
+  if (UNREADABLE_PATTERN.test(error.message)) return UNREADABLE;
   const reason = normalizeSettlementUserFailure(error);
   if (reason) return FRIENDLIER[reason] ?? reason;
   if (/token is inactive|token not found/i.test(error.message)) return 'This currency is not accepted right now.';

@@ -11,15 +11,20 @@ import type { SettlementJobData } from '../settlements/settlement-queue.constant
 /** What the runner needs from a job: BullMQ's Job has these, and the QStash route builds one from its request. */
 export type SettlementJob = { id?: string; name: string; data: SettlementJobData };
 
-type SettlementResult = { txHash: string | null; status: string };
+/** `reason` is set on a FAILED result: why, in the sender's words. */
+type SettlementResult = { txHash: string | null; status: string; reason?: string };
 
-/** The decided status a 409 carries: the voucher was settled (or failed) already, usually by the app over the internet. */
-function decidedElsewhere(error: unknown): { status: 'SETTLED' | 'FAILED'; txHash: string | null } | null {
+/**
+ * The decided status a 409 carries: the voucher was settled (or failed) already, usually by the app over the internet.
+ * A failed one carries the stored reason, so the text can repeat why.
+ */
+function decidedElsewhere(error: unknown): { status: 'SETTLED' | 'FAILED'; txHash: string | null; reason: string | null } | null {
   if (!(error instanceof ApiResponseException) || error.getStatus() !== 409) return null;
   const status = error.responseBody.status;
   if (status !== 'SETTLED' && status !== 'FAILED') return null;
   const txHash = typeof error.responseBody.txHash === 'string' ? error.responseBody.txHash : null;
-  return { status, txHash };
+  const reason = typeof error.responseBody.reason === 'string' ? error.responseBody.reason : null;
+  return { status, txHash, reason };
 }
 
 /**
@@ -54,10 +59,10 @@ export class SettlementJobRunner {
       const decided = decidedElsewhere(error);
       if (decided?.status === 'SETTLED') {
         await this.notifySettled(job);
-        return decided;
+        return { status: decided.status, txHash: decided.txHash };
       }
       if (decided?.status === 'FAILED') {
-        await this.notifyFailed(job, userFailureReason(null));
+        await this.notifyFailed(job, userFailureReason(decided.reason));
         throw new UnrecoverableError('Voucher already failed');
       }
       if (!isRetryableSettlementError(error)) {
@@ -73,7 +78,7 @@ export class SettlementJobRunner {
       throw new Error(`Settlement ${result.txHash ?? ''} has not been confirmed (timeout)`);
     }
     if (result.status === 'SETTLED') await this.notifySettled(job);
-    else if (result.status === 'FAILED') await this.notifyFailed(job, userFailureReason(null));
+    else if (result.status === 'FAILED') await this.notifyFailed(job, userFailureReason(result.reason ?? null));
     return result;
   }
 

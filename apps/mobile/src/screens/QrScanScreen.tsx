@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused } from '@react-navigation/native';
@@ -19,6 +19,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
+import { reportError } from '../services/errorReporting';
+import { MissingGatewayError, openVoucherSms, parseRelayVoucher } from '../services/offline/voucherFormat';
 import {
   parseRecipientQr,
   parseRecipientQrAmount,
@@ -61,6 +63,23 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
   const [checking, setChecking] = useState(false);
   useEffect(() => () => lookup.current?.abort(), []);
 
+  // After relaying a voucher the user is in their messaging app. Unlock scanning only a moment after they come back,
+  // so a camera still pointed at the sender's QR does not open a second text straight away.
+  const relayReturn = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || !relayReturn.current) return;
+      const release = relayReturn.current;
+      relayReturn.current = null;
+      timer = setTimeout(release, 2000);
+    });
+    return () => {
+      sub.remove();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
   /** Handles the text of a QR code, whether it came from the camera or from an uploaded image. */
   const handleCode = useCallback(
     async (data: string) => {
@@ -68,8 +87,31 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
       handled.current = true;
       const release = () => (handled.current = false);
 
+      // A partner's signed voucher ("Get Help Sending"): text it to the gateway for them. It is already signed, so this
+      // phone only carries it; the user just taps Send in their messaging app.
+      const relayed = parseRelayVoucher(data);
+      if (relayed) {
+        try {
+          relayReturn.current = release;
+          await openVoucherSms(relayed.text);
+        } catch (error) {
+          relayReturn.current = null;
+          const noGateway = error instanceof MissingGatewayError;
+          if (!noGateway) reportError(error, { step: 'relayVoucherSms' });
+          Alert.alert(
+            messages().qrScan.relayFailedTitle,
+            noGateway ? messages().qrScan.relayNoGatewayBody : messages().qrScan.relayFailedBody,
+            [{ text: messages().common.ok, onPress: release }],
+            { onDismiss: release },
+          );
+        }
+        return;
+      }
+
       const shortId = parseRecipientQr(data);
       if (!shortId) {
+        // Development builds only: the raw text, to see why a code was not recognised (a voucher holds no secrets).
+        if (__DEV__) console.log('[qrScan] unrecognised code', JSON.stringify(data));
         Alert.alert(messages().qrScan.notHoneBillTitle, messages().qrScan.notHoneBillBody, [{ text: messages().common.ok, onPress: release }], {
           onDismiss: release,
         });
@@ -147,7 +189,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (picked.canceled || !picked.assets[0]) return;
       const results = await Camera.scanFromURLAsync(picked.assets[0].uri, ['qr']);
-      const code = results.find((r) => parseRecipientQr(r.data))?.data ?? results[0]?.data;
+      const code = results.find((r) => parseRecipientQr(r.data) || parseRelayVoucher(r.data))?.data ?? results[0]?.data;
       if (!code) {
         Alert.alert(messages().qrScan.noQrTitle, messages().qrScan.noQrBody);
         return;

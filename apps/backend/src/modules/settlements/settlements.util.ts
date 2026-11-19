@@ -10,7 +10,19 @@ import {
   verifyOfflineVoucherSignature,
 } from './offline-voucher.util.js';
 import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
-import type { VoucherNotice } from '../engine/settlement-notice.util.js';
+import { userFailureReason, type VoucherNotice } from '../engine/settlement-notice.util.js';
+
+/**
+ * A voucher decided before: its status, plus for a failed one the reason in the sender's words, so a later text
+ * about it (the same voucher texted again, or the gateway after the app) says why instead of only "did not go through".
+ */
+function decidedBody(settlement: { txHash: string | null; status: string; failReason?: string | null }) {
+  return {
+    txHash: settlement.txHash,
+    status: settlement.status,
+    ...(settlement.status === 'FAILED' ? { reason: userFailureReason(settlement.failReason) } : {}),
+  };
+}
 
 // Preserve the settlement helper exports while sharing parsing and XDR logic with Phase 5.
 /** Retains the existing settlement import while using the shared Base62 decoder. */
@@ -74,7 +86,7 @@ export class SettlementsService {
     const payload = parseSettlementSmsBody(smsBody);
     const existing = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
     if (existing && existing.status !== 'PENDING') {
-      throw new ApiResponseException(409, { txHash: existing.txHash, status: existing.status });
+      throw new ApiResponseException(409, decidedBody(existing));
     }
     const [sender, receiver, token] = await Promise.all([
       this.prisma.account.findUnique({ where: { shortId: payload.senderShortId } }),
@@ -146,7 +158,7 @@ export class SettlementsService {
           settlement = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
           if (!settlement) throw error;
           if (settlement.status !== 'PENDING') {
-            throw new ApiResponseException(409, { txHash: settlement.txHash, status: settlement.status });
+            throw new ApiResponseException(409, decidedBody(settlement));
           }
         } else {
           throw error;
@@ -189,7 +201,7 @@ export class SettlementsService {
         where: { id: settlement.id },
         data: { status: 'FAILED', txHash: outcome.txHash, failReason: reason },
       });
-      return { txHash: outcome.txHash, status: 'FAILED' };
+      return { txHash: outcome.txHash, status: 'FAILED', reason: userFailureReason(reason) };
     }
     throw new Error(`Settlement transaction ${outcome.txHash} is not confirmed yet (timeout)`);
   }

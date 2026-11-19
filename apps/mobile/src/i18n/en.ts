@@ -214,6 +214,9 @@ export const en = {
     point: 'Point your camera at the QR code, or upload a saved one.',
     uploadA11y: 'Upload QR from gallery',
     reading: 'Reading…',
+    relayFailedTitle: 'Could not open your messages',
+    relayFailedBody: 'No messaging app could be opened, so the payment was not sent. Please try again.',
+    relayNoGatewayBody: 'The payment number is not set on this phone, so the payment cannot be sent from here.',
   },
 
   txDetail: {
@@ -467,10 +470,18 @@ export const en = {
     relayBody: "Don't have text load? Show your screen to a partner so they can scan it and send the text for you",
     prepareFailedTitle: 'Could not prepare the payment',
     noMessagingApp: 'No messaging app could be opened. No money has been moved.',
-    relayUnavailableTitle: 'Not available yet',
-    relayUnavailableBody: 'Getting help to send is not available yet. No money has been moved.',
+    relayQrTitle: 'Let your partner scan this',
+    relayQrBody:
+      'Your partner scans this with HoneBill or their phone camera, then taps Send on the text that opens. Their text load is used, and they cannot change the amount or who gets it.',
+    relayQrA11y: 'Payment QR code for your partner to scan',
+    relayTo: (name: string) => `to ${name}`,
+    relayDone: 'My partner sent it',
+    relayCancel: 'Close',
+    relayFailed: 'Something went wrong while preparing the QR code. No money has been moved.',
     sentTitle: 'Did you send the text?',
-    sentBody: 'Your payment is only made once the message has been sent.',
+    sentBody:
+      'Your payment is made once the text is sent. Until HoneBill confirms it, the amount stays set aside so it cannot be spent twice.',
+    sentFor: (amount: string, name: string) => `${amount} to ${name}. `,
     sentYes: 'Yes, I sent it',
     sentNo: 'Not yet',
   },
