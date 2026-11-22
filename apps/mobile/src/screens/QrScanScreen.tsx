@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Camera, CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -33,6 +33,11 @@ import type { Recipient } from '../types/recipient';
 import type { SendMode } from '../types/send';
 import { colors, fonts } from '../theme';
 import { messages, useT } from '../i18n';
+
+function qrPayload({ raw, data }: BarcodeScanningResult): string {
+  // Android can reformat structured QR codes in `data`, including the SMS wrapper on relay vouchers.
+  return raw || data;
+}
 
 // Figma: QR Scan (870:3349), 402x874.
 export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'QrScan'>) {
@@ -179,7 +184,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
     [activeAccount?.shortId, navigation, mode, connected],
   );
 
-  const onScanned = useCallback(({ data }: { data: string }) => void handleCode(data), [handleCode]);
+  const onScanned = useCallback((result: BarcodeScanningResult) => void handleCode(qrPayload(result)), [handleCode]);
 
   // A saved QR card (from a gallery) for someone who is not in front of the sender.
   const uploadFromGallery = async () => {
@@ -189,7 +194,8 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (picked.canceled || !picked.assets[0]) return;
       const results = await Camera.scanFromURLAsync(picked.assets[0].uri, ['qr']);
-      const code = results.find((r) => parseRecipientQr(r.data) || parseRelayVoucher(r.data))?.data ?? results[0]?.data;
+      const payloads = results.map(qrPayload);
+      const code = payloads.find((payload) => parseRecipientQr(payload) || parseRelayVoucher(payload)) ?? payloads[0];
       if (!code) {
         Alert.alert(messages().qrScan.noQrTitle, messages().qrScan.noQrBody);
         return;
