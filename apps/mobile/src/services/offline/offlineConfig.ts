@@ -51,7 +51,7 @@ export async function saveOfflineSetup(setup: OfflineSetup): Promise<void> {
   try {
     await SecureStore.setItemAsync(KEY, JSON.stringify(setup), OPTIONS);
   } catch {
-    // Without it the setup simply runs again next time the phone is online.
+    
   }
 }
 
@@ -59,6 +59,6 @@ export async function clearOfflineSetup(): Promise<void> {
   try {
     await SecureStore.deleteItemAsync(KEY, OPTIONS);
   } catch {
-    // Nothing to clear.
+    
   }
 }
