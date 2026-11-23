@@ -381,6 +381,10 @@ export class WalletService {
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       },
       include: { token: { select: { symbol: true, decimals: true } } },
+      omit: {
+        recoveryReview: true, confirmedLedger: true, recoveryLease: true,
+        recoveryLeaseUntil: true, nextReconcileAt: true, relayReceiptPhone: true,
+      },
       orderBy: { createdAt: 'desc' },
       take: requestedLimit,
     });

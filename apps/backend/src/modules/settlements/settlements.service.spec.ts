@@ -3,6 +3,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { SettlementsService, buildOfflineSignatureXdr, decodeBase62 } from './settlements.util.js';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
+import type { SettlementFinalizationService } from './settlement-finalization.service.js';
 import type { ConfigService } from '@nestjs/config';
 
 function makeService() {
@@ -13,6 +14,7 @@ function makeService() {
       findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
       create: jest.fn<(...args: any[]) => Promise<any>>(),
       update: jest.fn<(...args: any[]) => Promise<any>>(),
+      updateMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ count: 1 }),
     },
     account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
     token: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
@@ -25,12 +27,18 @@ function makeService() {
     get: jest.fn((key: string) => key === 'RELAYER_PUBLIC_KEY' ? gateway.publicKey() : gateway.secret()),
     getOrThrow: jest.fn(() => 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX'),
   };
+  const finalization = {
+    claim: jest.fn(async (id: number) => ({ id, token: 'test-lease' })),
+    check: jest.fn<(...args: any[]) => Promise<any>>(),
+    release: jest.fn(async () => undefined),
+  };
   const service = new SettlementsService(
     prisma as unknown as PrismaService,
     config as unknown as ConfigService,
     transactionManager as unknown as StellarTransactionManager,
+    finalization as unknown as SettlementFinalizationService,
   );
-  return { service, prisma, transactionManager, senderKey, gateway };
+  return { service, prisma, transactionManager, senderKey, gateway, finalization };
 }
 
 const body = (signature = Buffer.alloc(64, 7)) =>
@@ -96,6 +104,35 @@ describe('SettlementsService', () => {
     prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: Keypair.random().publicKey(), isActive: true });
     await expect(service.processSettlement(body())).rejects.toMatchObject({ status: 401 });
     expect(prisma.settlement.create).not.toHaveBeenCalled();
+  });
+
+  it('checks a signed attempt written by another worker before retrying a legacy voucher', async () => {
+    const { service, prisma, transactionManager, senderKey, gateway, finalization } = makeService();
+    const tokenContractId = Keypair.random().publicKey();
+    const signed = buildOfflineSignatureXdr({
+      amountStroops: decodeBase62('3v5K'),
+      protocolToll: 5_000_000n,
+      nonce: Buffer.alloc(32, 1),
+      receiverShortId: 'def456',
+      gatewayPublicKey: gateway.publicKey(),
+      tokenContractId,
+    });
+    prisma.settlement.findUnique
+      .mockResolvedValueOnce({ id: 1, status: 'PENDING', txHash: null, signedTxXdr: null })
+      .mockResolvedValueOnce({ txHash: 'observed-hash', signedTxXdr: 'observed-envelope', recoveryReview: null });
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
+      .mockResolvedValueOnce({ stellarPublicKey: Keypair.random().publicKey() });
+    prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
+    finalization.check.mockResolvedValue({
+      finalized: false,
+      evidence: { status: 'PENDING', attempts: [{ txHash: 'observed-hash', status: 'ENVELOPE_EXPIRED' }] },
+    });
+
+    await expect(service.processSettlement(body(Buffer.from(senderKey.sign(signed))))).rejects.toMatchObject({ status: 503 });
+    expect(finalization.check).toHaveBeenCalledWith({ id: 1, token: 'test-lease' }, true, expect.any(Number));
+    expect(transactionManager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
+    expect(transactionManager.resumeTwoPhaseSettlement).not.toHaveBeenCalled();
   });
 
   it('describes a voucher for the settlement texts', async () => {

@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import {
   buildOfflineSignatureXdr as buildVoucherSignatureXdr,
   decodeBase62,
@@ -11,6 +12,7 @@ import {
 } from './offline-voucher.util.js';
 import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 import { userFailureReason, type VoucherNotice } from '../engine/settlement-notice.util.js';
+import { SettlementFinalizationService } from './settlement-finalization.service.js';
 
 /**
  * A voucher decided before: its status, plus for a failed one the reason in the sender's words, so a later text
@@ -79,56 +81,57 @@ export class SettlementsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly transactionManager: StellarTransactionManager,
+    private readonly finalization: SettlementFinalizationService,
   ) {}
 
   /** Checks account/token state and signature, then sends the signed offline spend transaction. */
-  async processSettlement(smsBody: string) {
+  async processSettlement(smsBody: string, relayPhone?: string) {
     const payload = parseSettlementSmsBody(smsBody);
     const existing = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
     if (existing && existing.status !== 'PENDING') {
       throw new ApiResponseException(409, decidedBody(existing));
     }
+    const submitted = !!(existing?.txHash || existing?.signedTxXdr);
+    if (submitted && existing?.recoveryReview) throw settlementPending();
     const [sender, receiver, token] = await Promise.all([
       this.prisma.account.findUnique({ where: { shortId: payload.senderShortId } }),
       this.prisma.account.findUnique({ where: { shortId: payload.receiverShortId } }),
       this.prisma.token.findUnique({ where: { id: Number(payload.tokenId) } }),
     ]);
-    if (!sender) throw new NotFoundException('Sender account not found');
-    if (!token) throw new NotFoundException('Token Not Found');
+    if (!sender || !token) {
+      if (submitted) throw settlementPending();
+      throw new NotFoundException(!sender ? 'Sender account not found' : 'Token Not Found');
+    }
     const gateway = this.config.get<string>('RELAYER_PUBLIC_KEY')?.trim();
     const secret = this.config.get<string>('RELAYER_SECRET_KEY')?.trim();
     if (!gateway || !secret) throw new ApiResponseException(500, { error: 'Relayer not configured' });
-    if (!sender.offlineDeviceKey) throw new ConflictException('Offline device key is not enrolled. Sign in online to synchronize this device.');
+    if (!sender.offlineDeviceKey) {
+      if (submitted) throw settlementPending();
+      throw new ConflictException('Offline device key is not enrolled. Sign in online to synchronize this device.');
+    }
     const amount = decodeBase62(payload.amountBase62);
     const toll = token.symbol === 'PHPC' ? 5_000_000n : 0n;
     const nonce = Buffer.from(restorePadding(payload.nonce), 'base64');
     const signature = Buffer.from(restorePadding(payload.signature), 'base64');
     const contractId = this.config.getOrThrow<string>('CONTRACT_ID');
-    const signedBytes = buildOfflineSignatureXdr({ amountStroops: amount, protocolToll: toll, nonce, receiverShortId: payload.receiverShortId, gatewayPublicKey: gateway, tokenContractId: token.contractId, contractId });
-    let valid: boolean;
-    try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, signedBytes, signature); } catch { valid = false; }
-    if (!valid) {
-      const legacyBytes = buildOfflineSignatureXdr({ amountStroops: amount, protocolToll: toll, nonce, receiverShortId: payload.receiverShortId, gatewayPublicKey: gateway, tokenContractId: token.contractId });
-      try { valid = verifyOfflineVoucherSignature(sender.offlineDeviceKey, legacyBytes, signature); } catch { valid = false; }
+    const signatureFields = {
+      amountStroops: amount, nonce, receiverShortId: payload.receiverShortId,
+      gatewayPublicKey: gateway, tokenContractId: token.contractId,
+    };
+    const deviceKey = sender.offlineDeviceKey;
+    const verifies = (protocolToll: bigint, signedContract?: string): boolean => {
+      const bytes = buildOfflineSignatureXdr({ ...signatureFields, protocolToll, contractId: signedContract });
+      return verifyOfflineVoucherSignature(deviceKey, bytes, signature);
+    };
+    let valid = false;
+    try {
+      valid = verifies(toll, contractId) || verifies(toll);
+    } catch {
+      // Invalid key material or signature input is handled as a rejected voucher below.
     }
     if (!valid) {
-      // Everything logged is public. Compare with the phone's dev-build "[voucher] signed" log to see which field differs.
-      this.logger.warn(
-        `Offline voucher signature rejected: ${JSON.stringify({
-          senderShortId: payload.senderShortId,
-          receiverShortId: payload.receiverShortId,
-          amountStroops: amount.toString(),
-          tollStroops: toll.toString(),
-          nonceHex: nonce.toString('hex'),
-          gatewayPublicKey: gateway,
-          tokenContractId: token.contractId,
-          tokenSymbol: token.symbol,
-          contractId,
-          enrolledDeviceKey: sender.offlineDeviceKey,
-          signedXdrHex: signedBytes.toString('hex'),
-          signatureHex: signature.toString('hex'),
-        })}`,
-      );
+      if (submitted) throw settlementPending();
+      this.logger.warn(`Offline voucher signature rejected for token ${token.id}`);
       throw new UnauthorizedException('Invalid voucher signature');
     }
 
@@ -136,10 +139,12 @@ export class SettlementsService {
     // and the nonce can never settle later (the sender was told no money was taken). Before the signature check nothing
     // is recorded, so a forged text cannot put entries in someone's history.
     if (!receiver) {
+      if (submitted) throw settlementPending();
       await this.recordRejection(existing, payload, token.id, amount, gateway, 'Recipient account not found');
       throw new NotFoundException('Recipient account not found');
     }
     if (!token.isActive) {
+      if (submitted) throw settlementPending();
       await this.recordRejection(existing, payload, token.id, amount, gateway, 'Token is inactive');
       throw new BadRequestException('Token is inactive');
     }
@@ -176,34 +181,59 @@ export class SettlementsService {
       nonce,
       signature,
     };
-    const outcome = settlement.txHash && settlement.signedTxXdr
-      ? await this.transactionManager.resumeTwoPhaseSettlement({
-          settlementId: settlement.id,
-          txHash: settlement.txHash,
-          signedTxXdr: settlement.signedTxXdr,
-        })
-      : await this.transactionManager.executeTwoPhaseSettlement({
-          settlementId: settlement.id,
-          args,
-          relayerSecretKey: secret,
+    const lease = await this.finalization.claim(settlement.id);
+    if (!lease) {
+      const current = await this.prisma.settlement.findUnique({ where: { id: settlement.id } });
+      if (current && current.status !== 'PENDING') throw new ApiResponseException(409, decidedBody(current));
+      throw settlementPending();
+    }
+    try {
+      const current = await this.prisma.settlement.findUnique({
+        where: { id: lease.id, recoveryLease: lease.token, recoveryLeaseUntil: { gt: new Date() } },
+        select: { txHash: true, signedTxXdr: true, recoveryReview: true },
+      });
+      if (!current || (current.recoveryReview && (current.txHash || current.signedTxXdr))) throw settlementPending();
+      if (typeof relayPhone === 'string' && isPlausiblePhone(relayPhone)) {
+        await this.prisma.settlement.updateMany({
+          where: { id: settlement.id, recoveryLease: lease.token, relayReceiptPhone: null },
+          data: { relayReceiptPhone: normalizePhoneNumber(relayPhone) },
         });
-
-    if (outcome.pollResult.status === 'SUCCESS') {
-      await this.prisma.settlement.update({
-        where: { id: settlement.id },
-        data: { status: 'SETTLED', txHash: outcome.txHash, failReason: null },
-      });
-      return { txHash: outcome.txHash, status: 'SETTLED' };
+      }
+      if (current.txHash && current.signedTxXdr) {
+        const prior = await this.finalization.check(lease, true, Date.now() + 5_000);
+        if (prior.finalized && prior.evidence.status === 'SETTLED') {
+          return { txHash: prior.evidence.txHash, status: 'SETTLED' };
+        }
+        if (prior.evidence.status !== 'PENDING' || prior.evidence.attempts.some((attempt) =>
+          attempt.txHash === current.txHash && attempt.status !== 'UNKNOWN')) throw settlementPending();
+      }
+      try {
+        if (current.txHash && current.signedTxXdr) {
+          await this.transactionManager.resumeTwoPhaseSettlement({
+            settlementId: settlement.id, txHash: current.txHash, signedTxXdr: current.signedTxXdr, leaseToken: lease.token,
+          });
+        } else {
+          await this.transactionManager.executeTwoPhaseSettlement({
+            settlementId: settlement.id, args, receiverAddress: receiver.stellarPublicKey, relayerSecretKey: secret, leaseToken: lease.token,
+          });
+        }
+      } catch (error) {
+        if (error instanceof ApiResponseException && error.getStatus() === 409) throw error;
+        // The send may have reached Stellar before the request failed. Check evidence even after a submit error.
+        const current = await this.prisma.settlement.findUnique({ where: { id: settlement.id }, select: { txHash: true } });
+        if (!current?.txHash) throw settlementPending();
+      }
+      const result = await this.finalization.check(lease, true, Date.now() + 5_000);
+      if (result.finalized && result.evidence.status === 'SETTLED') {
+        return { txHash: result.evidence.txHash, status: 'SETTLED' };
+      }
+      throw settlementPending();
+    } catch (error) {
+      if (error instanceof ApiResponseException) throw error;
+      throw settlementPending();
+    } finally {
+      await this.finalization.release(lease).catch(() => this.logger.warn('Settlement claim will expire after a release error.'));
     }
-    if (outcome.pollResult.status === 'FAILED') {
-      const reason = outcome.pollResult.errorResultXdr ?? 'Soroban transaction failed';
-      await this.prisma.settlement.update({
-        where: { id: settlement.id },
-        data: { status: 'FAILED', txHash: outcome.txHash, failReason: reason },
-      });
-      return { txHash: outcome.txHash, status: 'FAILED', reason: userFailureReason(reason) };
-    }
-    throw new Error(`Settlement transaction ${outcome.txHash} is not confirmed yet (timeout)`);
   }
 
   /**
@@ -234,6 +264,40 @@ export class SettlementsService {
     };
   }
 
+  async claimReceipt(key: string): Promise<boolean> {
+    const result = await this.prisma.settlementReceiptClaim.createMany({ data: { key }, skipDuplicates: true });
+    return result.count === 1;
+  }
+
+  async recoveredReceipt(id: number): Promise<{ relayPhone: string; notice: VoucherNotice } | null> {
+    const row = await this.prisma.settlement.findUnique({
+      where: { id, status: 'SETTLED' },
+      select: {
+        nonce: true, txHash: true, senderShortId: true, receiverShortId: true, relayReceiptPhone: true,
+        amountStroops: true, token: { select: { symbol: true, decimals: true } },
+      },
+    });
+    if (!row?.relayReceiptPhone || !row.txHash) return null;
+    const attempt = await this.prisma.settlementAttempt.findUnique({
+      where: { settlementId_txHash: { settlementId: id, txHash: row.txHash } },
+      select: { senderAddress: true, receiverAddress: true },
+    });
+    if (!attempt?.senderAddress || !attempt.receiverAddress) return null;
+    const [sender, receiver] = await Promise.all([
+      this.prisma.account.findUnique({ where: { stellarPublicKey: attempt.senderAddress }, select: { firstName: true } }),
+      this.prisma.account.findUnique({ where: { stellarPublicKey: attempt.receiverAddress }, select: { phoneNumber: true } }),
+    ]);
+    return { relayPhone: row.relayReceiptPhone, notice: {
+      nonce: row.nonce, senderShortId: row.senderShortId, receiverShortId: row.receiverShortId,
+      amountStroops: row.amountStroops, symbol: row.token.symbol, decimals: row.token.decimals,
+      senderName: sender?.firstName ?? null, receiverPhone: receiver?.phoneNumber ?? null,
+    } };
+  }
+
+  async clearReceiptRelay(nonce: string): Promise<void> {
+    await this.prisma.settlement.updateMany({ where: { nonce, status: 'SETTLED' }, data: { relayReceiptPhone: null } });
+  }
+
   /** Marks a signed voucher that can never settle as FAILED, keeping the reason. A parallel claim of the nonce wins. */
   private async recordRejection(
     existing: { id: number } | null,
@@ -245,7 +309,14 @@ export class SettlementsService {
   ): Promise<void> {
     try {
       if (existing) {
-        await this.prisma.settlement.update({ where: { id: existing.id }, data: { status: 'FAILED', failReason: reason } });
+        const now = new Date();
+        const changed = await this.prisma.settlement.updateMany({
+          where: { id: existing.id, status: 'PENDING', txHash: null, signedTxXdr: null,
+            OR: [{ recoveryLeaseUntil: null }, { recoveryLeaseUntil: { lte: now } }],
+          },
+          data: { status: 'FAILED', failReason: reason },
+        });
+        if (!changed.count) throw settlementPending();
         return;
       }
       await this.prisma.settlement.create({ data: {
@@ -254,11 +325,14 @@ export class SettlementsService {
         relayerAddress: gateway, status: 'FAILED', failReason: reason,
       } });
     } catch (error) {
-      if (!isPrismaUniqueConflict(error)) {
-        this.logger.warn(`Could not record rejected voucher ${payload.nonce}: ${error instanceof Error ? error.message : String(error)}`);
-      }
+      if (error instanceof ApiResponseException) throw error;
+      throw settlementPending();
     }
   }
+}
+
+function settlementPending() {
+  return new ApiResponseException(503, { error: 'Settlement service unavailable while payment evidence is pending.', status: 'PENDING' });
 }
 
 function isPrismaUniqueConflict(error: unknown): boolean {

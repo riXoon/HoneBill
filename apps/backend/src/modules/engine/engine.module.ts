@@ -10,7 +10,10 @@ import { TransactionManagerModule } from './transaction-manager.module.js';
 import { SettlementQueueModule } from './settlement-queue.module.js';
 import { SettlementProcessor } from './settlement.processor.js';
 import { BullModule } from '@nestjs/bullmq';
-import { SettlementDrainController, CronSecretGuard } from './settlement-drain.controller.js';
+import { SettlementDrainController } from './settlement-drain.controller.js';
+import { CronSecretGuard } from '../../common/guards/cron-secret.guard.js';
+import { SettlementRecoveryController } from './settlement-recovery.controller.js';
+import { SettlementRecoveryService } from './settlement-recovery.service.js';
 import { SettlementDrainService } from './settlement-drain.service.js';
 import { QStashSignatureGuard, SettlementQStashController } from './settlement-qstash.controller.js';
 import { resolveSettlementTransport } from './settlement-transport.js';
@@ -46,14 +49,17 @@ const qstashEnabled = settlementTransport === 'qstash';
   ],
   controllers: [
     EngineController,
+    SettlementRecoveryController,
     ...(settlementDrainEnabled ? [SettlementDrainController] : []),
     ...(qstashEnabled ? [SettlementQStashController] : []),
   ],
   providers: [
     EngineService,
     Ed25519SignatureGuard,
+    CronSecretGuard,
+    SettlementRecoveryService,
     ...(settlementWorkerEnabled ? [SettlementProcessor] : []),
-    ...(settlementDrainEnabled ? [SettlementDrainService, CronSecretGuard] : []),
+    ...(settlementDrainEnabled ? [SettlementDrainService] : []),
     ...(qstashEnabled ? [QStashSignatureGuard] : []),
   ],
   exports: [EngineService, SettlementQueueModule],

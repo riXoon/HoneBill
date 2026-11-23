@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import {
@@ -11,9 +11,12 @@ import {
   rpc,
   xdr,
 } from '@stellar/stellar-sdk';
+import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
+import { stellarNetworkId } from '../../infra/stellar/network-id.js';
 import { LockService } from '../../infra/lock/lock.service.js';
+import { userFailureReason } from './settlement-notice.util.js';
 
 export interface SpendOfflineArgs {
   gateway: string;
@@ -38,6 +41,7 @@ export interface PreparedRelayerTransaction {
   txHash: string;
   signedTxXdr: string;
   signerAddress: string;
+  contractId: string;
   transaction: Transaction;
 }
 
@@ -58,7 +62,8 @@ export class StellarTransactionManager {
   ): Promise<PreparedRelayerTransaction> {
     const relayer = Keypair.fromSecret(relayerSecretKey);
     const account = await this.stellar.sorobanServer.getAccount(relayer.publicKey());
-    const call = new Contract(this.configuredContractId()).call(
+    const contractId = this.configuredContractId();
+    const call = new Contract(contractId).call(
       'spend_offline',
       Address.fromString(relayer.publicKey()).toScVal(),
       Address.fromString(args.sender).toScVal(),
@@ -85,6 +90,7 @@ export class StellarTransactionManager {
       txHash: prepared.hash().toString('hex'),
       signedTxXdr: prepared.toXDR(),
       signerAddress: relayer.publicKey(),
+      contractId,
       transaction: prepared,
     };
   }
@@ -125,7 +131,9 @@ export class StellarTransactionManager {
   async executeTwoPhaseSettlement(input: {
     settlementId: number;
     args: SpendOfflineArgs;
+    receiverAddress: string;
     relayerSecretKey: string;
+    leaseToken?: string;
     maxLockWaitMs?: number;
     maxPollAttempts?: number;
     pollIntervalMs?: number;
@@ -144,24 +152,54 @@ export class StellarTransactionManager {
     let transaction: Transaction;
     let sendResponse: rpc.Api.SendTransactionResponse;
     try {
-      const persisted = await this.prisma.settlement.findUnique({
-        where: { id: input.settlementId },
-        select: { txHash: true, signedTxXdr: true },
-      });
-      if (persisted?.txHash && persisted.signedTxXdr) {
+      const persisted = await this.pendingSettlement(input.settlementId, input.leaseToken);
+      if (persisted.txHash && persisted.signedTxXdr) {
         // Another worker already prepared this voucher while we waited for the relayer lock.
         txHash = persisted.txHash;
-        transaction = TransactionBuilder.fromXDR(persisted.signedTxXdr, this.stellar.networkPassphrase) as Transaction;
+        transaction = await this.recordExistingEnvelope(persisted, txHash, persisted.signedTxXdr);
       } else {
+        if (persisted.txHash !== null || persisted.signedTxXdr !== null) throw attemptUnavailable();
+        if (persisted.amountStroops !== input.args.amount ||
+            persisted.receiverShortId !== input.args.receiver_short_id.toString('ascii') ||
+            !Buffer.from(persisted.nonce, 'base64').equals(input.args.nonce)) {
+          throw attemptUnavailable();
+        }
         const prepared = await this.buildAndSignSpendOfflineTx(input.args, input.relayerSecretKey);
         txHash = prepared.txHash;
         transaction = prepared.transaction;
-        // Persist the deterministic hash and exact signed envelope before broadcast.
-        await this.prisma.settlement.update({
-          where: { id: input.settlementId },
-          data: { txHash, signedTxXdr: prepared.signedTxXdr, status: 'PENDING' },
-        });
+        // Keep the current-envelope fields for older workers. The nested write commits both records together.
+        try {
+          await this.prisma.settlement.update({
+            where: { id: persisted.id, status: 'PENDING', txHash: null, signedTxXdr: null,
+              ...(input.leaseToken ? { recoveryLease: input.leaseToken, recoveryLeaseUntil: { gt: new Date() } } : {}),
+            },
+            data: {
+              txHash,
+              signedTxXdr: prepared.signedTxXdr,
+              recoveryReview: null,
+              attempts: { create: {
+                txHash,
+                signedTxXdr: prepared.signedTxXdr,
+                nonce: persisted.nonce,
+                receiverShortId: persisted.receiverShortId,
+                amountStroops: persisted.amountStroops,
+                senderAddress: input.args.sender,
+                receiverAddress: input.receiverAddress,
+                gatewayAddress: input.args.gateway,
+                tokenContractId: input.args.token,
+                contractId: prepared.contractId,
+                networkId: this.networkId(),
+                protocolToll: input.args.protocol_toll,
+                ...envelopeBounds(transaction),
+              } },
+            },
+          });
+        } catch {
+          // A failed write or a competing worker must leave this envelope unbroadcast.
+          throw attemptUnavailable();
+        }
       }
+      if (input.leaseToken) await this.pendingSettlement(input.settlementId, input.leaseToken);
       sendResponse = await this.submitSignedTransaction(transaction);
     } finally {
       await this.locks.release(RELAYER_LOCK_KEY, lockToken);
@@ -177,11 +215,14 @@ export class StellarTransactionManager {
     settlementId: number;
     txHash: string;
     signedTxXdr: string;
+    leaseToken?: string;
     maxLockWaitMs?: number;
     maxPollAttempts?: number;
     pollIntervalMs?: number;
   }): Promise<{ txHash: string; pollResult: PollResult; sendResponse?: rpc.Api.SendTransactionResponse }> {
-    // Check ledger history first so a retry never submits a transaction already confirmed.
+    const persisted = await this.pendingSettlement(input.settlementId, input.leaseToken);
+    const transaction = await this.recordExistingEnvelope(persisted, input.txHash, input.signedTxXdr);
+    // Check ledger history before resubmitting an existing envelope.
     const priorResult = await this.pollTransactionConfirmation(input.txHash, {
       maxAttempts: 1,
       intervalMs: 0,
@@ -202,7 +243,9 @@ export class StellarTransactionManager {
 
     let sendResponse: rpc.Api.SendTransactionResponse;
     try {
-      sendResponse = await this.submitSignedTransaction(input.signedTxXdr);
+      const current = await this.pendingSettlement(input.settlementId, input.leaseToken);
+      if (current.txHash !== input.txHash || current.signedTxXdr !== input.signedTxXdr) throw attemptUnavailable();
+      sendResponse = await this.submitSignedTransaction(transaction);
     } finally {
       await this.locks.release(RELAYER_LOCK_KEY, lockToken);
     }
@@ -213,9 +256,97 @@ export class StellarTransactionManager {
     return { txHash: input.txHash, pollResult, sendResponse };
   }
 
+  private async pendingSettlement(id: number, leaseToken?: string) {
+    const settlement = await this.prisma.settlement.findUnique({
+      where: { id },
+      select: {
+        id: true, status: true, failReason: true, txHash: true, signedTxXdr: true,
+        nonce: true, receiverShortId: true, amountStroops: true, relayerAddress: true,
+        recoveryLease: true, recoveryLeaseUntil: true,
+      },
+    }).catch(() => { throw attemptUnavailable(); });
+    if (!settlement) throw attemptUnavailable();
+    if (settlement.status !== 'PENDING') {
+      throw new ApiResponseException(409, {
+        txHash: settlement.txHash,
+        status: settlement.status,
+        ...(settlement.status === 'FAILED' ? { reason: userFailureReason(settlement.failReason) } : {}),
+      });
+    }
+    if (leaseToken && (settlement.recoveryLease !== leaseToken || !settlement.recoveryLeaseUntil ||
+      settlement.recoveryLeaseUntil.getTime() <= Date.now())) throw attemptUnavailable();
+    return settlement;
+  }
+
+  private async recordExistingEnvelope(
+    settlement: Awaited<ReturnType<StellarTransactionManager['pendingSettlement']>>,
+    txHash: string,
+    signedTxXdr: string,
+  ): Promise<Transaction> {
+    if (settlement.txHash !== txHash || settlement.signedTxXdr !== signedTxXdr) throw attemptUnavailable();
+    try {
+      const tx = TransactionBuilder.fromXDR(signedTxXdr, this.stellar.networkPassphrase);
+      if (!(tx instanceof Transaction) || tx.hash().toString('hex') !== txHash) throw attemptUnavailable();
+
+      const key = { settlementId: settlement.id, txHash };
+      const attempt = await this.prisma.settlementAttempt.findUnique({
+        where: { settlementId_txHash: key }, select: { networkId: true, signedTxXdr: true },
+      });
+      const networkId = this.networkId();
+      if (attempt && (attempt.signedTxXdr !== signedTxXdr || (attempt.networkId && attempt.networkId !== networkId))) {
+        throw attemptUnavailable();
+      }
+      // During a rolling deploy an older worker may have populated the projection after the migration ran.
+      if (!attempt || !attempt.networkId) {
+        const metadata = { networkId, ...envelopeBounds(tx) };
+        await this.prisma.settlement.update({
+          where: { id: settlement.id, status: 'PENDING', txHash, signedTxXdr,
+            ...(settlement.recoveryLease ? { recoveryLease: settlement.recoveryLease, recoveryLeaseUntil: { gt: new Date() } } : {}),
+          },
+          data: {
+            recoveryReview: 'LEGACY_INTENT_UNVERIFIED',
+            attempts: { upsert: {
+              where: { settlementId_txHash: key },
+              create: {
+                txHash, signedTxXdr, ...metadata,
+                nonce: settlement.nonce,
+                receiverShortId: settlement.receiverShortId,
+                amountStroops: settlement.amountStroops,
+                gatewayAddress: settlement.relayerAddress,
+              },
+              update: metadata,
+            } },
+          },
+        });
+      }
+      return tx;
+    } catch {
+      throw attemptUnavailable();
+    }
+  }
+
+  private networkId(): string {
+    return stellarNetworkId(this.stellar.networkPassphrase);
+  }
+
   private configuredContractId(): string {
     return this.config.getOrThrow<string>('CONTRACT_ID');
   }
+}
+
+function envelopeBounds(transaction: Transaction) {
+  const { timeBounds, ledgerBounds } = transaction;
+  return {
+    sourceSequence: BigInt(transaction.sequence),
+    minTime: timeBounds ? BigInt(timeBounds.minTime) : null,
+    maxTime: timeBounds ? BigInt(timeBounds.maxTime) : null,
+    minLedger: ledgerBounds ? BigInt(ledgerBounds.minLedger) : null,
+    maxLedger: ledgerBounds ? BigInt(ledgerBounds.maxLedger) : null,
+  };
+}
+
+function attemptUnavailable() {
+  return new ServiceUnavailableException('Settlement service unavailable while recording the signed attempt.');
 }
 
 function wait(ms: number): Promise<void> {

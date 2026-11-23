@@ -22,6 +22,18 @@ enum SettlementStatus {
   FAILED
 }
 
+enum SettlementRecoveryReview {
+  LEGACY_ENVELOPE_MISSING
+  LEGACY_INTENT_UNVERIFIED
+  MISSING_INTENT
+  EVIDENCE_MISMATCH
+}
+
+enum SettlementAttemptOutcome {
+  ENVELOPE_EXPIRED
+  FAILED
+}
+
 enum DemoPairPurpose {
   JUDGE
   QA
@@ -160,13 +172,92 @@ model Settlement {
   signedTxXdr     String?          @map("signed_tx_xdr")
   status          SettlementStatus @map("status")
   failReason      String?          @map("fail_reason")
+  recoveryReview  SettlementRecoveryReview? @map("recovery_review")
+  confirmedLedger BigInt?          @map("confirmed_ledger")
+  recoveryLease   String?          @map("recovery_lease")
+  recoveryLeaseUntil DateTime?     @map("recovery_lease_until")
+  nextReconcileAt DateTime         @default(now()) @map("next_reconcile_at")
+  relayReceiptPhone String?        @map("relay_receipt_phone")
   createdAt       DateTime         @default(now()) @map("created_at")
 
   token Token @relation(fields: [tokenId], references: [id])
+  attempts SettlementAttempt[]
 
   @@index([senderShortId, createdAt])
   @@index([receiverShortId, createdAt])
+  @@index([status, id])
+  @@index([status, recoveryReview, nextReconcileAt, id])
   @@map("settlement")
+}
+
+/// One locally persisted signed envelope. Legacy rows lack a trustworthy snapshot of the intended payment.
+model SettlementAttempt {
+  id                Int      @id @default(autoincrement())
+  settlementId      Int      @map("settlement_id")
+  txHash            String   @map("tx_hash")
+  signedTxXdr       String   @map("signed_tx_xdr")
+  nonce             String
+  receiverShortId   String   @map("receiver_short_id")
+  amountStroops     BigInt   @map("amount_stroops")
+  senderAddress     String?  @map("sender_address")
+  receiverAddress   String?  @map("receiver_address")
+  gatewayAddress    String?  @map("gateway_address")
+  tokenContractId   String?  @map("token_contract_id")
+  contractId        String?  @map("contract_id")
+  networkId         String?  @map("network_id")
+  protocolToll      BigInt?  @map("protocol_toll")
+  sourceSequence    BigInt?  @map("source_sequence")
+  minTime           BigInt?  @map("min_time")
+  maxTime           BigInt?  @map("max_time")
+  minLedger         BigInt?  @map("min_ledger")
+  maxLedger         BigInt?  @map("max_ledger")
+  outcome           SettlementAttemptOutcome?
+  outcomeLedger     BigInt?  @map("outcome_ledger")
+  /// When this evidence was stored locally. For backfilled rows this is the migration time.
+  recordedAt        DateTime @default(now()) @map("recorded_at")
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+
+  @@unique([settlementId, txHash])
+  @@map("settlement_attempt")
+}
+
+model SettlementReceiptClaim {
+  key       String   @id
+  claimedAt DateTime @default(now()) @map("claimed_at")
+
+  @@map("settlement_receipt_claim")
+}
+
+/// Successful, decoded spend events retained independently of the RPC history window.
+model SettlementSpendEvent {
+  networkId       String @map("network_id")
+  contractId      String @map("contract_id")
+  eventId         String @map("event_id")
+  txHash          String @map("tx_hash")
+  ledger          BigInt
+  nonce           String
+  senderAddress   String @map("sender_address")
+  receiverAddress String @map("receiver_address")
+  receiverShortId String @map("receiver_short_id")
+  gatewayAddress  String @map("gateway_address")
+  tokenContractId String @map("token_contract_id")
+  /// Base-10 encoding of Soroban i128 values, which may exceed PostgreSQL BIGINT.
+  amountStroops   String @map("amount_stroops")
+  protocolToll    String @map("protocol_toll")
+
+  @@id([networkId, contractId, eventId])
+  @@index([networkId, contractId, nonce])
+  @@map("settlement_spend_event")
+}
+
+model SettlementEventCursor {
+  networkId  String @map("network_id")
+  contractId String @map("contract_id")
+  cursor     String?
+
+  @@id([networkId, contractId])
+  @@map("settlement_event_cursor")
 }
 
 //Anchor Transaction

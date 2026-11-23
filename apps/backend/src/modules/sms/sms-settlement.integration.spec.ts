@@ -16,6 +16,7 @@ import { SettlementQueueService } from '../engine/settlement-queue.service.js';
 import { SettlementProcessor } from '../engine/settlement.processor.js';
 import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 import { SettlementsService } from '../settlements/settlements.util.js';
+import type { SettlementFinalizationService } from '../settlements/settlement-finalization.service.js';
 import { buildOfflineSignatureXdr } from '../settlements/offline-voucher.util.js';
 import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME, type SettlementJobData } from '../settlements/settlement-queue.constants.js';
 import { SmsController } from './sms.controller.js';
@@ -54,17 +55,26 @@ function fixture() {
   const sms = new SmsService(textbee as unknown as TextbeeService, redis as unknown as RedisService, config, undefined, producer);
   const prisma = {
     settlement: {
-      findUnique: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(null),
+      findUnique: jest.fn(async ({ where }: any) => where.recoveryLease
+        ? { txHash: null, signedTxXdr: null, recoveryReview: null }
+        : null),
       create: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 1, status: 'PENDING' }),
       update: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({}),
+      updateMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ count: 1 }),
     },
     account: { findUnique: jest.fn(async ({ where }: any) => where.shortId === 'abc123' ? { stellarPublicKey: device.publicKey(), offlineDeviceKey: device.publicKey() } : { stellarPublicKey: Keypair.random().publicKey() }) },
     token: { findUnique: jest.fn(async () => ({ id: 1, symbol: 'PHPC', contractId: token, isActive: true })) },
   };
   const manager = { executeTwoPhaseSettlement: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ txHash: 'confirmed', pollResult: { status: 'SUCCESS' } }) };
-  const settlements = new SettlementsService(prisma as unknown as PrismaService, config, manager as unknown as StellarTransactionManager);
+  const finalization = {
+    claim: jest.fn(async (id: number) => ({ id, token: 'fixture-lease' })),
+    check: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ finalized: true, evidence: { status: 'SETTLED', txHash: 'confirmed' } }),
+    release: jest.fn(async () => undefined),
+  };
+  const settlements = new SettlementsService(prisma as unknown as PrismaService, config, manager as unknown as StellarTransactionManager,
+    finalization as unknown as SettlementFinalizationService);
   const worker = new SettlementProcessor(settlements);
-  return { config, raw, voucher, client, redis, jobs, add, producer, textbee, sms, prisma, manager, worker };
+  return { config, raw, voucher, client, redis, jobs, add, producer, textbee, sms, prisma, manager, worker, finalization };
 }
 
 describe('SMS to settlement integration', () => {
@@ -91,7 +101,7 @@ describe('SMS to settlement integration', () => {
     expect(job.opts).toMatchObject({ attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
     await expect(f.worker.process(job)).resolves.toEqual({ txHash: 'confirmed', status: 'SETTLED' });
     expect(f.manager.executeTwoPhaseSettlement).toHaveBeenCalledTimes(1);
-    expect(f.prisma.settlement.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'SETTLED' }) }));
+    expect(f.finalization.check).toHaveBeenCalledWith({ id: 1, token: 'fixture-lease' }, true, expect.any(Number));
   });
 
   it('allows the same voucher to retry after a failed publish', async () => {
@@ -152,7 +162,7 @@ describe('SMS to settlement integration', () => {
     const job = [...f.jobs.values()][0];
     const failure = new Error('network error');
     f.manager.executeTwoPhaseSettlement.mockRejectedValueOnce(failure);
-    await expect(f.worker.process(job)).rejects.toBe(failure);
+    await expect(f.worker.process(job)).rejects.toMatchObject({ status: 503 });
     expect(job.opts.attempts).toBe(5);
     await expect(f.worker.process(job)).resolves.toMatchObject({ status: 'SETTLED' });
   });

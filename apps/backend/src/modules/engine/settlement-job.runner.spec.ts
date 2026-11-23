@@ -20,9 +20,17 @@ const notice: VoucherNotice = {
 const job = { id: '7', name: ENGINE_SETTLEMENT_JOB, data: { smsBody: 'voucher', senderPhone: '+639170000001', traceId: 't' } };
 
 function makeRunner(processSettlement: () => Promise<any>) {
+  const claimed = new Set<string>();
   const settlements = {
     processSettlement: jest.fn(processSettlement),
     describeVoucher: jest.fn(async () => notice),
+    claimReceipt: jest.fn(async (key: string) => {
+      if (claimed.has(key)) return false;
+      claimed.add(key);
+      return true;
+    }),
+    clearReceiptRelay: jest.fn(async () => undefined),
+    recoveredReceipt: jest.fn(async () => ({ relayPhone: job.data.senderPhone, notice })),
   };
   const sms = { enqueueSms: jest.fn(async (..._args: any[]) => ({ queued: true, messageId: '1' })) };
   const runner = new SettlementJobRunner(settlements as any, sms as any);
@@ -106,6 +114,15 @@ describe('SettlementJobRunner texts', () => {
     });
     await expect(runner.run(job)).rejects.toThrow('fetch failed');
     expect(sms.enqueueSms).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates receipts when QStash and the recovery schedule see the same outcome', async () => {
+    const { runner, texts } = makeRunner(async () => ({ status: 'SETTLED', txHash: 'h' }));
+    await Promise.all([runner.notifyRecovered(1), runner.run(job)]);
+    expect(texts()).toHaveLength(2);
+    expect(texts().map(({ dedupKey }) => dedupKey).sort()).toEqual([
+      'settlement-receipt:QUJDREVGRw==:receiver', 'settlement-receipt:QUJDREVGRw==:sender',
+    ]);
   });
 
   it('does not text the receiver when the same number sent the voucher', async () => {

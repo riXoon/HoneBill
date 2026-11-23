@@ -127,17 +127,17 @@ describe('SettlementQStashController', () => {
   const request = (body: unknown) => ({ body }) as any;
 
   it('answers processed once the voucher settles', async () => {
-    const settle = jest.fn(async (_body: string) => ({ status: 'SETTLED', txHash: 'h' }));
-    await expect(controllerWith(settle).process(request({ smsBody: VOUCHER }), 'msg_1')).resolves.toEqual({
+    const settle = jest.fn(async (_body: string, _relayPhone?: string) => ({ status: 'SETTLED', txHash: 'h' }));
+    await expect(controllerWith(settle).process(request({ smsBody: VOUCHER, senderPhone: '+639000000001' }), 'msg_1')).resolves.toEqual({
       status: 'processed',
       result: { status: 'SETTLED', txHash: 'h' },
     });
-    expect(settle).toHaveBeenCalledWith(VOUCHER);
+    expect(settle).toHaveBeenCalledWith(VOUCHER, '+639000000001');
   });
 
   it('answers rejected (so QStash stops) when the voucher can never settle', async () => {
     const controller = controllerWith(async () => {
-      throw new Error('Unauthorized');
+      throw new UnauthorizedException();
     });
     await expect(controller.process(request({ smsBody: VOUCHER }), 'msg_2')).resolves.toEqual({ status: 'rejected', reason: 'Unauthorized' });
     await expect(controller.process(request({}), 'msg_3')).resolves.toMatchObject({ status: 'rejected' });
