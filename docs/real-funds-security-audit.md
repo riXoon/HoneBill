@@ -14,6 +14,44 @@ Severity estimates the consequence under the stated prerequisites. Priority dete
 
 **Patch routing.** The last column names the lead layer, the starting files and the agent skills for each item. Mobile frontend means the Expo app in `apps/mobile`. Deployment, custody, and provider work goes to the relevant operational owner. Use `$security-auditor` to review completed fixes. Patch the active code paths linked below.
 
+## Patch checklist
+
+Check off a finding after its remediation meets the verification criteria in the corresponding row, including any required deployment evidence.
+
+### P0 patches
+
+- [ ] F01 — Bind mobile signatures to the approved transaction intent.
+- [ ] F02 — Verify the production network and payout lifecycle.
+- [ ] F03 — Enforce voucher expiry and bind the recipient.
+- [ ] F04 — Restrict wallet funding and enforce a spending budget.
+- [ ] F05 — Reserve ramp limits atomically and fail closed.
+
+### P1 patches
+
+- [ ] F06 — Enforce wallet history ownership. Backend and mobile patches are implemented. Production verification is pending.
+- [ ] F07 — Enforce phone ownership and recovery policy.
+- [ ] F08 — Reconcile unknown settlement outcomes.
+- [ ] F09 — Reconcile app history with confirmed on-chain activity.
+- [ ] F10 — Separate and protect upgrade and recipient administration.
+- [ ] F11 — Monitor ledger storage expiry and verify restoration.
+- [ ] F12 — Make OTP consumption and account binding atomic.
+- [ ] F13 — Separate SMS delivery deduplication from voucher authentication.
+- [ ] F14 — Restrict settlement status and redact diagnostics.
+- [ ] F15 — Enforce shared rate limits and trusted ingress identity.
+- [ ] F16 — Harden SEP-10 challenges and sessions.
+- [ ] F17 — Protect mobile outbox data and device secrets.
+- [ ] F18 — Align token and amount policy across layers.
+- [ ] F19 — Account for offline funds committed across devices and channels.
+
+### P2 patches
+
+- [ ] F20 — Limit identity links exposed through recipient discovery.
+- [ ] F21 — Strengthen PIN verification controls.
+- [ ] F22 — Verify the mobile update source and artifact.
+- [ ] F23 — Minimize customer metadata sent to third parties.
+- [ ] F24 — Restrict access to detailed diagnostics.
+- [ ] F25 — Add dedicated security checks to CI.
+
 ## P0 launch gates
 
 | ID | Severity and finding | Impact and prerequisites | Remediation and verification | Where to change it and which skill to use |

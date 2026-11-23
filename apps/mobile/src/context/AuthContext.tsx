@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 import { saveStoredAccount } from '../services/accountStorage';
 import { clearSession } from '../services/session';
@@ -24,6 +24,8 @@ export type StoredAccount = AccountProfile & { role: string };
 
 type AuthContextType = {
   activeAccount: StoredAccount | null;
+  /** One local unlock, even when the same wallet locks and signs in again. */
+  walletSignal: AbortSignal | null;
   connectedWalletPublicKey: string | null;
   userMode: UserMode;
   isAppReady: boolean;
@@ -37,36 +39,45 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [activeAccount, setActiveAccount] = useState<StoredAccount | null>(null);
+  const [wallet, setWallet] = useState<{ account: StoredAccount; signal: AbortSignal } | null>(null);
+  const walletController = useRef<AbortController | null>(null);
+  const activeAccount = wallet?.account ?? null;
+  const walletSignal = wallet?.signal ?? null;
   const [userMode, setUserMode] = useState<UserMode>('customer');
 
   const login = useCallback(async (profile: AccountProfile) => {
+    walletController.current?.abort();
     clearSession();
-    setActiveAccount({ ...profile, role: 'USER' });
+    const controller = new AbortController();
+    walletController.current = controller;
+    setWallet({ account: { ...profile, role: 'USER' }, signal: controller.signal });
     setUserMode('customer');
     await saveStoredAccount(profile);
   }, []);
 
   const logout = useCallback(async () => {
+    walletController.current?.abort();
+    walletController.current = null;
     clearSession();
-    setActiveAccount(null);
+    setWallet(null);
     // The saved profile is kept (it holds no secret), so the fingerprint on the Login screen still works after signing
     // out. It is removed only when this phone no longer holds the account's wallet (see LoginScreen's recovery).
   }, []);
 
   const updateAccount = useCallback(
     async (changes: Partial<Pick<AccountProfile, 'firstName' | 'lastName'>>) => {
-      if (!activeAccount) return;
+      if (!activeAccount || !walletSignal || walletSignal.aborted) return;
       const next = { ...activeAccount, ...changes };
-      setActiveAccount(next);
+      setWallet((current) => current?.signal === walletSignal ? { ...current, account: next } : current);
       await saveStoredAccount(next);
     },
-    [activeAccount],
+    [activeAccount, walletSignal],
   );
 
   const value = useMemo<AuthContextType>(
     () => ({
       activeAccount,
+      walletSignal,
       connectedWalletPublicKey: activeAccount?.stellarPublicKey ?? null,
       userMode,
       isAppReady: true,
@@ -75,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       updateAccount,
       setUserMode,
     }),
-    [activeAccount, userMode, login, logout, updateAccount],
+    [activeAccount, walletSignal, userMode, login, logout, updateAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

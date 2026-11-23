@@ -19,8 +19,8 @@ export type CachedBalances = { online: number; offline: number };
 export type WalletSnapshot = {
   balances: CachedBalances | null;
   transactions: Transaction[];
-  /** Unix ms of the last successful history read. */
-  savedAt: number;
+  /** Unix ms of the last successful history read, or null for a balance-only snapshot. */
+  savedAt: number | null;
 };
 
 /** An offline payment sent from this phone, shown until the server's history lists it. */
@@ -284,7 +284,7 @@ function writeSnapshot(publicKey: string, snapshot: WalletSnapshot): void {
     publicKey,
     onlineBalance: snapshot.balances?.online ?? null,
     offlineBalance: snapshot.balances?.offline ?? null,
-    syncedAt: snapshot.savedAt,
+    syncedAt: snapshot.savedAt ?? 0,
   };
   writeGroup(publicKey, 'server', snapshot.transactions, (tx) => {
     tx.insert(walletState).values(state).onConflictDoUpdate({ target: walletState.publicKey, set: state }).run();
@@ -300,9 +300,23 @@ export async function loadSnapshot(publicKey: string): Promise<WalletSnapshot | 
       state.onlineBalance !== null && state.offlineBalance !== null
         ? { online: state.onlineBalance, offline: state.offlineBalance }
         : null;
-    return { balances, transactions: readGroup(publicKey, 'server'), savedAt: state.syncedAt };
+    return { balances, transactions: readGroup(publicKey, 'server'), savedAt: state.syncedAt || null };
   } catch {
     return null;
+  }
+}
+
+/** Save a balance read without replacing history or advancing its last successful refresh time. */
+export async function saveWalletBalances(publicKey: string, balances: CachedBalances): Promise<void> {
+  try {
+    await ready(publicKey);
+    const values = { onlineBalance: balances.online, offlineBalance: balances.offline };
+    getDb().insert(walletState)
+      .values({ publicKey, ...values, syncedAt: 0 })
+      .onConflictDoUpdate({ target: walletState.publicKey, set: values })
+      .run();
+  } catch {
+    // A missing cache does not affect the current balance on screen.
   }
 }
 

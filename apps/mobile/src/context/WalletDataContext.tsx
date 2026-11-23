@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { OFFLINE_TOLL_PESOS } from '../config/limits';
-import { errorMessage, isAborted } from '../services/api/client';
+import { errorMessage } from '../services/api/client';
 import { getConnectivity } from '../services/connectivity';
 import { reportError } from '../services/errorReporting';
 import { syncService } from '../services/sync/syncService';
@@ -35,6 +35,7 @@ import {
   saveOutcomes,
   savePending,
   saveSnapshot,
+  saveWalletBalances,
   type PendingOffline,
 } from '../services/walletCache';
 import type { Transaction } from '../types/transaction';
@@ -106,7 +107,8 @@ const syncNow = () => syncService.requestSync();
 const OFFLINE_MESSAGE = "You're offline. Connect to the internet to load your transactions.";
 
 export function WalletDataProvider({ children }: { children: React.ReactNode }) {
-  const { activeAccount } = useAuth();
+  const { activeAccount, walletSignal } = useAuth();
+  const [dataWallet, setDataWallet] = useState<AbortSignal | null>(null);
   const [balances, setBalances] = useState<Balances | null>(null);
   const [serverTransactions, setServerTransactions] = useState<Transaction[]>([]);
   const [pending, setPending] = useState<PendingOffline[]>([]);
@@ -117,13 +119,13 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const [outcomes, setOutcomes] = useState<PaymentOutcomes>(NO_OUTCOMES);
   const [voucherReviews, setVoucherReviews] = useState<VoucherReview[]>([]);
   const request = useRef<AbortController | null>(null);
+  const hydratedWallet = useRef<AbortSignal | null>(null);
   const loadedAt = useRef(0);
   // Latest values for code that runs after an await, where the render's copies may be stale.
   const balancesRef = useRef<Balances | null>(null);
   const serverRef = useRef<Transaction[]>([]);
   const pendingRef = useRef<PendingOffline[]>([]);
   const movesRef = useRef<Transaction[]>([]);
-  const syncedAtRef = useRef<number | null>(null);
   const hasData = useRef(false);
 
   const shortId = activeAccount?.shortId ?? null;
@@ -133,11 +135,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const outcomesRef = useRef<PaymentOutcomes>(NO_OUTCOMES);
   const putOutcomes = useCallback(
     (next: PaymentOutcomes) => {
+      if (!walletSignal || walletSignal.aborted) return;
       outcomesRef.current = next;
       setOutcomes(next);
       if (publicKey) void saveOutcomes(publicKey, next);
     },
-    [publicKey],
+    [publicKey, walletSignal],
   );
   const addOutcomes = useCallback(
     (delta: Partial<PaymentOutcomes>) => {
@@ -164,9 +167,10 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   }, [publicKey, addOutcomes]);
 
   const refresh = useCallback(
-    async ({ force = false }: { force?: boolean } = {}) => {
-      if (!shortId || !publicKey) return;
-      if (!force && Date.now() - loadedAt.current < FRESH_MS) return;
+    async ({ force = false, signal }: { force?: boolean; signal?: AbortSignal } = {}) => {
+      if (!shortId || !publicKey || !walletSignal || walletSignal.aborted || signal?.aborted) return;
+      if (hydratedWallet.current !== walletSignal) return;
+      if (!force && (request.current || Date.now() - loadedAt.current < FRESH_MS)) return;
 
       // No connection: do not start a request that can only fail. A saved copy stays on screen as it is; with
       // nothing saved, say why the list is empty.
@@ -181,22 +185,40 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
+      const abort = () => controller.abort();
+      walletSignal.addEventListener('abort', abort);
+      signal?.addEventListener('abort', abort);
       setStatus('loading');
 
       const account = { shortId, stellarPublicKey: publicKey };
+      const balanceRequest = getVaultBalance(account, controller.signal).then((balance) => {
+        if (!controller.signal.aborted) {
+          const next = { online: balance.balancePHP, offline: balance.offlineBalancePHP };
+          balancesRef.current = next;
+          setBalances(next);
+        }
+        return balance;
+      });
       const [balance, history] = await Promise.allSettled([
-        getVaultBalance(account, controller.signal),
+        balanceRequest,
         getHistory(account, HISTORY_LIMIT, controller.signal),
       ]);
-      if (controller.signal.aborted) return;
+      walletSignal.removeEventListener('abort', abort);
+      signal?.removeEventListener('abort', abort);
+      if (request.current !== controller || walletSignal.aborted) return;
+      request.current = null;
+      if (controller.signal.aborted) {
+        setError(null);
+        if (hasData.current || balancesRef.current) {
+          setStatus('ready');
+        } else if (!getConnectivity().online) {
+          setError(OFFLINE_MESSAGE);
+          setStatus('error');
+        } else setStatus('idle');
+        return;
+      }
 
-      // Each half succeeds or fails on its own, so a failed balance does not blank the history.
-      let failure: unknown = null;
-      if (balance.status === 'fulfilled') {
-        const next = { online: balance.value.balancePHP, offline: balance.value.offlineBalancePHP };
-        balancesRef.current = next;
-        setBalances(next);
-      } else if (!isAborted(balance.reason)) failure = balance.reason;
+      let failure: unknown = balance.status === 'rejected' ? balance.reason : null;
 
       if (history.status === 'fulfilled') {
         const next = toTransactions(history.value);
@@ -251,18 +273,15 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         }
         addOutcomes({ settled, failed });
         // What the server still does not list after 14 days is marked unconfirmed now, with a fresh balance on screen.
-        expirePending();
-        syncedAtRef.current = now;
+        if (balance.status === 'fulfilled') expirePending();
         void saveSnapshot(publicKey, { balances: balancesRef.current, transactions: next, savedAt: now });
       } else {
-        if (!isAborted(history.reason)) failure = failure ?? history.reason;
+        failure = failure ?? history.reason;
         setVoucherReviews([]);
-        // A fresh balance is still kept with the history already saved, so it survives a lock or restart.
         if (balance.status === 'fulfilled') {
-          void saveSnapshot(publicKey, {
-            balances: balancesRef.current,
-            transactions: serverRef.current,
-            savedAt: syncedAtRef.current ?? Date.now(),
+          void saveWalletBalances(publicKey, {
+            online: balance.value.balancePHP,
+            offline: balance.value.offlineBalancePHP,
           });
         }
       }
@@ -276,7 +295,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         setStatus('ready');
       }
     },
-    [shortId, publicKey, addOutcomes, expirePending],
+    [shortId, publicKey, walletSignal, addOutcomes, expirePending],
   );
 
   // A different (or no) account means nothing from the previous one may stay on screen. The saved copy for the new
@@ -284,13 +303,13 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     let cancelled = false;
     request.current?.abort();
+    hydratedWallet.current = null;
     loadedAt.current = 0;
     hasData.current = false;
     balancesRef.current = null;
     serverRef.current = [];
     pendingRef.current = [];
     movesRef.current = [];
-    syncedAtRef.current = null;
     setBalances(null);
     setServerTransactions([]);
     setPending([]);
@@ -299,11 +318,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     setSyncedAt(null);
     setError(null);
     setStatus('idle');
+    setDataWallet(walletSignal);
     // Not saved: the previous account's notice stays stored for it, and this account's is loaded below.
     outcomesRef.current = NO_OUTCOMES;
     setOutcomes(NO_OUTCOMES);
 
-    if (shortId && publicKey) {
+    if (shortId && publicKey && walletSignal) {
       void (async () => {
         const [snapshot, savedPending, savedMoves, savedOutcomes] = await Promise.all([
           loadSnapshot(publicKey),
@@ -311,7 +331,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           loadMoves(publicKey),
           loadOutcomes(publicKey),
         ]);
-        if (cancelled) return;
+        if (cancelled || walletSignal.aborted) return;
         // Added to anything announced while loading, so neither is lost.
         addOutcomes(savedOutcomes);
         if (snapshot) {
@@ -320,7 +340,6 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           setBalances(snapshot.balances);
           setServerTransactions(snapshot.transactions);
           setSyncedAt(snapshot.savedAt);
-          syncedAtRef.current = snapshot.savedAt;
           hasData.current = true;
         }
         if (savedPending.length > 0) {
@@ -334,14 +353,16 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           hasData.current = true;
         }
         if (hasData.current) setStatus('ready');
+        hydratedWallet.current = walletSignal;
         await refresh({ force: true });
       })();
     }
     return () => {
       cancelled = true;
       request.current?.abort();
+      request.current = null;
     };
-  }, [shortId, publicKey, refresh, addOutcomes]);
+  }, [shortId, publicKey, walletSignal, refresh, addOutcomes]);
 
   // The sync service decides when to read fresh data (reconnect, back on screen, interval, pull-to-refresh). After a
   // reconnect or a pull the data is re-read even if recent; the others skip it while it is still fresh.
@@ -349,7 +370,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     if (!shortId || !publicKey) return;
     return syncService.registerStep(
       'wallet',
-      ({ trigger }) => refresh({ force: trigger === 'reconnect' || trigger === 'manual' }),
+      ({ trigger, signal }) => refresh({ force: trigger === 'reconnect' || trigger === 'manual', signal }),
       SYNC_ORDER_WALLET,
     );
   }, [shortId, publicKey, refresh]);
@@ -357,13 +378,13 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   // Each sync submits this wallet's approved vouchers before reading History. Server rejections without a History
   // entry are marked failed on this phone.
   useEffect(() => {
-    if (!publicKey) return;
+    if (!publicKey || !walletSignal) return;
     return syncService.registerStep(
       'vouchers',
       async ({ signal }) => {
-        if (!getConnectivity().online) return;
+        if (walletSignal.aborted || !getConnectivity().online) return;
         const { givenUp } = await drainVouchers(publicKey, signal);
-        if (givenUp.length === 0) return;
+        if (walletSignal.aborted || givenUp.length === 0) return;
         const reasons = new Map(givenUp.map((g) => [normalizeNonce(g.nonce), g.reason]));
         let failed = 0;
         const next = pendingRef.current.map((p) => {
@@ -380,7 +401,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       },
       SYNC_ORDER_VOUCHERS,
     );
-  }, [publicKey, addOutcomes]);
+  }, [publicKey, walletSignal, addOutcomes]);
 
   // Settlement confirms queued by moves and transfers (e.g. the app was killed before they went out) are sent after
   // the vouchers and before the history read, so History already lists those transactions.
@@ -422,7 +443,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
   const holdOffline = useCallback(
     (payment: PendingOffline) => {
-      if (!publicKey) return;
+      if (!publicKey || !walletSignal || walletSignal.aborted) return;
       const nonce = normalizeNonce(payment.nonce);
       if (pendingRef.current.some((p) => normalizeNonce(p.nonce) === nonce)) return;
       const next = [payment, ...pendingRef.current];
@@ -431,12 +452,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       setPending(next);
       void savePending(publicKey, next);
     },
-    [publicKey],
+    [publicKey, walletSignal],
   );
 
   const releaseOfflineHold = useCallback(
     (nonce: string) => {
-      if (!publicKey) return;
+      if (!publicKey || !walletSignal || walletSignal.aborted) return;
       const key = normalizeNonce(nonce);
       const next = pendingRef.current.filter((p) => !(normalizeNonce(p.nonce) === key && p.status === 'pending'));
       if (next.length === pendingRef.current.length) return;
@@ -444,12 +465,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       setPending(next);
       void savePending(publicKey, next);
     },
-    [publicKey],
+    [publicKey, walletSignal],
   );
 
   const trackOfflineDispatch = useCallback(
     (payment: PendingOffline, voucher: string) => {
-      if (!publicKey) return false;
+      if (!publicKey || !walletSignal || walletSignal.aborted) return false;
       const nonce = normalizeNonce(payment.nonce);
       if (serverRef.current.some((tx) => tx.nonce && normalizeNonce(tx.nonce) === nonce && tx.status !== 'pending')) {
         return true;
@@ -464,12 +485,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       if (getConnectivity().online) syncService.requestSync({ afterCurrent: true });
       return true;
     },
-    [publicKey, holdOffline],
+    [publicKey, walletSignal, holdOffline],
   );
 
   const answerVoucherReview = useCallback(
     (review: VoucherReview, payment: PendingOffline | null) => {
-      if (!publicKey || review.row.publicKey !== publicKey) return false;
+      if (!publicKey || !walletSignal || walletSignal.aborted || review.row.publicKey !== publicKey) return false;
       try {
         if (payment) {
           if (!getConnectivity().online || !acceptVoucherReview(review)) return false;
@@ -489,12 +510,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         return false;
       }
     },
-    [publicKey, holdOffline],
+    [publicKey, walletSignal, holdOffline],
   );
 
   const addMoves = useCallback(
     (entries: Transaction[]) => {
-      if (!publicKey || entries.length === 0) return;
+      if (!publicKey || !walletSignal || walletSignal.aborted || entries.length === 0) return;
       const known = new Set(movesRef.current.map((m) => m.id));
       const fresh = entries.filter((e) => !known.has(e.id));
       if (fresh.length === 0) return;
@@ -504,7 +525,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       setMoves(next);
       void saveMoves(publicKey, next);
     },
-    [publicKey],
+    [publicKey, walletSignal],
   );
 
   const transactions = useMemo(() => {
@@ -526,26 +547,29 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   );
   const dismissOutcomes = useCallback(() => putOutcomes(NO_OUTCOMES), [putOutcomes]);
 
+  // The new unlock can render before the cache-loading effect resets the previous unlock's data.
+  const ownsData = walletSignal !== null && dataWallet === walletSignal;
   const value = useMemo<WalletData>(
     () => ({
-      balances,
-      transactions,
-      status,
-      error,
-      syncedAt,
+      balances: ownsData ? balances : null,
+      transactions: ownsData ? transactions : [],
+      status: ownsData ? status : 'idle',
+      error: ownsData ? error : null,
+      syncedAt: ownsData ? syncedAt : null,
       refresh,
       syncNow,
       trackOfflineDispatch,
-      voucherReviews,
+      voucherReviews: ownsData ? voucherReviews : [],
       answerVoucherReview,
       holdOffline,
       releaseOfflineHold,
       addMoves,
-      pendingOffline,
-      outcomes,
+      pendingOffline: ownsData ? pendingOffline : 0,
+      outcomes: ownsData ? outcomes : NO_OUTCOMES,
       dismissOutcomes,
     }),
     [
+      ownsData,
       balances,
       transactions,
       status,
