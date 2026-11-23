@@ -112,7 +112,7 @@ function RootNavigator({ initialRoute }: { initialRoute: 'Landing' | 'Login' }) 
         {/* The receipt ends the flow: no swipe-back into the finished steps (its own Back goes home). */}
         <Stack.Screen name="SendReceipt" component={SendReceiptScreen} options={{ gestureEnabled: false }} />
       </Stack.Navigator>
-      {/* Tracks SMS handoffs and requests consent before retrying an unconfirmed transfer over the internet. */}
+      {/* Confirms SMS dispatch and separately requests consent before an internet retry. */}
       <SmsDispatchPrompt navigation={navigationRef} />
     </NavigationContainer>
   );

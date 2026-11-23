@@ -66,7 +66,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     return at;
   };
 
-  // Relay dispatch is recorded here. SMS handoffs are recorded by SmsDispatchPrompt when HoneBill regains focus.
+  // The SMS receipt opens from SmsDispatchPrompt after the user confirms sending the text.
   const finish = useCallback(
     (signed: string, method: DispatchMethod) => {
       const nonce = voucherNonce(signed);
@@ -129,9 +129,6 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
           releaseOfflineHold(dispatch.nonce);
         }
         throw error;
-      }
-      if (navigation.isFocused()) {
-        navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: dispatch.nonce, issuedAt: dispatch.openedAt });
       }
     } catch (error) {
       if (error instanceof MissingGatewayError) {

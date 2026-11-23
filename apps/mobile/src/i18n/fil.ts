@@ -482,6 +482,11 @@ export const fil: Messages = {
     relayDone: 'Na-send na ng partner ko',
     relayCancel: 'Isara',
     relayFailed: 'Nagkaproblema sa paghahanda ng QR code. Walang perang nailipat.',
+    sentTitle: 'Na-send mo na ba ang text?',
+    sentBody: (amount, name) =>
+      `${amount} para kay ${name}. Nakatabi muna ang halaga habang sinusuri ng HoneBill ang payment.`,
+    sentYes: 'Oo, na-send ko na',
+    sentNo: 'Hindi pa',
     recoveryTitle: 'Subukan ulit online ang offline transfer?',
     recoveryBody: (amount, name, ref, total) =>
       `Hindi makumpirma ng HoneBill ang transfer na ito. Maaaring hindi naipadala ang text o hindi pa ito nakakarating.\n\n${amount} para kay ${name} · Ref ${ref}\n${total} ang kabuuang ibabawas sa Offline Funds, kasama ang fee.\n\nPuwede mong subukan ulit nang walang bagong text. Kung makarating ang unang text, isang beses lang maaaring matuloy ang transfer.`,

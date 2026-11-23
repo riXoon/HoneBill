@@ -14,8 +14,9 @@ import {
   loadSmsHandoff,
   onDispatchChange,
   pendingPayment,
+  type SmsHandoff,
 } from '../../services/offline/smsDispatch';
-import { resolveRecipient } from '../../services/recipientDirectory';
+import { rememberRecipient, resolveRecipient } from '../../services/recipientDirectory';
 import type { Recipient } from '../../types/recipient';
 import { formatPeso, voucherRef } from '../../utils/format';
 
@@ -36,8 +37,8 @@ const SIGNED_OUT_ROUTES = new Set<keyof RootStackParamList>([
 ]);
 
 /**
- * Recovers SMS handoffs after returning to the signed-in app. A fresh wallet check can then offer to retry an
- * unconfirmed transfer, even after an auto-lock or restart.
+ * Asks about SMS dispatch when the user returns, including after an auto-lock or restart.
+ * A separate prompt asks for approval to retry an eligible unconfirmed transfer online.
  */
 export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContainerRefWithCurrent<RootStackParamList> }) {
   const t = useT();
@@ -47,7 +48,7 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
   const publicKey = activeAccount?.stellarPublicKey ?? null;
   // Load saved holds before recording the dispatch.
   const walletLoaded = publicKey !== null && status !== 'idle';
-  const [foregroundWallet, setForegroundWallet] = useState<string | null>(null);
+  const [foreground, setForeground] = useState<{ publicKey: string; handoff: SmsHandoff | null } | null>(null);
   const [resolved, setResolved] = useState<Recipient | null>(null);
 
   useEffect(() => {
@@ -56,23 +57,17 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
     const check = async () => {
       const started = ++generation;
       if (AppState.currentState !== 'active') {
-        setForegroundWallet(null);
+        setForeground(null);
         return;
       }
       const found = await loadSmsHandoff(publicKey);
       if (started !== generation) return;
       const route = navigation.isReady() ? navigation.getCurrentRoute()?.name : undefined;
       if (!route || SIGNED_OUT_ROUTES.has(route as keyof RootStackParamList)) {
-        setForegroundWallet(null);
+        setForeground(null);
         return;
       }
-      setForegroundWallet(publicKey);
-      if (found) {
-        const payment = pendingPayment(found.nonce, found.draft.amount, found.recipient, found.openedAt);
-        if (trackOfflineDispatch(payment, found.voucher)) {
-          void clearSmsHandoff(publicKey, found.nonce);
-        }
-      }
+      setForeground({ publicKey, handoff: found });
     };
     void check();
     const appSub = AppState.addEventListener('change', () => void check());
@@ -84,10 +79,11 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
       navUnsub();
       unsubscribe();
     };
-  }, [publicKey, walletLoaded, navigation, trackOfflineDispatch]);
+  }, [publicKey, walletLoaded, navigation]);
 
-  const canPrompt = publicKey !== null && foregroundWallet === publicKey;
-  const review = canPrompt && online
+  const canPrompt = walletLoaded && foreground?.publicKey === publicKey;
+  const handoff = canPrompt ? foreground.handoff : null;
+  const review = canPrompt && !handoff && online
     ? voucherReviews.find(({ row }) => row.publicKey === publicKey)
     : undefined;
   const receiverShortId = review?.receiverShortId;
@@ -107,6 +103,37 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
       });
     return () => controller.abort();
   }, [review, receiverShortId, answerVoucherReview]);
+
+  if (handoff) {
+    const { draft, nonce, openedAt, recipient, voucher } = handoff;
+    const who = recipient ? (recipient.unverified ? `ID ${recipient.shortId}` : recipient.name) : draft.recipientId;
+    const answer = (sent: boolean) => {
+      // Either answer preserves the voucher for status checks. Only the retry dialog can authorize submission.
+      const payment = pendingPayment(nonce, draft.amount, recipient, openedAt);
+      if (!trackOfflineDispatch(payment, voucher)) {
+        Alert.alert(t.sendMethod.reviewSaveFailed);
+        return;
+      }
+      void clearSmsHandoff(handoff.publicKey, nonce);
+      setForeground({ publicKey: handoff.publicKey, handoff: null });
+      if (sent && navigation.isReady()) {
+        if (recipient) rememberRecipient(recipient);
+        navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt: openedAt });
+      }
+    };
+    return (
+      <ConfirmDialog
+        visible
+        mood="phone"
+        title={t.sendMethod.sentTitle}
+        message={t.sendMethod.sentBody(formatPeso(draft.amount), who)}
+        confirmLabel={t.sendMethod.sentYes}
+        cancelLabel={t.sendMethod.sentNo}
+        onConfirm={() => answer(true)}
+        onCancel={() => answer(false)}
+      />
+    );
+  }
 
   if (review && resolved && resolved.shortId === receiverShortId) {
     const answer = (approve: boolean) => {
