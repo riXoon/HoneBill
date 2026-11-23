@@ -11,7 +11,7 @@ export type SignupKeys = { publicKey: string; offlineDeviceKey: string };
 
 export type SignupSession = {
   phone: string;
-  verificationToken?: string;
+  verificationToken: string;
   details?: SignupDetails;
   pin?: string;
   keys?: SignupKeys;
@@ -26,6 +26,13 @@ export function setSignupSession(session: SignupSession): void {
 
 export function getSignupSession(): SignupSession | null {
   return current;
+}
+
+/** Re-verifies the same signup without replacing the generated wallet or form data. */
+export function refreshSignupProof(phone: string, verificationToken: string): boolean {
+  if (current?.phone !== phone) return false;
+  current = { ...current, verificationToken };
+  return true;
 }
 
 export function setSignupDetails(details: SignupDetails): void {

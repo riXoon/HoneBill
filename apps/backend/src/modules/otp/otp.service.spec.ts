@@ -1,11 +1,14 @@
 import { BadRequestException, HttpException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import type Redis from 'ioredis';
 import { verifyVerificationToken } from '../../common/utils/otp.util';
 import { RedisService } from '../../infra/redis/redis.service';
 import { OtpRateLimitService } from '../../infra/redis/otp-rate-limit.service';
 import { TextbeeService } from './textbee.service';
 import { OtpService } from './otp.service';
+import { SendOtpDto, VerifyOtpDto } from './dto/otp.dto';
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 
 type SendSms = (
@@ -213,6 +216,48 @@ describe('OtpService', () => {
     const error = await service.verify('09000000006', '123456').catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ServiceUnavailableException);
     expect((error as ServiceUnavailableException).getStatus()).toBe(503);
+  });
+
+  it('scopes challenges and tokens to the requested purpose', async () => {
+    const secret = 'fixture-otp-secret';
+    const phone = '+639000000004';
+    const { service, valuesStore } = createService({ OTP_VERIFICATION_JWT_SECRET: secret, OTP_REQUIRE_PURPOSE: true });
+    await expect(service.send(phone, '203.0.113.4')).rejects.toBeInstanceOf(BadRequestException);
+    await service.send(phone, '203.0.113.4', 'signup');
+    const code = valuesStore.get(`honebill:otp:signup:${phone}`)!;
+    await expect(service.verify(phone, code, 'change_email')).rejects.toBeInstanceOf(BadRequestException);
+    const { verificationToken } = await service.verify(phone, code, 'signup');
+    expect(verifyVerificationToken(verificationToken!, phone, secret, 'signup')).toBe(true);
+    expect(verifyVerificationToken(verificationToken!, phone, secret, 'reset_mpin', true)).toBe(false);
+    expect(verifyVerificationToken(verificationToken!, '+639000000005', secret, 'signup')).toBe(false);
+  });
+
+  it('cannot verify an outstanding pre-deployment code or issue a test code in production', async () => {
+    const phone = '+639000000004';
+    const { service, textbee, valuesStore } = createService({
+      NODE_ENV: 'production',
+      OTP_VERIFICATION_JWT_SECRET: 'fixture-otp-secret',
+      OTP_TEST_MODE: true,
+      OTP_TEST_NUMBERS: phone,
+      OTP_TEST_CODE: '012345',
+    });
+    valuesStore.set(`honebill:otp:${phone}`, '012345');
+    await expect(service.verify(phone, '012345')).rejects.toBeInstanceOf(BadRequestException);
+    await service.send(phone, '203.0.113.4');
+    expect(valuesStore.get(`honebill:otp:production:${phone}`)).toMatch(/^\d{6}$/);
+    expect(textbee).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the purpose field for both OTP HTTP bodies and rejects unknown or null purposes', async () => {
+    const phoneNumber = '+639000000004';
+    const body = { phoneNumber, code: '123456', purpose: 'signup' };
+    const options = { whitelist: true, forbidNonWhitelisted: true };
+    await expect(validate(plainToInstance(SendOtpDto, { phoneNumber, purpose: 'signup' }), options)).resolves.toEqual([]);
+    await expect(validate(plainToInstance(VerifyOtpDto, body), options)).resolves.toEqual([]);
+    for (const purpose of [null, 'wrong-purpose']) {
+      await expect(validate(plainToInstance(VerifyOtpDto, { ...body, purpose }), options))
+        .resolves.toEqual([expect.objectContaining({ property: 'purpose' })]);
+    }
   });
 
   it('applies the send limiter before writing an OTP and propagates the limit error', async () => {

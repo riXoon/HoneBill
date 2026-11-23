@@ -183,6 +183,7 @@ export function ChangeMpinScreen({ navigation }: NativeStackScreenProps<RootStac
         <SmsCodeStep
           key={round}
           phone={phone}
+          purpose="change_mpin"
           onVerified={(proof) => {
             smsProof.current = proof;
             goTo('new');

@@ -108,7 +108,7 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
     return null;
   };
 
-  const save = async (proof: string | undefined) => {
+  const save = async (proof: string) => {
     if (!phone) return;
     const controller = new AbortController();
     request.current = controller;
@@ -147,7 +147,7 @@ export function AccountSettingsScreen({ navigation }: NativeStackScreenProps<Roo
             {t.accountSettings.saving}
           </Text>
         ) : (
-          <SmsCodeStep key={smsRound} phone={phone} onVerified={(proof) => void save(proof)} />
+          <SmsCodeStep key={smsRound} phone={phone} purpose="change_email" onVerified={(proof) => void save(proof)} />
         )}
       </SettingsPage>
     );

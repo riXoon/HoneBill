@@ -10,6 +10,8 @@ describe('legacy SMS tester OTP gate', () => {
     expect(getTestOtpCode('+639181111111', env)).toBeNull();
     expect(getTestOtpCode('+639171234567', { ...env, OTP_TEST_MODE: 'false' })).toBeNull();
     expect(getTestOtpCode('+639171234567', { ...env, OTP_TEST_CODE: '12' })).toBeNull();
+    expect(getTestOtpCode('+639171234567', { ...env, NODE_ENV: 'production' })).toBeNull();
+    expect(getTestOtpCode('+639171234567', { ...env, VERCEL_ENV: 'production' })).toBeNull();
     expect(getTestOtpCode('+639171234567', {})).toBeNull();
   });
 });

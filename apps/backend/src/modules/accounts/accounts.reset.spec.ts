@@ -30,7 +30,7 @@ const account = (overrides: Partial<Account> = {}): Account => ({
   ...overrides,
 });
 
-function makeService(found: Account | null, options: { redisFails?: boolean } = {}) {
+function makeService(found: Account | null, options: { redisFails?: boolean; strictPurpose?: boolean } = {}) {
   const prisma = {
     account: {
       findFirst: jest.fn(async (..._args: any[]) => found),
@@ -41,7 +41,8 @@ function makeService(found: Account | null, options: { redisFails?: boolean } = 
     if (options.redisFails) throw new Error('redis down');
     return 1;
   });
-  const config = { get: jest.fn((key: string) => (key === 'OTP_VERIFICATION_JWT_SECRET' ? SECRET : undefined)) };
+  const settings = { OTP_VERIFICATION_JWT_SECRET: SECRET, OTP_REQUIRE_PURPOSE: options.strictPurpose };
+  const config = { get: jest.fn((key: keyof typeof settings) => settings[key]) };
   const service = new AccountsService(
     prisma as unknown as PrismaService,
     { getClient: () => ({ del }) } as unknown as RedisService,
@@ -85,6 +86,17 @@ describe('resetPin ("Forgot MPIN")', () => {
     expect(error.responseBody.code).toBe('WALLET_MISMATCH');
     expect(prisma.account.update).not.toHaveBeenCalled();
     expect(del).not.toHaveBeenCalled();
+  });
+
+  it('requires reset-specific SMS proof as well as the account wallet in strict mode', async () => {
+    const { service, prisma } = makeService(account(), { strictPurpose: true });
+    const recovery = signVerificationToken(PHONE, SECRET, 'recover_device')!;
+    const reset = signVerificationToken(PHONE, SECRET, 'reset_mpin')!;
+    await expect(service.resetPin(PHONE, '5678', token(), WALLET)).rejects.toMatchObject({ status: 401 });
+    await expect(service.resetPin(PHONE, '5678', recovery, WALLET)).rejects.toMatchObject({ status: 401 });
+    await expect(service.resetPin(PHONE, '5678', reset, 'GSOMEOTHERWALLET')).rejects.toMatchObject({ status: 403 });
+    expect(prisma.account.update).not.toHaveBeenCalled();
+    await expect(service.resetPin(PHONE, '5678', reset, WALLET)).resolves.toEqual({ success: true });
   });
 
   it('refuses an unknown number and a malformed MPIN', async () => {

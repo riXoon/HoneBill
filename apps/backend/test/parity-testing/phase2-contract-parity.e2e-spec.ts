@@ -3,7 +3,9 @@ import {
   INestApplication,
   HttpException,
   UnauthorizedException,
+  ValidationPipe,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { ApiResponseException } from '../../src/common/exceptions/api-response.exception.js';
@@ -15,6 +17,7 @@ import { AccountsController } from '../../src/modules/accounts/accounts.controll
 import { AccountsService } from '../../src/modules/accounts/accounts.service.js';
 import { OtpController } from '../../src/modules/otp/otp.controller.js';
 import { OtpService } from '../../src/modules/otp/otp.service.js';
+import type { OtpPurpose } from '../../src/common/utils/otp.util.js';
 import { OtpRateLimitService, RateLimitedException } from '../../src/infra/redis/otp-rate-limit.service.js';
 
 describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
@@ -36,8 +39,8 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     >(),
   };
   const otpService = {
-    send: jest.fn<(phoneNumber: string, clientIp: string) => Promise<Record<string, unknown>>>(),
-    verify: jest.fn<(phoneNumber: string, code: string) => Promise<Record<string, unknown>>>(),
+    send: jest.fn<(phoneNumber: string, clientIp: string, purpose?: OtpPurpose) => Promise<Record<string, unknown>>>(),
+    verify: jest.fn<(phoneNumber: string, code: string, purpose?: OtpPurpose) => Promise<Record<string, unknown>>>(),
   };
 
   beforeAll(async () => {
@@ -45,6 +48,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AuthController, AccountsController, OtpController],
       providers: [
+        { provide: JwtService, useValue: new JwtService() },
         { provide: AuthService, useValue: authService },
         { provide: AccountsService, useValue: accountsService },
         { provide: OtpService, useValue: otpService },
@@ -56,6 +60,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     app = moduleRef.createNestApplication({ rawBody: true, bodyParser: false });
     app.setGlobalPrefix('api/v2');
     configureRequestBodyParsing(app);
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
     app.useGlobalFilters(new ApiExceptionFilter());
     await app.init();
   });
@@ -128,29 +133,24 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
     expect(accountsService.verifyPin).toHaveBeenNthCalledWith(1, '09000000001', '1234');
   });
 
-  it('POST /api/v2/auth/pin/verify trims PINs and coerces non-strings to empty', async () => {
-    accountsService.verifyPin.mockResolvedValue({ success: true });
-
+  it('POST /api/v2/auth/pin/verify rejects PIN bodies that fail the active DTO', async () => {
+    accountsService.verifyPin.mockClear();
     await request(app.getHttpServer())
       .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: '09000000001', pin: ' 1234 ' })
-      .expect(200);
-    expect(accountsService.verifyPin).toHaveBeenLastCalledWith('09000000001', '1234');
+      .expect(400);
 
     await request(app.getHttpServer())
       .post('/api/v2/auth/pin/verify')
       .send({ phoneNumber: 9000000001, pin: 1234 })
-      .expect(200);
-    expect(accountsService.verifyPin).toHaveBeenLastCalledWith('', '');
+      .expect(400);
+    expect(accountsService.verifyPin).not.toHaveBeenCalled();
   });
 
   it('POST /api/v2/auth/pin/verify with no body does not crash the controller', async () => {
-    accountsService.verifyPin.mockRejectedValueOnce(
-      new HttpException({ error: 'A valid phone number and PIN are required.' }, 400),
-    );
-
+    accountsService.verifyPin.mockClear();
     await request(app.getHttpServer()).post('/api/v2/auth/pin/verify').expect(400);
-    expect(accountsService.verifyPin).toHaveBeenCalledWith('', '');
+    expect(accountsService.verifyPin).not.toHaveBeenCalled();
   });
 
   it('POST /api/v2/auth/pin/verify returns 423 with retryAfter body and Retry-After header', async () => {
@@ -189,7 +189,7 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       .set('X-Forwarded-For', '203.0.113.7, 10.0.0.1')
       .send({ phoneNumber: '09000000002' })
       .expect(200, { success: true, message: 'OTP sent successfully.' });
-    expect(otpService.send).toHaveBeenNthCalledWith(1, '09000000002', '203.0.113.7');
+    expect(otpService.send).toHaveBeenNthCalledWith(1, '09000000002', '203.0.113.7', undefined);
 
     const limited = await request(app.getHttpServer())
       .post('/api/v2/otp/send')
@@ -227,7 +227,21 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       .post('/api/v2/otp/verify')
       .send({ phoneNumber: '09000000003', code: '000000' })
       .expect(401, { error: 'Invalid verification code.', attemptsRemaining: 4 });
-    expect(otpService.verify).toHaveBeenNthCalledWith(1, '09000000003', '123456');
+    expect(otpService.verify).toHaveBeenNthCalledWith(1, '09000000003', '123456', undefined);
+  });
+
+  it('forwards the purpose on OTP send and verify requests', async () => {
+    otpService.send.mockResolvedValueOnce({ success: true, message: 'OTP sent successfully.' });
+    otpService.verify.mockResolvedValueOnce({ success: true, verificationToken: 'fixture-proof' });
+    const phoneNumber = '09000000003';
+    await request(app.getHttpServer()).post('/api/v2/otp/send')
+      .set('X-Forwarded-For', '203.0.113.7').send({ phoneNumber, purpose: 'signup' }).expect(200);
+    await request(app.getHttpServer()).post('/api/v2/otp/verify')
+      .send({ phoneNumber, code: '123456', purpose: 'signup' }).expect(200);
+    expect(otpService.send).toHaveBeenLastCalledWith(phoneNumber, '203.0.113.7', 'signup');
+    expect(otpService.verify).toHaveBeenLastCalledWith(phoneNumber, '123456', 'signup');
+    await request(app.getHttpServer()).post('/api/v2/otp/verify')
+      .send({ phoneNumber, code: '123456', purpose: 'unknown' }).expect(400);
   });
 
   it('POST /api/v2/register keeps the legacy 201 success status and conflict shape', async () => {
@@ -236,14 +250,15 @@ describe('Phase 2 legacy HTTP contract parity (e2e)', () => {
       .mockRejectedValueOnce(
         new HttpException({ error: 'Phone number is already registered.' }, 409),
       );
+    const stellarPublicKey = `G${'A'.repeat(55)}`;
 
     await request(app.getHttpServer())
       .post('/api/v2/register')
-      .send({ stellarPublicKey: 'GTEST', phoneNumber: '09000000004' })
+      .send({ stellarPublicKey, phoneNumber: '09000000004' })
       .expect(201, { success: true, data: { id: 'fake-account-id' } });
     await request(app.getHttpServer())
       .post('/api/v2/register')
-      .send({ stellarPublicKey: 'GTEST', phoneNumber: '09000000004' })
+      .send({ stellarPublicKey, phoneNumber: '09000000004' })
       .expect(409, { error: 'Phone number is already registered.' });
   });
 

@@ -8,14 +8,17 @@ import { Mascot } from '../components/mascot/Mascot';
 import { HiveEntrance } from '../components/transition/HiveEntrance';
 import { useHiveEntrance } from '../components/transition/useHiveEntrance';
 import { AppBackground } from '../components/ui/AppBackground';
+import { AuthChrome } from '../components/ui/AuthChrome';
+import { AuthScroll } from '../components/ui/AuthScroll';
 import { Button } from '../components/ui/Button';
 import { GradientTitle } from '../components/ui/GradientTitle';
+import { SmsCodeStep } from '../components/ui/SmsCodeStep';
 import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { SignupIncompleteError, completeSignup, fieldErrorText } from '../services/completeSignup';
 import { reportError } from '../services/errorReporting';
-import { clearSignupSession } from '../services/signupSession';
+import { clearSignupSession, getSignupSession, refreshSignupProof } from '../services/signupSession';
 import { colors, fonts } from '../theme';
 import { messages, useT } from '../i18n';
 
@@ -30,6 +33,7 @@ export function AccountConfirmationScreen({
   const { login } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reverifyPhone, setReverifyPhone] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
 
@@ -73,8 +77,9 @@ export function AccountConfirmationScreen({
           { text: messages().common.ok, onPress: startOver },
         ]);
       } else if (e instanceof ApiError && e.status === 401) {
-        // The OTP proof expired (30 minutes) or does not match this number.
-        Alert.alert(messages().onboarding.verificationExpired, messages().onboarding.verifyPhoneAgain, [{ text: messages().common.ok, onPress: startOver }]);
+        const session = getSignupSession();
+        if (session) setReverifyPhone(session.phone);
+        else startOver();
       } else if (e instanceof ApiError && e.status === 409) {
         setError(messages().onboarding.hasAccount);
       } else if (e instanceof ApiError && e.status === 400) {
@@ -90,6 +95,27 @@ export function AccountConfirmationScreen({
       setBusy(false);
     }
   };
+
+  if (reverifyPhone) {
+    return (
+      <View style={styles.root}>
+        <AppBackground />
+        <AuthChrome onBack={() => setReverifyPhone(null)} />
+        <AuthScroll style={styles.reverify}>
+          <GradientTitle>{t.onboarding.verificationExpired}</GradientTitle>
+          <Text style={styles.subtitle}>{t.onboarding.verifyAgainFinish}</Text>
+          <SmsCodeStep
+            phone={reverifyPhone}
+            purpose="signup"
+            onVerified={(proof) => {
+              if (refreshSignupProof(reverifyPhone, proof)) setReverifyPhone(null);
+              else startOver();
+            }}
+          />
+        </AuthScroll>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -134,6 +160,7 @@ export function AccountConfirmationScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   content: { flex: 1, justifyContent: 'center', padding: 40 },
+  reverify: { gap: 18, paddingHorizontal: 32, paddingVertical: 24 },
   titleBlock: { gap: 8 },
   subtitle: { fontFamily: fonts.light, fontSize: 15, color: colors.textMuted },
   mascotArea: { height: 400, width: '100%', alignItems: 'center' },

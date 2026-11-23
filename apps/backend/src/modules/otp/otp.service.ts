@@ -11,11 +11,15 @@ import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone
 import {
   generateOtp,
   getTestOtpCode,
+  isProductionOtpRuntime,
   otpMatches,
+  requiresOtpPurpose,
+  requiresOtpToken,
   signVerificationToken,
   OTP_MAX_ATTEMPTS,
   OTP_TTL_SECONDS,
   VERIFICATION_TOKEN_TTL_SECONDS,
+  type OtpPurpose,
 } from '../../common/utils/otp.util.js';
 import { RedisService } from '../../infra/redis/redis.service.js';
 import { OtpRateLimitService } from '../../infra/redis/otp-rate-limit.service.js';
@@ -41,21 +45,21 @@ export class OtpService {
     private readonly rateLimiter: OtpRateLimitService,
   ) {}
 
-  async send(phoneNumber: string, clientIp: string) {
+  async send(phoneNumber: string, clientIp: string, purpose?: OtpPurpose) {
     if (!phoneNumber) {
       throw new BadRequestException('Phone number is required.');
     }
     if (!isPlausiblePhone(phoneNumber)) {
       throw new BadRequestException('Invalid phone number format.');
     }
+    this.getProofSecret(purpose);
 
     const formattedPhone = normalizePhoneNumber(phoneNumber);
     await this.rateLimiter.enforceSendLimits(clientIp, formattedPhone);
 
     const testCode = getTestOtpCode(formattedPhone, this.getOtpEnvironment());
     const code = testCode ?? generateOtp();
-    const otpKey = `honebill:otp:${formattedPhone}`;
-    const attemptsKey = `honebill:otp:attempts:${formattedPhone}`;
+    const { otpKey, attemptsKey } = this.otpKeys(formattedPhone, purpose);
     const redis = this.redisService.getClient();
     try {
       await redis.set(otpKey, code, 'EX', OTP_TTL_SECONDS);
@@ -92,14 +96,14 @@ export class OtpService {
     };
   }
 
-  async verify(phoneNumber: string, code: string) {
+  async verify(phoneNumber: string, code: string, purpose?: OtpPurpose) {
     if (!phoneNumber || !code) {
       throw new BadRequestException('Phone number and code are required.');
     }
+    const otpSecret = this.getProofSecret(purpose);
 
     const formattedPhone = normalizePhoneNumber(phoneNumber);
-    const otpKey = `honebill:otp:${formattedPhone}`;
-    const attemptsKey = `honebill:otp:attempts:${formattedPhone}`;
+    const { otpKey, attemptsKey } = this.otpKeys(formattedPhone, purpose);
     const redis = this.redisService.getClient();
     let storedCode: string | null;
     try {
@@ -142,11 +146,7 @@ export class OtpService {
       throw new ServiceUnavailableException('OTP service is temporarily unavailable.');
     }
 
-    const otpSecret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET');
-    const verificationToken = signVerificationToken(formattedPhone, otpSecret);
-    if (!verificationToken && this.isOtpTokenRequired()) {
-      throw new InternalServerErrorException('Internal Server Error');
-    }
+    const verificationToken = otpSecret ? signVerificationToken(formattedPhone, otpSecret, purpose) : null;
 
     return {
       success: true,
@@ -158,14 +158,29 @@ export class OtpService {
   private getOtpEnvironment(): Record<string, string | undefined> {
     const testMode = this.configService.get<boolean | string>('OTP_TEST_MODE');
     return {
+      NODE_ENV: this.configService.get<string>('NODE_ENV'),
+      VERCEL_ENV: this.configService.get<string>('VERCEL_ENV'),
       OTP_TEST_MODE: String(testMode ?? ''),
       OTP_TEST_CODE: this.configService.get<string>('OTP_TEST_CODE'),
       OTP_TEST_NUMBERS: this.configService.get<string>('OTP_TEST_NUMBERS'),
     };
   }
 
-  private isOtpTokenRequired(): boolean {
-    const required = this.configService.get<boolean | string>('REQUIRE_OTP_TOKEN');
-    return required === true || required === 'true';
+  private getProofSecret(purpose?: OtpPurpose): string | undefined {
+    if (requiresOtpPurpose(this.configService) && !purpose) {
+      throw new BadRequestException('Update HoneBill to verify your phone number for this action.');
+    }
+    const secret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET')?.trim();
+    if (!secret && (purpose || requiresOtpToken(this.configService))) {
+      throw new InternalServerErrorException('Phone verification is unavailable.');
+    }
+    return secret;
+  }
+  private otpKeys(phone: string, purpose?: OtpPurpose) {
+    const production = isProductionOtpRuntime(this.configService.get('NODE_ENV'), this.configService.get('VERCEL_ENV'));
+    // Discard challenges that predate the production ban on test codes.
+    const prefix = production ? 'honebill:otp:production' : 'honebill:otp';
+    const suffix = purpose ? `${purpose}:${phone}` : phone;
+    return { otpKey: `${prefix}:${suffix}`, attemptsKey: `${prefix}:attempts:${suffix}` };
   }
 }
