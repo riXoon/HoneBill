@@ -1,4 +1,5 @@
-import { apiRequest } from './client';
+import { getSessionToken, invalidateSessionToken } from '../session';
+import { ApiError, apiRequest } from './client';
 
 export type VaultBalance = {
   /** Online (Stellar account) PHPC balance, in pesos. 0 for an account that has no trustline yet. */
@@ -38,11 +39,28 @@ export function getVaultBalance(account: AccountRef, signal?: AbortSignal): Prom
 
 /** Newest-first activity across offline settlements, anchor transactions and online transfers. */
 export async function getHistory(account: AccountRef, limit = 50, signal?: AbortSignal): Promise<HistoryItem[]> {
-  const result = await apiRequest<{ transactions: HistoryItem[] }>('GET', '/wallet/history', {
-    query: { shortId: account.shortId, publicKey: account.stellarPublicKey, limit: String(limit) },
-    signal,
-  });
-  return result.transactions;
+  const publicKey = account.stellarPublicKey;
+  const read = async (bearer: string) => {
+    if (signal?.aborted) throw new ApiError('aborted', 0, 'Request cancelled.');
+    const { transactions } = await apiRequest<{ transactions: HistoryItem[] }>('GET', '/wallet/history', {
+      // These identifiers also let this build read history from the previous backend during rollout.
+      query: { shortId: account.shortId, publicKey, limit: String(limit) },
+      bearer,
+      signal,
+    });
+    if (signal?.aborted) throw new ApiError('aborted', 0, 'Request cancelled.');
+    if (!Array.isArray(transactions)) throw new Error('Invalid wallet history response.');
+    return transactions;
+  };
+
+  const token = await getSessionToken(publicKey, signal);
+  try {
+    return await read(token);
+  } catch (error) {
+    if (signal?.aborted || !(error instanceof ApiError) || error.kind !== 'http' || error.status !== 401) throw error;
+    invalidateSessionToken(publicKey, token);
+    return read(await getSessionToken(publicKey, signal));
+  }
 }
 
 /**

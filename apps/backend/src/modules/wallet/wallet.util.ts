@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { rpc } from '@stellar/stellar-sdk';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
@@ -62,6 +62,13 @@ export function buildTransactionHistory(items: Array<Record<string, unknown>>, l
     .slice(0, limit);
 }
 
+type WalletHistoryQuery = {
+  shortId?: unknown;
+  publicKey?: unknown;
+  limit?: string;
+  since?: string;
+};
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -94,14 +101,26 @@ export class WalletService {
     }
   }
 
-  async getHistory(shortId?: string, publicKey?: string, limitParam?: string, sinceParam?: string) {
-    if (!shortId || !publicKey) {
-      const missing = [!shortId && 'shortId', !publicKey && 'publicKey'].filter(Boolean).join(', ');
-      throw new BadRequestException(`Missing required parameter(s): ${missing}`);
+  private async resolveHistoryOwner(subject: string, query: WalletHistoryQuery) {
+    const account = await this.prisma.account.findUnique({
+      where: { stellarPublicKey: subject },
+      select: { shortId: true, stellarPublicKey: true },
+    });
+    // Legacy query identifiers are assertions. Only the subject's account can scope history queries.
+    if (
+      !account ||
+      (query.shortId !== undefined && query.shortId !== account.shortId) ||
+      (query.publicKey !== undefined && query.publicKey !== account.stellarPublicKey)
+    ) {
+      throw new ForbiddenException('Wallet history is unavailable for this account.');
     }
+    return account;
+  }
 
-    const limit = normalizeLimit(limitParam);
-    const sinceDate = sinceParam ? new Date(sinceParam) : null;
+  async getHistory(subject: string, query: WalletHistoryQuery = {}) {
+    const { shortId, stellarPublicKey: publicKey } = await this.resolveHistoryOwner(subject, query);
+    const limit = normalizeLimit(query.limit);
+    const sinceDate = query.since ? new Date(query.since) : null;
     const validSince = sinceDate && !isNaN(sinceDate.getTime()) ? sinceDate : null;
     const dateFilter = validSince ? { gte: validSince } : undefined;
 
@@ -348,20 +367,16 @@ export class WalletService {
     };
   }
 
-  async getTransactions(shortId: string, limit = 50, since?: string) {
-    const normalizedShortId = (shortId ?? '').trim();
-    if (!normalizedShortId) {
-      throw new BadRequestException('shortId query parameter is required');
-    }
-
-    const requestedLimit = normalizeLimit(limit);
-    const sinceDate = since ? new Date(since) : null;
+  async getTransactions(subject: string, query: WalletHistoryQuery = {}) {
+    const { shortId } = await this.resolveHistoryOwner(subject, query);
+    const requestedLimit = normalizeLimit(query.limit);
+    const sinceDate = query.since ? new Date(query.since) : null;
     const validSince = sinceDate && !isNaN(sinceDate.getTime()) ? sinceDate : null;
     const dateFilter = validSince ? { gte: validSince } : undefined;
 
     const settlements = await this.prisma.settlement.findMany({
       where: {
-        OR: [{ senderShortId: normalizedShortId }, { receiverShortId: normalizedShortId }],
+        OR: [{ senderShortId: shortId }, { receiverShortId: shortId }],
         status: 'SETTLED',
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       },

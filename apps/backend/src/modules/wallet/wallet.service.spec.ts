@@ -4,6 +4,7 @@ import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { StellarService } from '../../infra/stellar/stellar.service.js';
 
 const PUBLIC_KEY = `G${'A'.repeat(55)}`;
+const OWNER = { shortId: 'abc123', stellarPublicKey: PUBLIC_KEY };
 
 function makeService(overrides: Record<string, any> = {}) {
   const prisma = {
@@ -19,7 +20,7 @@ function makeService(overrides: Record<string, any> = {}) {
       update: jest.fn<(...args: any[]) => Promise<any>>(),
     },
     anchorTransaction: { findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
-    account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>(), findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
+    account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(OWNER), findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
     token: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
     ...overrides,
   };
@@ -52,10 +53,13 @@ describe('WalletService', () => {
     await expect(service.getBalance(PUBLIC_KEY, 'PHPC')).resolves.toEqual({ balance: '9.2500000' });
   });
 
-  it('requires both history identifiers and applies the requested date and row cap', async () => {
+  it('uses the subject to resolve history identifiers and applies the requested date and row cap', async () => {
     const { service, prisma } = makeService();
-    await expect(service.getHistory('abc123', undefined, '200', '2026-01-01')).rejects.toThrow('Missing required parameter(s): publicKey');
-    await service.getHistory('abc123', PUBLIC_KEY, '200', '2026-01-01T00:00:00.000Z');
+    await service.getHistory(PUBLIC_KEY, { limit: '200', since: '2026-01-01T00:00:00.000Z' });
+    expect(prisma.account.findUnique).toHaveBeenCalledWith({
+      where: { stellarPublicKey: PUBLIC_KEY },
+      select: { shortId: true, stellarPublicKey: true },
+    });
     expect(prisma.settlement.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100, where: expect.objectContaining({ createdAt: { gte: new Date('2026-01-01T00:00:00.000Z') } }) }));
     expect(prisma.anchorTransaction.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ stellarAccount: PUBLIC_KEY }) }));
   });
@@ -88,7 +92,7 @@ describe('WalletService', () => {
         token: { symbol: 'PHPC', decimals: 7 },
       },
     ]);
-    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    const { transactions } = await service.getHistory(PUBLIC_KEY);
     expect(prisma.walletMove.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ accountPublicKey: PUBLIC_KEY, status: 'SETTLED' }) }),
     );
@@ -107,7 +111,7 @@ describe('WalletService', () => {
       { id: 's1', senderShortId: 'abc123', receiverShortId: 'zzz999', amountStroops: 10_000_000n, status: 'SETTLED', createdAt: new Date('2026-11-10T03:00:00.000Z'), token: { symbol: 'PHPC', decimals: 7 } },
       { id: 's2', senderShortId: 'qqq111', receiverShortId: 'abc123', amountStroops: 20_000_000n, status: 'SETTLED', createdAt: new Date('2026-11-10T04:00:00.000Z'), token: { symbol: 'PHPC', decimals: 7 } },
     ]);
-    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    const { transactions } = await service.getHistory(PUBLIC_KEY);
     expect(transactions.find((t) => t.id === 's1')).toMatchObject({ type: 'SEND', counterpartyShortId: 'zzz999' });
     expect(transactions.find((t) => t.id === 's2')).toMatchObject({ type: 'RECEIVE', counterpartyShortId: 'qqq111' });
   });
@@ -120,7 +124,7 @@ describe('WalletService', () => {
         createdAt: new Date('2026-11-10T02:00:00.000Z'), confirmedAt: null, token: { symbol: 'PHPC', decimals: 7 },
       },
     ]);
-    const { transactions } = (await service.getHistory('abc123', PUBLIC_KEY)) as { transactions: any[] };
+    const { transactions } = await service.getHistory(PUBLIC_KEY);
     expect(transactions.find((t) => t.id === 'move:m2:out')).toMatchObject({ tag: 'OFFLINE', title: 'Transferred to Online Balance' });
     expect(transactions.find((t) => t.id === 'move:m2:in')).toMatchObject({ tag: 'WALLET', title: 'Received from Offline Balance', mirror: true });
   });

@@ -1,10 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, HttpStatus, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { WalletFundingService } from './wallet-funding.service.js';
 import { WalletService } from './wallet.util.js';
-import { ApiThrottlerGuard } from '../../common/guards/api-throttler.guard.js';
+import { Sep10JwtGuard } from '../../common/guards/sep10-jwt.guard.js';
 import { FundWalletDto } from './dto/fund-wallet.dto.js';
 import { ConfirmTransferDto } from './dto/confirm-transfer.dto.js';
+
+type AuthenticatedRequest = Request & { user: { sub: string } };
 
 @Controller()
 export class WalletController {
@@ -29,13 +32,16 @@ export class WalletController {
 
   @Get('wallet/history')
   @Throttle({ default: { limit: 10, ttl: 10_000 } })
+  @UseGuards(Sep10JwtGuard)
+  @Header('Cache-Control', 'private, no-store')
   getHistory(
-    @Query('shortId') shortId?: string,
-    @Query('publicKey') publicKey?: string,
+    @Req() request: AuthenticatedRequest,
+    @Query('shortId') shortId?: unknown,
+    @Query('publicKey') publicKey?: unknown,
     @Query('limit') limit?: string,
     @Query('since') since?: string,
   ) {
-    return this.walletService.getHistory(shortId, publicKey, limit, since);
+    return this.walletService.getHistory(request.user.sub, { shortId, publicKey, limit, since });
   }
 
   @Get('vault-balance')
@@ -49,12 +55,21 @@ export class WalletController {
 
   @Get('transactions')
   @Throttle({ default: { limit: 15, ttl: 10_000 } })
+  @UseGuards(Sep10JwtGuard)
+  @Header('Cache-Control', 'private, no-store')
   getTransactions(
-    @Query('shortId') shortId: string,
+    @Req() request: AuthenticatedRequest,
+    @Query('shortId') shortId?: unknown,
+    @Query('publicKey') publicKey?: unknown,
     @Query('limit') limit?: string,
     @Query('since') since?: string,
   ) {
-    return this.walletService.getTransactions(shortId ?? '', Number(limit ?? 50), since);
+    return this.walletService.getTransactions(request.user.sub, {
+      shortId: typeof shortId === 'string' ? shortId.trim() : shortId,
+      publicKey,
+      limit,
+      since,
+    });
   }
 
   @Post('wallet/moves/confirm')

@@ -6,6 +6,13 @@ import { buildTransactionHistory, stroopsToDecimalString, WalletService } from '
 describe('wallet history reconciliation', () => {
   it('merges offline, online, and anchor transactions by newest timestamp', async () => {
     const prisma = {
+      account: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+          shortId: 'sender',
+          stellarPublicKey: 'Gsender',
+        }),
+        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+      },
       settlement: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
           {
@@ -48,7 +55,7 @@ describe('wallet history reconciliation', () => {
     const stellar = {} as StellarService;
     const service = new WalletService(prisma as unknown as PrismaService, stellar);
 
-    const result = await service.getHistory('sender', 'Gsender');
+    const result = await service.getHistory('Gsender');
 
     expect(result.transactions).toHaveLength(3);
     expect(result.transactions).toEqual([
