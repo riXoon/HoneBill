@@ -7,7 +7,14 @@ import { reportError } from '../services/errorReporting';
 import { syncService } from '../services/sync/syncService';
 import { drainConfirms } from '../services/sync/confirmOutbox';
 import { drainFeedback } from '../services/sync/feedbackOutbox';
-import { drainVouchers, enqueueVoucher } from '../services/sync/voucherOutbox';
+import {
+  acceptVoucherReview,
+  dismissVoucherReview,
+  drainVouchers,
+  listVoucherReviews,
+  rememberVoucherForReview,
+  type VoucherReview,
+} from '../services/sync/voucherOutbox';
 import { getHistory, getVaultBalance } from '../services/api/wallet';
 import { toTransactions } from '../services/transactionMapper';
 import {
@@ -58,16 +65,14 @@ type WalletData = {
   refresh: (options?: { force?: boolean }) => Promise<void>;
   /** Pull-to-refresh: a full sync (queued work first, then fresh data). */
   syncNow: () => void;
-  /**
-   * Records an offline payment the user says they texted: lists it as pending right away, and queues its voucher so
-   * it also settles over the internet whenever the phone is online.
-   */
-  addPendingOffline: (payment: PendingOffline, voucher: string) => void;
+  /** Saves a dispatched voucher for status checks, without authorizing an online submission. */
+  trackOfflineDispatch: (payment: PendingOffline, voucher: string) => boolean;
+  voucherReviews: VoucherReview[];
+  answerVoucherReview: (review: VoucherReview, payment: PendingOffline | null) => boolean;
   /**
    * Holds an offline payment's money the moment its voucher leaves the app (the messaging app opens with it, or its
    * QR is shown), whatever the person answers afterwards: from then on the voucher can settle at any time (sent later
-   * from drafts, forwarded, relayed), so what can be spent must already exclude it. Not queued: only a confirmed send
-   * is settled over the internet. Only the server's answer releases it (see `refresh`).
+   * from drafts, forwarded, relayed), so what can be spent must already exclude it. The server's answer releases the hold.
    */
   holdOffline: (payment: PendingOffline) => void;
   /** Undoes `holdOffline` for a voucher that provably never left the app (the messaging app failed to open). */
@@ -110,6 +115,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [outcomes, setOutcomes] = useState<PaymentOutcomes>(NO_OUTCOMES);
+  const [voucherReviews, setVoucherReviews] = useState<VoucherReview[]>([]);
   const request = useRef<AbortController | null>(null);
   const loadedAt = useRef(0);
   // Latest values for code that runs after an await, where the render's copies may be stale.
@@ -200,6 +206,17 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
         const now = Date.now();
         setSyncedAt(now);
+        if (balance.status === 'fulfilled') {
+          try {
+            const reviews = listVoucherReviews(publicKey, next, balance.value.offlineBalancePHP, now);
+            setVoucherReviews((current) => (current.length || reviews.length ? reviews : current));
+          } catch (error) {
+            setVoucherReviews([]);
+            reportError(error, { step: 'listVoucherReviews' });
+          }
+        } else {
+          setVoucherReviews([]);
+        }
 
         // Moves between the user's own wallets that the server now lists no longer need this phone's copy.
         const listedRefs = new Set(next.map((tx) => tx.ref));
@@ -239,6 +256,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         void saveSnapshot(publicKey, { balances: balancesRef.current, transactions: next, savedAt: now });
       } else {
         if (!isAborted(history.reason)) failure = failure ?? history.reason;
+        setVoucherReviews([]);
         // A fresh balance is still kept with the history already saved, so it survives a lock or restart.
         if (balance.status === 'fulfilled') {
           void saveSnapshot(publicKey, {
@@ -276,6 +294,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     setBalances(null);
     setServerTransactions([]);
     setPending([]);
+    setVoucherReviews([]);
     setMoves([]);
     setSyncedAt(null);
     setError(null);
@@ -335,9 +354,8 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     );
   }, [shortId, publicKey, refresh]);
 
-  // Each sync first settles this wallet's queued offline vouchers over the internet, so the history read after it
-  // already lists them. A voucher the server says can never settle is marked failed here; everything else (settled,
-  // failed on-chain) is shown from the server's history, which reflects the chain.
+  // Each sync submits this wallet's approved vouchers before reading History. Server rejections without a History
+  // entry are marked failed on this phone.
   useEffect(() => {
     if (!publicKey) return;
     return syncService.registerStep(
@@ -348,20 +366,17 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
         if (givenUp.length === 0) return;
         const reasons = new Map(givenUp.map((g) => [normalizeNonce(g.nonce), g.reason]));
         let failed = 0;
-        let unconfirmed = 0;
         const next = pendingRef.current.map((p) => {
           const reason = reasons.get(normalizeNonce(p.nonce));
           if (reason === undefined || p.status !== 'pending') return p;
-          // A voucher given up for age was never answered, so whether money moved is not known: not "failed".
-          if (reason === EXPIRED_REASON) unconfirmed += 1;
-          else failed += 1;
+          failed += 1;
           return { ...p, status: 'failed' as const, failureReason: reason };
         });
-        if (failed === 0 && unconfirmed === 0) return;
+        if (failed === 0) return;
         pendingRef.current = next;
         setPending(next);
         void savePending(publicKey, next);
-        addOutcomes({ failed, unconfirmed });
+        addOutcomes({ failed });
       },
       SYNC_ORDER_VOUCHERS,
     );
@@ -396,8 +411,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
   // A different account signing in removes what this phone kept for any other account. Locking or signing out does
   // not: the same person comes back with their MPIN or fingerprint, often with no connection, and the saved copy is
-  // what Home shows until the network answers. Queued vouchers are kept: that money is committed, and they settle the
-  // next time that wallet signs in here.
+  // what Home shows until the network answers. Voucher reviews and approvals stay scoped to the wallet in the outbox.
   const lastSignedInKey = useRef<string | null>(null);
   useEffect(() => {
     if (!publicKey) return;
@@ -433,19 +447,47 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     [publicKey],
   );
 
-  const addPendingOffline = useCallback(
+  const trackOfflineDispatch = useCallback(
     (payment: PendingOffline, voucher: string) => {
-      if (!publicKey) return;
-      try {
-        enqueueVoucher(publicKey, voucher, payment.nonce);
-        // Settle now if there is a connection; the text to the gateway is still on its way as the other path.
-        syncService.requestSync();
-      } catch (error) {
-        // The text to the gateway still settles it; only the internet path is lost.
-        reportError(error, { step: 'enqueueVoucher' });
+      if (!publicKey) return false;
+      const nonce = normalizeNonce(payment.nonce);
+      if (serverRef.current.some((tx) => tx.nonce && normalizeNonce(tx.nonce) === nonce && tx.status !== 'pending')) {
+        return true;
       }
-      // Usually already held (when the voucher left the app); a repeat changes nothing.
       holdOffline(payment);
+      try {
+        rememberVoucherForReview(publicKey, voucher, payment.nonce, payment.timestamp);
+      } catch (error) {
+        reportError(error, { step: 'rememberVoucherForReview' });
+        return false;
+      }
+      if (getConnectivity().online) syncService.requestSync({ afterCurrent: true });
+      return true;
+    },
+    [publicKey, holdOffline],
+  );
+
+  const answerVoucherReview = useCallback(
+    (review: VoucherReview, payment: PendingOffline | null) => {
+      if (!publicKey || review.row.publicKey !== publicKey) return false;
+      try {
+        if (payment) {
+          if (!getConnectivity().online || !acceptVoucherReview(review)) return false;
+          const unconfirmed = pendingRef.current.find(
+            (p) => normalizeNonce(p.nonce) === review.row.dedupeKey && p.failureReason === EXPIRED_REASON,
+          );
+          if (unconfirmed) pendingRef.current = pendingRef.current.filter((p) => p !== unconfirmed);
+          holdOffline(payment);
+          syncService.requestSync({ afterCurrent: true });
+        } else {
+          dismissVoucherReview(review);
+        }
+        setVoucherReviews((reviews) => reviews.filter(({ row }) => row.id !== review.row.id));
+        return true;
+      } catch (error) {
+        reportError(error, { step: 'answerVoucherReview' });
+        return false;
+      }
     },
     [publicKey, holdOffline],
   );
@@ -493,7 +535,9 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       syncedAt,
       refresh,
       syncNow,
-      addPendingOffline,
+      trackOfflineDispatch,
+      voucherReviews,
+      answerVoucherReview,
       holdOffline,
       releaseOfflineHold,
       addMoves,
@@ -508,7 +552,9 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       error,
       syncedAt,
       refresh,
-      addPendingOffline,
+      trackOfflineDispatch,
+      voucherReviews,
+      answerVoucherReview,
       holdOffline,
       releaseOfflineHold,
       addMoves,

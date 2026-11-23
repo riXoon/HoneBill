@@ -87,7 +87,7 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
 
   return (
     <SendLayout
-      title={t.receipt.title}
+      title={method === 'sms' ? t.receipt.smsTitle : t.receipt.title}
       icon={<ReceiptIcon />}
       onBack={goHome}
       gap={12}
@@ -104,7 +104,7 @@ export function SendReceiptScreen({ navigation, route }: NativeStackScreenProps<
               {t.receipt.heading}
             </Text>
             <Text style={styles.copy}>
-              {byText ? t.receipt.bySms(ref) : t.receipt.online}
+              {method === 'sms' ? t.receipt.smsHandoff : byText ? t.receipt.bySms(ref) : t.receipt.online}
             </Text>
           </View>
 

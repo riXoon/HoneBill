@@ -1,21 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, AppState } from 'react-native';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
 
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { OFFLINE_TOLL_PESOS } from '../../config/limits';
 import { useAuth } from '../../context/AuthContext';
 import { useWalletData } from '../../context/WalletDataContext';
+import { useIsOnline } from '../../hooks/useIsOnline';
 import { useT } from '../../i18n';
 import type { RootStackParamList } from '../../navigation/types';
 import {
-  clearUnansweredDispatch,
-  loadUnansweredDispatch,
+  clearSmsHandoff,
+  loadSmsHandoff,
   onDispatchChange,
   pendingPayment,
-  type UnansweredDispatch,
 } from '../../services/offline/smsDispatch';
-import { rememberRecipient } from '../../services/recipientDirectory';
-import { formatPeso } from '../../utils/format';
+import { resolveRecipient } from '../../services/recipientDirectory';
+import type { Recipient } from '../../types/recipient';
+import { formatPeso, voucherRef } from '../../utils/format';
 
 /** Screens shown before sign-in. The question waits until the person is past them. */
 const SIGNED_OUT_ROUTES = new Set<keyof RootStackParamList>([
@@ -34,82 +36,103 @@ const SIGNED_OUT_ROUTES = new Set<keyof RootStackParamList>([
 ]);
 
 /**
- * Asks "Did you send the text?" for an offline payment texted from this phone, whenever the person comes back to the
- * app signed in: straight back from the messaging app, after the auto-lock and their MPIN, or after the phone closed
- * HoneBill. Lives above the screens so a lock or restart can never lose the question (see `smsDispatch.ts`).
+ * Recovers SMS handoffs after returning to the signed-in app. A fresh wallet check can then offer to retry an
+ * unconfirmed transfer, even after an auto-lock or restart.
  */
 export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContainerRefWithCurrent<RootStackParamList> }) {
   const t = useT();
   const { activeAccount } = useAuth();
-  const { addPendingOffline, status } = useWalletData();
+  const { answerVoucherReview, trackOfflineDispatch, voucherReviews, status } = useWalletData();
+  const online = useIsOnline();
   const publicKey = activeAccount?.stellarPublicKey ?? null;
-  // The wallet's saved pending payments must be loaded first, or a "yes" could be added before them and replace them.
+  // Load saved holds before recording the dispatch.
   const walletLoaded = publicKey !== null && status !== 'idle';
-  const [question, setQuestion] = useState<UnansweredDispatch | null>(null);
-  const checking = useRef(false);
+  const [foregroundWallet, setForegroundWallet] = useState<string | null>(null);
+  const [resolved, setResolved] = useState<Recipient | null>(null);
 
-  const check = useCallback(async () => {
-    if (!publicKey || !walletLoaded || checking.current) return;
-    checking.current = true;
-    try {
-      const found = await loadUnansweredDispatch(publicKey);
+  useEffect(() => {
+    if (!publicKey || !walletLoaded) return;
+    let generation = 0;
+    const check = async () => {
+      const started = ++generation;
+      if (AppState.currentState !== 'active') {
+        setForegroundWallet(null);
+        return;
+      }
+      const found = await loadSmsHandoff(publicKey);
+      if (started !== generation) return;
       const route = navigation.isReady() ? navigation.getCurrentRoute()?.name : undefined;
-      // Locking happens on the same return to the app: never ask over (or just before) the MPIN screen.
-      if (!found || !route || SIGNED_OUT_ROUTES.has(route as keyof RootStackParamList)) return;
-      if (found.recipient) rememberRecipient(found.recipient);
-      setQuestion((current) => current ?? found);
-    } finally {
-      checking.current = false;
-    }
-  }, [publicKey, walletLoaded, navigation]);
-
-  // Signed out (locked or another account): nothing of this wallet stays on screen.
-  useEffect(() => {
-    if (!publicKey) setQuestion(null);
-  }, [publicKey]);
-
-  useEffect(() => {
+      if (!route || SIGNED_OUT_ROUTES.has(route as keyof RootStackParamList)) {
+        setForegroundWallet(null);
+        return;
+      }
+      setForegroundWallet(publicKey);
+      if (found) {
+        const payment = pendingPayment(found.nonce, found.draft.amount, found.recipient, found.openedAt);
+        if (trackOfflineDispatch(payment, found.voucher)) {
+          void clearSmsHandoff(publicKey, found.nonce);
+        }
+      }
+    };
     void check();
-    const appSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void check();
-    });
-    // After the MPIN the app moves on to Home: ask once it is there.
+    const appSub = AppState.addEventListener('change', () => void check());
     const navUnsub = navigation.addListener('state', () => void check());
     const unsubscribe = onDispatchChange(() => void check());
     return () => {
+      generation++;
       appSub.remove();
       navUnsub();
       unsubscribe();
     };
-  }, [check, navigation]);
+  }, [publicKey, walletLoaded, navigation, trackOfflineDispatch]);
 
-  if (!question || question.publicKey !== publicKey) return null;
+  const canPrompt = publicKey !== null && foregroundWallet === publicKey;
+  const review = canPrompt && online
+    ? voucherReviews.find(({ row }) => row.publicKey === publicKey)
+    : undefined;
+  const receiverShortId = review?.receiverShortId;
 
-  const { draft, recipient, nonce, voucher, openedAt } = question;
-  const who = recipient ? (recipient.unverified ? `ID ${recipient.shortId}` : recipient.name) : null;
+  useEffect(() => {
+    setResolved(null);
+    if (!review || !receiverShortId) return;
+    const controller = new AbortController();
+    void resolveRecipient(receiverShortId, controller.signal)
+      .then((recipient) => {
+        if (controller.signal.aborted) return;
+        if (recipient) setResolved(recipient);
+        else answerVoucherReview(review, null);
+      })
+      .catch(() => {
+        // A failed lookup leaves the voucher untouched. The next wallet refresh checks it again.
+      });
+    return () => controller.abort();
+  }, [review, receiverShortId, answerVoucherReview]);
 
-  return (
-    <ConfirmDialog
-      visible
-      mood="phone"
-      title={t.sendMethod.sentTitle}
-      message={`${who ? t.sendMethod.sentFor(formatPeso(draft.amount), who) : ''}${t.sendMethod.sentBody}`}
-      confirmLabel={t.sendMethod.sentYes}
-      cancelLabel={t.sendMethod.sentNo}
-      onConfirm={() => {
-        setQuestion(null);
-        // Holds the money and queues the voucher (both keyed by nonce, so a repeat changes nothing).
-        addPendingOffline(pendingPayment(nonce, draft.amount, recipient, openedAt), voucher);
-        void clearUnansweredDispatch(question.publicKey, nonce);
-        if (navigation.isReady()) {
-          navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: nonce, issuedAt: openedAt });
-        }
-      }}
-      onCancel={() => {
-        // Not sent. If the Send screen is still open, it keeps the same voucher, so texting again never pays twice.
-        setQuestion(null);
-        void clearUnansweredDispatch(question.publicKey, nonce);
-      }}
-    />
-  );
+  if (review && resolved && resolved.shortId === receiverShortId) {
+    const answer = (approve: boolean) => {
+      const payment = approve ? pendingPayment(review.nonce, review.amount, resolved, review.dispatchedAt) : null;
+      if (!answerVoucherReview(review, payment)) {
+        Alert.alert(t.sendMethod.reviewSaveFailed);
+      }
+    };
+    return (
+      <ConfirmDialog
+        visible
+        mood="phone"
+        title={t.sendMethod.recoveryTitle}
+        message={t.sendMethod.recoveryBody(
+          formatPeso(review.amount),
+          resolved.name,
+          voucherRef(review.nonce),
+          formatPeso(review.amount + OFFLINE_TOLL_PESOS),
+        )}
+        confirmLabel={t.sendMethod.settleOnline}
+        cancelLabel={t.sendMethod.recoveryLater}
+        onConfirm={() => answer(true)}
+        onCancel={() => answer(false)}
+      />
+    );
+  }
+
+  return null;
 }

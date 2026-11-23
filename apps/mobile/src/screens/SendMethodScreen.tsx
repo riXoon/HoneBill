@@ -15,9 +15,9 @@ import { reportError } from '../services/errorReporting';
 import { buildOfflineVoucher } from '../services/offline/voucher';
 import { MissingGatewayError, openVoucherSms, relayQrPayload } from '../services/offline/voucherFormat';
 import {
-  clearUnansweredDispatch,
+  clearSmsHandoff,
   pendingPayment,
-  saveUnansweredDispatch,
+  saveSmsHandoff,
   voucherNonce,
 } from '../services/offline/smsDispatch';
 import { findRecipientById } from '../services/recipientDirectory';
@@ -51,7 +51,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   /** The QR shown for a partner to scan and text ("Get Help Sending"); null while it is closed. */
   const [relayQr, setRelayQr] = useState<string | null>(null);
 
-  const { addPendingOffline, holdOffline, releaseOfflineHold } = useWalletData();
+  const { trackOfflineDispatch, holdOffline, releaseOfflineHold } = useWalletData();
   /** When the voucher first left the app (messaging app opened, or QR shown): its hold's time, and the payment's. */
   const heldAt = useRef<number | null>(null);
 
@@ -66,17 +66,15 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     return at;
   };
 
-  // Only the relay ends here. "Did you send the text?" for the SMS method is asked by `SmsDispatchPrompt` above the
-  // screens, so the auto-lock or the phone closing the app while the person is in the messaging app cannot lose it.
+  // Relay dispatch is recorded here. SMS handoffs are recorded by SmsDispatchPrompt when HoneBill regains focus.
   const finish = useCallback(
     (signed: string, method: DispatchMethod) => {
       const nonce = voucherNonce(signed);
       const issuedAt = heldAt.current ?? Date.now();
-      // Already held; now also queued, so the phone settles it over the internet once it is online.
-      addPendingOffline(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt), signed);
+      trackOfflineDispatch(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt), signed);
       navigation.navigate('SendReceipt', { ...draft, method, reference: nonce, issuedAt });
     },
-    [navigation, draft, addPendingOffline],
+    [navigation, draft, trackOfflineDispatch],
   );
 
   /**
@@ -108,7 +106,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       const signed = await prepareVoucher();
       if (!signed || !activeAccount) return;
       const alreadyLeft = heldAt.current !== null;
-      // Saved before the messaging app opens, so the question survives a lock or the app being closed meanwhile.
+      // Keep the handoff even if the app locks or closes while Messages is open.
       const dispatch = {
         publicKey: activeAccount.stellarPublicKey,
         voucher: signed,
@@ -117,7 +115,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
         recipient: findRecipientById(draft.recipientId) ?? null,
         openedAt: heldAt.current ?? Date.now(),
       };
-      await saveUnansweredDispatch(dispatch);
+      await saveSmsHandoff(dispatch);
       heldAt.current = dispatch.openedAt;
       holdVoucher(signed);
       try {
@@ -125,12 +123,15 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       } catch (error) {
         // The messaging app never opened: nothing to ask about. If the voucher never left the app before either
         // (an earlier text or QR), it can never settle, so its money is free again.
-        await clearUnansweredDispatch(dispatch.publicKey, dispatch.nonce);
+        await clearSmsHandoff(dispatch.publicKey, dispatch.nonce);
         if (!alreadyLeft) {
           heldAt.current = null;
           releaseOfflineHold(dispatch.nonce);
         }
         throw error;
+      }
+      if (navigation.isFocused()) {
+        navigation.navigate('SendReceipt', { ...draft, method: 'sms', reference: dispatch.nonce, issuedAt: dispatch.openedAt });
       }
     } catch (error) {
       if (error instanceof MissingGatewayError) {

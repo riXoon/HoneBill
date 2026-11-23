@@ -16,17 +16,27 @@ export function enqueue(publicKey: string, kind: string, dedupeKey: string, payl
 }
 
 /** Pending rows of the given kinds that may be tried now, oldest first. */
-export function dueRows(publicKey: string, kind: string, now: number): OutboxRow[] {
+export function dueRows(publicKey: string, kind: string, now: number, status: 'pending' | 'approved' = 'pending'): OutboxRow[] {
   return getDb()
     .select()
     .from(outbox)
-    .where(and(eq(outbox.publicKey, publicKey), eq(outbox.kind, kind), eq(outbox.status, 'pending'), lte(outbox.nextAttemptAt, now)))
+    .where(and(eq(outbox.publicKey, publicKey), eq(outbox.kind, kind), eq(outbox.status, status), lte(outbox.nextAttemptAt, now)))
     .orderBy(asc(outbox.createdAt))
     .all();
 }
 
 export function finishRow(row: OutboxRow, status: 'done' | 'failed', lastError: string | null = null): void {
   getDb().update(outbox).set({ status, lastError, updatedAt: Date.now() }).where(eq(outbox.id, row.id)).run();
+}
+
+/** Changes state only if the row has not been changed since it was read. */
+export function transitionRow(row: OutboxRow, status: OutboxRow['status'], nextAttemptAt = 0): boolean {
+  const result = getDb()
+    .update(outbox)
+    .set({ status, nextAttemptAt, updatedAt: Date.now() })
+    .where(and(eq(outbox.id, row.id), eq(outbox.status, row.status), eq(outbox.updatedAt, row.updatedAt)))
+    .run();
+  return result.changes > 0;
 }
 
 /** Counts the attempt and waits `base * 2^(attempts-1)` ms, up to `max`, before the row is due again. */

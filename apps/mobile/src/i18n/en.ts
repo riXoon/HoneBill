@@ -478,12 +478,12 @@ export const en = {
     relayDone: 'My partner sent it',
     relayCancel: 'Close',
     relayFailed: 'Something went wrong while preparing the QR code. No money has been moved.',
-    sentTitle: 'Did you send the text?',
-    sentBody:
-      'Your payment is made once the text is sent. Until HoneBill confirms it, the amount stays set aside so it cannot be spent twice.',
-    sentFor: (amount: string, name: string) => `${amount} to ${name}. `,
-    sentYes: 'Yes, I sent it',
-    sentNo: 'Not yet',
+    recoveryTitle: 'Retry this offline transfer online?',
+    recoveryBody: (amount: string, name: string, ref: string, total: string) =>
+      `HoneBill couldn’t confirm this transfer. The text may have failed to send or may still be on its way.\n\n${amount} to ${name} · Ref ${ref}\n${total} total from Offline Funds, including the fee.\n\nYou can retry without sending another text. If the original text arrives, the transfer can still settle once.`,
+    settleOnline: 'Retry online',
+    recoveryLater: 'Don’t retry',
+    reviewSaveFailed: 'Could not save your choice. Please try again.',
   },
 
   verify: {
@@ -515,8 +515,10 @@ export const en = {
 
   receipt: {
     title: 'Sent',
+    smsTitle: 'Offline payment',
     returnHome: 'Return to Home',
     heading: 'Receipt Created',
+    smsHandoff: 'Your payment is awaiting SMS confirmation. If the text does not go through, HoneBill will ask before trying online.',
     bySms: (ref: string) => `Your payment was sent by SMS.\nYou will get a text with Ref ${ref} when it goes through or fails.`,
     online: 'Your transaction is successful.\nSent via HoneBill',
     recipient: 'Recipient',
