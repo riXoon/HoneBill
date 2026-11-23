@@ -11,7 +11,7 @@ import { ApiResponseException } from '../../common/exceptions/api-response.excep
 const VALID_PUBLIC_KEY = `G${'A'.repeat(55)}`;
 const VALID_PHONE = '09000000001';
 
-function createService() {
+function createService(config: Record<string, string> = {}) {
   const prisma = {
     account: {
       findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
@@ -32,7 +32,7 @@ function createService() {
     service: new AccountsService(
       prisma as unknown as PrismaService,
       {} as RedisService,
-      { get: (key: string) => process.env[key] } as unknown as ConfigService,
+      { get: (key: string) => config[key] ?? process.env[key] } as unknown as ConfigService,
     ),
   };
 }
@@ -107,6 +107,20 @@ describe('signup security', () => {
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.account.create).not.toHaveBeenCalled();
+  });
+
+  it('requires real signup proof in production and accepts legacy phone proof during rollout', async () => {
+    const secret = 'fixture-otp-secret';
+    const { prisma, service } = createService({
+      NODE_ENV: 'production', OTP_VERIFICATION_JWT_SECRET: secret, OTP_REQUIRE_PURPOSE: 'false',
+    });
+    const profile = { stellarPublicKey: VALID_PUBLIC_KEY, phoneNumber: VALID_PHONE };
+    await expect(service.register(profile)).rejects.toMatchObject({ status: 401 });
+    await expect(service.register({ ...profile, verificationToken: signVerificationToken(VALID_PHONE, secret, 'change_mpin') }))
+      .rejects.toMatchObject({ status: 401 });
+    expect(prisma.account.create).not.toHaveBeenCalled();
+    await expect(service.register({ ...profile, verificationToken: signVerificationToken(VALID_PHONE, secret) }))
+      .resolves.toMatchObject({ success: true });
   });
 
   it('rejects duplicate Stellar public keys and phone numbers without creating an account', async () => {

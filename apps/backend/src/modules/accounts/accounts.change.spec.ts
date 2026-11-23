@@ -68,6 +68,17 @@ describe('changePin', () => {
     expect(prisma.account.update).not.toHaveBeenCalled();
   });
 
+  it('does not accept an email code for an MPIN change, or vice versa', async () => {
+    const { service, verifyPin, prisma } = makeService(fresh());
+    const emailProof = signVerificationToken(PHONE, SECRET, 'change_email')!;
+    const pinProof = signVerificationToken(PHONE, SECRET, 'change_mpin')!;
+    await expect(service.changePin(PHONE, '1234', '5678', emailProof)).rejects.toMatchObject({ status: 401 });
+    await expect(service.updateProfile(PHONE, '1234', { email: 'new@mail.com' }, pinProof)).rejects.toMatchObject({ status: 401 });
+    expect(verifyPin).not.toHaveBeenCalled();
+    expect(prisma.account.update).not.toHaveBeenCalled();
+    await expect(service.updateProfile(PHONE, '1234', { email: 'new@mail.com' }, emailProof)).resolves.toMatchObject({ success: true });
+  });
+
   it('refuses a second change within 24 hours without using up PIN tries', async () => {
     const { service, verifyPin } = makeService({ ...fresh(), pinChangedAt: new Date(Date.now() - HOUR) });
     const error: any = await service.changePin(PHONE, '1234', '5678', token()).catch((e) => e);

@@ -123,7 +123,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
     setBusy(true);
     setError(null);
     try {
-      await sendOtp(phone, controller.signal);
+      await sendOtp(phone, 'recover_device', controller.signal);
       navigation.navigate('Otp', { phone, purpose: 'recover' });
     } catch (e) {
       if (!isAborted(e)) setError(errorMessage(e));
@@ -235,6 +235,7 @@ export function ForgotMpinScreen({ navigation, route }: NativeStackScreenProps<R
         <SmsCodeStep
           key={round}
           phone={phone}
+          purpose="reset_mpin"
           onVerified={(proof) => {
             smsProof.current = proof;
             goTo('new');

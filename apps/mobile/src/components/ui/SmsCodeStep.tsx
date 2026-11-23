@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatPhoneDisplay } from '../../services/accountPhone';
 import { ApiError, errorMessage, isAborted } from '../../services/api/client';
-import { sendOtp, verifyOtp } from '../../services/api/otp';
+import { sendOtp, verifyOtp, type OtpPurpose } from '../../services/api/otp';
 import { messages, useT } from '../../i18n';
 import { colors, fonts, radius } from '../../theme';
 import { Button } from './Button';
@@ -24,11 +24,9 @@ function verifyErrorMessage(error: unknown): string {
 type SmsCodeStepProps = {
   /** The account's number, which the code is texted to. */
   phone: string;
-  /**
-   * Called once the code checks out, with the proof the server takes for the change. `undefined` only on a
-   * development server that issues no proof (it then does not ask for one either).
-   */
-  onVerified: (verificationToken: string | undefined) => void;
+  purpose: OtpPurpose;
+  /** Called once the code checks out with the proof required by the action. */
+  onVerified: (verificationToken: string) => void;
 };
 
 /**
@@ -36,7 +34,7 @@ type SmsCodeStepProps = {
  * checks it as soon as all six digits are in, and offers Resend after 30 seconds. Same behavior as the signup OTP
  * screen, sized to sit inside a settings page.
  */
-export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
+export function SmsCodeStep({ phone, purpose, onVerified }: SmsCodeStepProps) {
   const t = useT();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -53,7 +51,8 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
     setSending(true);
     setError(null);
     try {
-      await sendOtp(phone, controller.signal);
+      await sendOtp(phone, purpose, controller.signal);
+      if (controller.signal.aborted) return;
       setCode('');
       setCooldown(RESEND_SECONDS);
     } catch (e) {
@@ -65,7 +64,7 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
     } finally {
       if (request.current === controller) setSending(false);
     }
-  }, [phone]);
+  }, [phone, purpose]);
 
   // The code goes out as soon as the step opens.
   useEffect(() => {
@@ -80,7 +79,7 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
   }, [cooldown]);
 
   const verify = async (value: string) => {
-    if (busy || done.current) return;
+    if (busy || sending || done.current) return;
     if (value.length !== CODE_LENGTH) {
       setError(messages().smsCode.enterCode(CODE_LENGTH));
       return;
@@ -90,7 +89,8 @@ export function SmsCodeStep({ phone, onVerified }: SmsCodeStepProps) {
     setBusy(true);
     setError(null);
     try {
-      const result = await verifyOtp(phone, value, controller.signal);
+      const result = await verifyOtp(phone, value, purpose, controller.signal);
+      if (controller.signal.aborted) return;
       done.current = true;
       onVerified(result.verificationToken);
     } catch (e) {

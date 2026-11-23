@@ -151,7 +151,7 @@ export function LoginScreen({ navigation, route }: NativeStackScreenProps<RootSt
     async (recoverPhone: string, signal: AbortSignal) => {
       await Promise.all([clearStoredAccount(), forgetMpin()]);
       setStored(null);
-      await sendOtp(recoverPhone, signal);
+      await sendOtp(recoverPhone, 'recover_device', signal);
       navigation.navigate('Otp', { phone: recoverPhone, purpose: 'recover' });
     },
     [navigation],

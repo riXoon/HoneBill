@@ -71,7 +71,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
           navigation.popTo('Login');
           return;
         }
-        await sendOtp(fullPhone, controller.signal);
+        await sendOtp(fullPhone, 'recover_device', controller.signal);
         navigation.navigate('Otp', { phone: fullPhone, purpose: 'recover' });
         return;
       }
@@ -79,7 +79,7 @@ export function InputNumberScreen({ navigation, route }: NativeStackScreenProps<
         setError(messages().onboarding.hasAccount);
         return;
       }
-      await sendOtp(fullPhone, controller.signal);
+      await sendOtp(fullPhone, 'signup', controller.signal);
       navigation.navigate('Otp', { phone: fullPhone });
     } catch (e) {
       if (!isAborted(e)) setError(errorMessage(e));

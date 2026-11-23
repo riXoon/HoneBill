@@ -18,13 +18,13 @@ export class OtpController {
       ?.trim();
     const realIpHeader = req.headers['x-real-ip'];
     const realIp = (Array.isArray(realIpHeader) ? realIpHeader[0] : realIpHeader)?.trim();
-    return this.otpService.send(phone, firstForwardedIp || realIp || req.ip || '127.0.0.1');
+    return this.otpService.send(phone, firstForwardedIp || realIp || req.ip || '127.0.0.1', body.purpose);
   }
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @UseGuards(PinVerifyRateLimitGuard)
   verify(@Body() body: VerifyOtpDto) {
-    return this.otpService.verify(body.phoneNumber, body.code);
+    return this.otpService.verify(body.phoneNumber, body.code, body.purpose);
   }
 }

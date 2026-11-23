@@ -35,6 +35,7 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
   const scale = useScale();
   const { phone } = route.params;
   const recover = route.params.purpose === 'recover';
+  const purpose = recover ? 'recover_device' : 'signup';
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   /** True while a new code is being requested, so the Resend link can say so. */
@@ -63,7 +64,8 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
     setBusy(true);
     setError(null);
     try {
-      const result = await verifyOtp(phone, code, controller.signal);
+      const result = await verifyOtp(phone, code, purpose, controller.signal);
+      if (controller.signal.aborted) return;
       if (recover) {
         navigation.navigate('VerifySeedPhrase', { phone });
       } else {
@@ -94,7 +96,7 @@ export function OtpScreen({ navigation, route }: NativeStackScreenProps<RootStac
     setResending(true);
     setError(null);
     try {
-      await sendOtp(phone, controller.signal);
+      await sendOtp(phone, purpose, controller.signal);
       setCode('');
       setCooldown(RESEND_SECONDS);
     } catch (e) {

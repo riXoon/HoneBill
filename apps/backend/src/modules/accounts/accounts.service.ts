@@ -14,7 +14,7 @@ import { RedisService } from '../../infra/redis/redis.service.js';
 import { isPlausiblePhone, toDbPhone } from '../../common/utils/phone.util.js';
 import { isValidPinFormat, hashPin, verifyPin } from '../../common/utils/pin.util.js';
 import { generateBase62Id } from '../../common/utils/short-id.util.js';
-import { signVerificationToken, verifyVerificationToken } from '../../common/utils/otp.util.js';
+import { requiresOtpPurpose, requiresOtpToken, verifyVerificationToken, type OtpPurpose } from '../../common/utils/otp.util.js';
 import { classifyAccountUniqueConstraint } from './unique-constraint.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 
@@ -81,15 +81,8 @@ export class AccountsService {
     }
 
     const verificationToken = typeof payload.verificationToken === 'string' ? payload.verificationToken.trim() : '';
-    if (verificationToken || this.isOtpTokenRequired()) {
-      const otpSecret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET');
-      if (
-        !cleanPhone ||
-        !verificationToken ||
-        !verifyVerificationToken(verificationToken, cleanPhone, otpSecret)
-      ) {
-        throw new UnauthorizedException('Phone verification required. Please verify your number again.');
-      }
+    if (verificationToken || requiresOtpToken(this.configService)) {
+      this.assertPhoneVerified(cleanPhone ?? '', verificationToken, 'signup');
     }
 
     const [existingKey, existingPhone] = await Promise.all([
@@ -342,7 +335,7 @@ export class AccountsService {
     // Checked before the PIN, so a refused change does not use up the person's PIN tries.
     const account = await this.findChangeAccount(phoneNumber);
     if (account) assertNoCooldown('pin', account.pinChangedAt);
-    this.assertPhoneVerified(phoneNumber, verificationToken);
+    this.assertPhoneVerified(phoneNumber, verificationToken, 'change_mpin');
 
     await this.verifyPin(phoneNumber, currentPin);
     if (!account) throw new NotFoundException('Account not found.');
@@ -383,7 +376,7 @@ export class AccountsService {
     const emailChanging = email !== undefined && email !== account?.email;
     if (emailChanging) {
       if (account) assertEmailChangeAllowed(account);
-      this.assertPhoneVerified(phoneNumber, verificationToken);
+      this.assertPhoneVerified(phoneNumber, verificationToken, 'change_email');
     }
 
     await this.verifyPin(phoneNumber, pin);
@@ -422,7 +415,7 @@ export class AccountsService {
         fieldErrors: { newPin: 'PIN must be 4 to 6 digits.' },
       });
     }
-    this.assertPhoneVerified(phoneNumber, verificationToken);
+    this.assertPhoneVerified(phoneNumber, verificationToken, 'reset_mpin');
 
     const account = await this.findChangeAccount(phoneNumber);
     if (!account) throw new NotFoundException('Account not found.');
@@ -473,21 +466,20 @@ export class AccountsService {
    * A sensitive change needs proof the person holds the account's phone right now: the token `POST /otp/verify`
    * returns. Required whenever the server can issue tokens; a development setup with no token secret skips it.
    */
-  private assertPhoneVerified(phoneNumber: string, verificationToken?: string): void {
-    const secret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET');
-    if (!secret && !this.isOtpTokenRequired()) return;
+  private assertPhoneVerified(phoneNumber: string, verificationToken: string | undefined, purpose: OtpPurpose): void {
+    const secret = this.configService.get<string>('OTP_VERIFICATION_JWT_SECRET')?.trim();
     const token = verificationToken?.trim() ?? '';
-    if (!token || !verifyVerificationToken(token, phoneNumber, secret)) {
+    if (!secret && !token && !requiresOtpToken(this.configService)) return;
+    if (!phoneNumber || !token || !secret || !verifyVerificationToken(
+      token, phoneNumber, secret, purpose, !requiresOtpPurpose(this.configService),
+    )) {
       throw new UnauthorizedException({
-        error: 'Enter the code we texted to your number to confirm this change.',
+        error: purpose === 'signup'
+          ? 'Phone verification required. Please verify your number again.'
+          : 'Enter the code we texted to your number to confirm this change.',
         code: 'OTP_REQUIRED',
       });
     }
-  }
-
-  private isOtpTokenRequired(): boolean {
-    const required = this.configService.get<boolean | string>('REQUIRE_OTP_TOKEN');
-    return required === true || required === 'true';
   }
 }
 

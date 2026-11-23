@@ -1,5 +1,8 @@
 import * as Joi from 'joi';
 
+const productionOtpSecret = Joi.string().min(32)
+  .invalid(Joi.ref('SECRET_SEP10_JWT_SECRET')).required();
+
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().port().default(3000),
@@ -70,9 +73,17 @@ export const envValidationSchema = Joi.object({
   SMS_DISPATCH_SECRET: Joi.string().allow('').optional(),
   OFFLINE_TRANSACTION_DEBUG: Joi.boolean().truthy('true').falsy('false').default(false),
   NEXT_PUBLIC_APP_URL: Joi.string().uri().allow('').optional(),
-  OTP_VERIFICATION_JWT_SECRET: Joi.string().allow('').optional(),
-  REQUIRE_OTP_TOKEN: Joi.boolean().default(false),
-  OTP_TEST_MODE: Joi.boolean().default(false),
+  OTP_VERIFICATION_JWT_SECRET: Joi.string().trim().empty('')
+    .when('NODE_ENV', { is: 'production', then: productionOtpSecret })
+    .when('VERCEL_ENV', { is: Joi.valid('production').required(), then: productionOtpSecret })
+    .when('OTP_REQUIRE_PURPOSE', { is: true, then: productionOtpSecret }),
+  REQUIRE_OTP_TOKEN: Joi.boolean().default(false)
+    .when('NODE_ENV', { is: 'production', then: Joi.boolean().valid(true).default(true) })
+    .when('VERCEL_ENV', { is: Joi.valid('production').required(), then: Joi.boolean().valid(true).default(true) }),
+  OTP_REQUIRE_PURPOSE: Joi.boolean().default(false),
+  OTP_TEST_MODE: Joi.boolean().default(false)
+    .when('NODE_ENV', { is: 'production', then: Joi.boolean().valid(false) })
+    .when('VERCEL_ENV', { is: Joi.valid('production').required(), then: Joi.boolean().valid(false) }),
   OTP_TEST_NUMBERS: Joi.string().allow('').default(''),
   OTP_TEST_CODE: Joi.string().allow('').optional(),
   SEP10_AUTH_TIMEOUT: Joi.number().integer().positive().default(900),
