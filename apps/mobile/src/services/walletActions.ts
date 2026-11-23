@@ -3,9 +3,9 @@ import { settleDeposit, startDeposit } from './api/anchor';
 import { UserFacingError } from './api/client';
 import { prepareDeposit, prepareTransfer, prepareWithdraw } from './api/engine';
 import { getSessionToken } from './session';
-import { confirmSoon } from './sync/confirmOutbox';
+import { confirmSoon, type ConfirmKind } from './sync/confirmOutbox';
 import { loadAccount, submitTransaction, type HorizonAccount } from './stellar/horizon';
-import { submitAndWait } from './stellar/sorobanRpc';
+import { PendingTransactionError, submitAndWait } from './stellar/sorobanRpc';
 import { openWalletSigner, type WalletSigner } from './wallet/signer';
 
 /**
@@ -26,6 +26,17 @@ function requireConfig(): void {
   }
 }
 
+async function submitWalletActivity(walletPublicKey: string, kind: ConfirmKind, signedXdr: string, expectedHash: string) {
+  try {
+    const hash = await submitAndWait(signedXdr, expectedHash);
+    void confirmSoon(walletPublicKey, kind, hash);
+    return hash;
+  } catch (error) {
+    if (error instanceof PendingTransactionError) void confirmSoon(walletPublicKey, kind, error.hash);
+    throw error;
+  }
+}
+
 /** Online wallet -> offline vault (`/engine/deposit`). */
 export async function moveToOffline(walletPublicKey: string, pesos: number): Promise<string> {
   requireConfig();
@@ -34,7 +45,7 @@ export async function moveToOffline(walletPublicKey: string, pesos: number): Pro
   if (!signer.offlineDevicePubkeyHex) {
     throw new UserFacingError("This phone has no offline payment key. Sign in again with your recovery phrase.");
   }
-  const { xdr } = await prepareDeposit(
+  const { xdr, txHash } = await prepareDeposit(
     {
       senderPublicKey: signer.publicKey,
       tokenAddress: TOKEN_CONTRACT_ID,
@@ -43,9 +54,7 @@ export async function moveToOffline(walletPublicKey: string, pesos: number): Pro
     },
     signer.signMessage(`deposit:${signer.publicKey}:${amountStroops}`),
   );
-  const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
-  void confirmSoon(walletPublicKey, 'confirm_move', hash);
-  return hash;
+  return submitWalletActivity(walletPublicKey, 'confirm_move', signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE), txHash);
 }
 
 /** Offline vault -> online wallet (`/engine/withdraw`). */
@@ -53,13 +62,11 @@ export async function moveToOnline(walletPublicKey: string, pesos: number): Prom
   requireConfig();
   const amountStroops = pesosToStroops(pesos);
   const signer = await openWalletSigner(walletPublicKey);
-  const { xdr } = await prepareWithdraw(
+  const { xdr, txHash } = await prepareWithdraw(
     { senderPublicKey: signer.publicKey, tokenAddress: TOKEN_CONTRACT_ID, amountStroops },
     signer.signMessage(`withdraw:${signer.publicKey}:${amountStroops}`),
   );
-  const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
-  void confirmSoon(walletPublicKey, 'confirm_move', hash);
-  return hash;
+  return submitWalletActivity(walletPublicKey, 'confirm_move', signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE), txHash);
 }
 
 /** Online wallet -> someone else's online wallet (`/engine/transfer`), then marks it settled on the backend. */
@@ -75,17 +82,14 @@ export async function sendOnline(walletPublicKey: string, recipientPublicKey: st
   const intent = signer.signMessage(
     `transfer:v2:online:${TOKEN_CONTRACT_ID}:${signer.publicKey}:${recipientPublicKey}:${amountStroops}`,
   );
-  const { xdr } = await prepareTransfer(
+  const { xdr, txHash } = await prepareTransfer(
     { senderPublicKey: signer.publicKey, recipientPublicKey, tokenAddress: TOKEN_CONTRACT_ID, amountStroops },
     intent,
   );
   lap('backend prepared the transaction');
-  const hash = await submitAndWait(signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE));
+  const hash = await submitWalletActivity(walletPublicKey, 'confirm_transfer', signer.signPreparedTransaction(xdr, STELLAR_NETWORK_PASSPHRASE), txHash);
   lap('ledger applied it');
 
-  // The money has moved, so the receipt must not wait on the backend's bookkeeping (which can retry for seconds).
-  // The confirm is queued first, so it still goes out on the next sync if the app is killed now.
-  void confirmSoon(walletPublicKey, 'confirm_transfer', hash);
   return hash;
 }
 

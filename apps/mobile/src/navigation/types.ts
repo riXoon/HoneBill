@@ -1,6 +1,7 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
 import type { DispatchMethod, SendMode } from '../types/send';
+import type { Transaction } from '../types/transaction';
 
 /** The four tabs behind the bottom navigation bar. */
 export type TabParamList = {
@@ -59,7 +60,7 @@ export type RootStackParamList = {
   VaultSettings: undefined;
   /** Profile menu: current MPIN, then a new one twice. */
   ChangeMpin: undefined;
-  TransactionDetail: { id: string };
+  TransactionDetail: { id: string; activity?: Pick<Transaction, 'ref' | 'source' | 'direction'> };
   /** Help & Feedback. With `transactionId` (from a transaction's "Report a problem") that payment is attached. */
   Feedback: { transactionId?: string } | undefined;
   /** Release notes, newest first. `version` (from an Inbox notice) is highlighted. */

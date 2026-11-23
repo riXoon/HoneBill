@@ -23,7 +23,7 @@ type Outcome = Pick<ResultDialogProps, 'mood' | 'title' | 'message' | 'buttonLab
 
 export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) {
   const { activeAccount } = useAuth();
-  const { refresh, addMoves } = useWalletData();
+  const { refresh, addLocalActivity } = useWalletData();
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -39,7 +39,7 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         const hash = await (to === 'online' ? moveToOnline : moveToOffline)(activeAccount.stellarPublicKey, amount);
         // Listed right away from this phone; the server records it too (confirmed in the background) and its copy
         // replaces this one on the next refresh, which is also what shows it on other devices.
-        addMoves(buildMoveEntries(to, amount, hash));
+        addLocalActivity(buildMoveEntries(to, amount, hash));
         void refresh({ force: true });
         successHaptic();
         const t = messages();
@@ -51,8 +51,13 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
           done: true,
         });
       } catch (error) {
-        // Submitted but unconfirmed: the balances may already have changed.
-        if (error instanceof PendingTransactionError) void refresh({ force: true });
+        if (error instanceof PendingTransactionError) {
+          addLocalActivity(buildMoveEntries(to, amount, error.hash, 'pending'));
+          void refresh({ force: true });
+          const t = messages();
+          setOutcome({ mood: 'idlePlain', title: t.common.pendingConfirmation, message: t.common.pendingConfirmationBody, buttonLabel: t.common.done, done: true });
+          return;
+        }
         if (!(error instanceof UserFacingError)) reportError(error, { step: `transferTo${to}` });
         errorHaptic();
         const t = messages();
@@ -62,7 +67,7 @@ export function useWalletTransfer(to: 'online' | 'offline', onDone: () => void) 
         setBusy(false);
       }
     },
-    [activeAccount, to, refresh, addMoves, onDone],
+    [activeAccount, to, refresh, addLocalActivity, onDone],
   );
 
   /** Props for the result dialog: success leaves the screen once acknowledged, a failure stays for another try. */

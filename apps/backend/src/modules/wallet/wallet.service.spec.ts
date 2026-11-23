@@ -11,13 +11,9 @@ function makeService(overrides: Record<string, any> = {}) {
     settlement: { findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
     onlineTransfer: {
       findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]),
-      findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
-      update: jest.fn<(...args: any[]) => Promise<any>>(),
     },
     walletMove: {
       findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]),
-      findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
-      update: jest.fn<(...args: any[]) => Promise<any>>(),
     },
     anchorTransaction: { findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
     account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(OWNER), findMany: jest.fn<(...args: any[]) => Promise<any[]>>().mockResolvedValue([]) },
@@ -29,7 +25,6 @@ function makeService(overrides: Record<string, any> = {}) {
     getContract: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({
       get_vault: jest.fn<(...args: any[]) => Promise<any>>(),
     }),
-    sorobanServer: { getTransaction: jest.fn<(...args: any[]) => Promise<any>>() },
   };
   return { service: new WalletService(prisma as unknown as PrismaService, stellar as unknown as StellarService), prisma, stellar };
 }
@@ -94,7 +89,7 @@ describe('WalletService', () => {
     ]);
     const { transactions } = await service.getHistory(PUBLIC_KEY);
     expect(prisma.walletMove.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ accountPublicKey: PUBLIC_KEY, status: 'SETTLED' }) }),
+      expect.objectContaining({ where: expect.objectContaining({ accountPublicKey: PUBLIC_KEY, status: { in: ['SETTLED', 'FAILED'] } }) }),
     );
     expect(transactions).toHaveLength(2);
     expect(transactions.find((t) => t.id === 'move:m1:out')).toMatchObject({
@@ -127,38 +122,5 @@ describe('WalletService', () => {
     const { transactions } = await service.getHistory(PUBLIC_KEY);
     expect(transactions.find((t) => t.id === 'move:m2:out')).toMatchObject({ tag: 'OFFLINE', title: 'Transferred to Online Balance' });
     expect(transactions.find((t) => t.id === 'move:m2:in')).toMatchObject({ tag: 'WALLET', title: 'Received from Offline Balance', mirror: true });
-  });
-
-  it('confirms a wallet move only after the ledger has applied it', async () => {
-    const { service, prisma, stellar } = makeService();
-    await expect(service.confirmMove('nope')).rejects.toThrow('64-character');
-    prisma.walletMove.findUnique.mockResolvedValue(null);
-    await expect(service.confirmMove('d'.repeat(64))).rejects.toThrow('Unknown wallet move');
-
-    prisma.walletMove.findUnique.mockResolvedValue({ txHash: 'd'.repeat(64), status: 'PENDING', confirmedAt: null });
-    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'NOT_FOUND' });
-    await expect(service.confirmMove('D'.repeat(64))).rejects.toMatchObject({ responseBody: { status: 'PENDING' } });
-    expect(prisma.walletMove.update).not.toHaveBeenCalled();
-
-    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'FAILED' });
-    prisma.walletMove.update.mockResolvedValue({ status: 'FAILED' });
-    await expect(service.confirmMove('d'.repeat(64))).rejects.toMatchObject({ responseBody: { status: 'FAILED' } });
-
-    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'SUCCESS' });
-    prisma.walletMove.update.mockResolvedValue({ status: 'SETTLED', confirmedAt: new Date('2026-11-10') });
-    await expect(service.confirmMove('d'.repeat(64))).resolves.toMatchObject({ status: 'SETTLED' });
-  });
-
-  it('checks Soroban status before promoting an online transfer', async () => {
-    const { service, prisma, stellar } = makeService();
-    prisma.onlineTransfer.findUnique.mockResolvedValue({ txHash: 'a'.repeat(64), status: 'PENDING', confirmedAt: null });
-    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'NOT_FOUND' });
-    await expect(service.confirmTransfer('A'.repeat(64))).rejects.toMatchObject({
-      responseBody: { status: 'PENDING', error: 'Transaction has not reached the RPC history window yet' },
-    });
-    expect(prisma.onlineTransfer.update).not.toHaveBeenCalled();
-    stellar.sorobanServer.getTransaction.mockResolvedValue({ status: 'SUCCESS' });
-    prisma.onlineTransfer.update.mockResolvedValue({ status: 'SETTLED', confirmedAt: new Date('2026-01-01') });
-    await expect(service.confirmTransfer('A'.repeat(64))).resolves.toMatchObject({ txHash: 'a'.repeat(64), status: 'SETTLED' });
   });
 });

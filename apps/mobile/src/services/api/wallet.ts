@@ -55,13 +55,17 @@ export async function getHistory(account: AccountRef, limit = 50, signal?: Abort
     return transactions;
   };
 
+  return withWalletSession(publicKey, read, signal);
+}
+
+async function withWalletSession<T>(publicKey: string, request: (bearer: string) => Promise<T>, signal?: AbortSignal): Promise<T> {
   const token = await getSessionToken(publicKey, signal);
   try {
-    return await read(token);
+    return await request(token);
   } catch (error) {
     if (signal?.aborted || !(error instanceof ApiError) || error.kind !== 'http' || error.status !== 401) throw error;
     invalidateSessionToken(publicKey, token);
-    return read(await getSessionToken(publicKey, signal));
+    return request(await getSessionToken(publicKey, signal));
   }
 }
 
@@ -69,16 +73,25 @@ export async function getHistory(account: AccountRef, limit = 50, signal?: Abort
  * Marks a move between the user's own wallets settled once the ledger has it, which is what puts it in History on
  * every device. 409 means the RPC has not indexed it yet (retry); 422 means it failed on-chain.
  */
-export function confirmMove(txHash: string, signal?: AbortSignal): Promise<{ txHash: string; status: string }> {
-  return apiRequest('POST', '/wallet/moves/confirm', { body: { txHash }, signal });
+export function confirmMove(publicKey: string, txHash: string, signal?: AbortSignal) {
+  return confirmWalletActivity(publicKey, '/wallet/moves/confirm', txHash, signal);
 }
 
 /**
  * Marks an online transfer settled once the ledger has it. 409 means the RPC has not indexed it yet (retry);
  * 422 means it failed on-chain.
  */
-export function confirmTransfer(txHash: string, signal?: AbortSignal): Promise<{ txHash: string; status: string }> {
-  return apiRequest('POST', '/wallet/transfers/confirm', { body: { txHash }, signal });
+export function confirmTransfer(publicKey: string, txHash: string, signal?: AbortSignal) {
+  return confirmWalletActivity(publicKey, '/wallet/transfers/confirm', txHash, signal);
+}
+
+async function confirmWalletActivity(publicKey: string, path: string, txHash: string, signal?: AbortSignal) {
+  await withWalletSession(publicKey, async (bearer) => {
+    const result = await apiRequest<{ txHash: string; status: string }>('POST', path, { bearer, body: { txHash }, signal });
+    if (result?.status !== 'SETTLED' || result.txHash !== txHash.toLowerCase()) {
+      throw new Error('Wallet confirmation did not return a settled transaction.');
+    }
+  }, signal);
 }
 
 /**

@@ -41,6 +41,8 @@ export const envValidationSchema = Joi.object({
   CRON_SECRET: Joi.string().allow('').optional(),
   SETTLEMENT_RECONCILE_MODE: Joi.string().valid('off', 'observe', 'apply').default('off'),
   SETTLEMENT_RECONCILE_START_LEDGER: Joi.number().integer().min(1).max(4294967295).optional(),
+  WALLET_HISTORY_RECONCILE_MODE: Joi.string().valid('off', 'observe', 'apply').default('off'),
+  WALLET_HISTORY_RECONCILE_START_LEDGER: Joi.number().integer().min(1).max(4294967295).optional(),
   SETTLEMENT_TRANSPORT: Joi.string().valid('qstash', 'bullmq', 'none', '').optional(),
   QSTASH_TOKEN: Joi.string().allow('').optional(),
   QSTASH_URL: Joi.string().uri().allow('').optional(),

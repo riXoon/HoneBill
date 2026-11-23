@@ -49,7 +49,7 @@ type SendResult = {
   /** Base64 `TransactionResult` when the network refuses the transaction outright. */
   errorResultXdr?: string;
 };
-type GetResult = { status: 'SUCCESS' | 'FAILED' | 'NOT_FOUND' };
+type GetResult = { status: 'SUCCESS' | 'FAILED' | 'NOT_FOUND'; txHash?: string };
 
 /** Thrown when the transaction was submitted but its outcome is not known yet. Money may still move. */
 export class PendingTransactionError extends UserFacingError {
@@ -60,9 +60,16 @@ export class PendingTransactionError extends UserFacingError {
 }
 
 /** Submits a signed envelope and resolves with its hash once the ledger has applied it. */
-export async function submitAndWait(signedXdr: string): Promise<string> {
+export async function submitAndWait(signedXdr: string, expectedHash?: string): Promise<string> {
   if (__DEV__) await logOutgoing(signedXdr);
-  const sent = await rpc<SendResult>('sendTransaction', { transaction: signedXdr });
+  let sent: SendResult;
+  try {
+    sent = await rpc<SendResult>('sendTransaction', { transaction: signedXdr });
+  } catch (error) {
+    if (expectedHash && SOROBAN_RPC_URL) throw new PendingTransactionError(expectedHash);
+    throw error;
+  }
+  if (expectedHash && sent.hash !== expectedHash) throw new PendingTransactionError(expectedHash);
   if (sent.status === 'ERROR') {
     const code = await resultCodeOf(sent.errorResultXdr);
     if (__DEV__) console.log('[soroban] sendTransaction ERROR', JSON.stringify({ hash: sent.hash, resultCode: code, errorResultXdr: sent.errorResultXdr }));
@@ -78,6 +85,9 @@ export async function submitAndWait(signedXdr: string): Promise<string> {
     );
   }
   if (sent.status === 'TRY_AGAIN_LATER') throw new UserFacingError('The network is busy. No money has been moved; try again shortly.');
+  if (sent.status !== 'PENDING' && sent.status !== 'DUPLICATE') {
+    throw new PendingTransactionError(expectedHash ?? sent.hash);
+  }
 
   const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -88,6 +98,7 @@ export async function submitAndWait(signedXdr: string): Promise<string> {
     } catch {
       continue; // A dropped poll says nothing about the transaction; keep asking until the deadline.
     }
+    if (expectedHash && result.txHash !== expectedHash) continue;
     if (result.status === 'SUCCESS') return sent.hash;
     if (result.status === 'FAILED') throw new UserFacingError('The transaction failed on the network. No money has been moved.');
   }

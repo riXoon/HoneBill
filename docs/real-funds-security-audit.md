@@ -28,10 +28,10 @@ Check off a finding after its remediation meets the verification criteria in the
 
 ### P1 patches
 
-- [ ] F06 — Enforce wallet history ownership. Backend and mobile patches are implemented. Production verification is pending.
-- [ ] F07 — Enforce phone ownership and recovery policy.
-- [ ] F08 — Reconcile unknown settlement outcomes.
-- [ ] F09 — Reconcile app history with confirmed on-chain activity.
+- [x] F06 — Enforce wallet history ownership in the active NestJS API (`02fcc1f`). Local HTTP tests verified ownership on both routes. In production, the old app received `401` when fetching history, and the updated app loaded history in Expo Go. Legacy route exposure remains unverified.
+- [ ] F07 — Enforce phone ownership and recovery policy (`6b60a17`). The deployed OTP flow worked in user testing. Confirm strict-purpose rejection before closing the patch. Recovery when the old number is unavailable still needs a reviewed process.
+- [x] F08 — Reconcile unknown settlement outcomes (`6bd6269`). User verified the recurring QStash sweep on Stellar Testnet in `observe` mode. Local tests covered verified finalization, expired envelopes, and duplicate receipt claims. The controlled Testnet recovery test in `apply` mode was skipped.
+- [ ] F09 — Reconcile app history with confirmed on-chain activity. Owner-scoped confirmation and QStash recovery are implemented. Deployed Testnet verification is pending.
 - [ ] F10 — Separate and protect upgrade and recipient administration.
 - [ ] F11 — Monitor ledger storage expiry and verify restoration.
 - [ ] F12 — Make OTP consumption and account binding atomic.
@@ -42,6 +42,13 @@ Check off a finding after its remediation meets the verification criteria in the
 - [ ] F17 — Protect mobile outbox data and device secrets.
 - [ ] F18 — Align token and amount policy across layers.
 - [ ] F19 — Account for offline funds committed across devices and channels.
+
+#### F09 Testnet verification
+
+1. Apply the wallet history migration. Deploy the updated backend and test with the updated mobile build.
+2. Set `WALLET_HISTORY_RECONCILE_MODE=observe` and `WALLET_HISTORY_RECONCILE_START_LEDGER` to a retained Testnet ledger at or before the test payments. Configure a QStash POST to `/api/v2/internal/wallet/history/reconcile` with the deployed `Authorization: Bearer <CRON_SECRET>` destination header.
+3. On an isolated Testnet deployment, verify an online send and vault moves in both directions. Confirm the sweep sees their effects with `errors: 0`. Then switch to `apply` and use a fixture with a confirmed transaction and its History row absent. Check that the original hash, wallets, amount, and ledger time appear on refresh. Replay the sweep and check that the receipt appears once.
+4. Verify loss of connectivity leaves an uncertain submission pending, and verify that an unrelated wallet gets the same confirmation response as an unknown hash. Apply mode starts its own cursor, so the starting ledger must still be retained when it first runs.
 
 ### P2 patches
 

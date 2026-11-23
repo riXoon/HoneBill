@@ -130,7 +130,7 @@ export class EngineService {
     try {
       await this.prisma.walletMove.upsert({
         where: { txHash },
-        update: { accountPublicKey, direction, tokenId, amountStroops },
+        update: {},
         create: { txHash, accountPublicKey, direction, tokenId, amountStroops },
       });
     } catch (error) {
@@ -191,7 +191,7 @@ export class EngineService {
       const txHash = TransactionBuilder.fromXDR(xdrEnvelope, this.stellar.networkPassphrase).hash().toString('hex');
       await this.prisma.onlineTransfer.upsert({
         where: { txHash },
-        update: { senderPublicKey, recipientPublicKey, tokenId: token.id, amountStroops: amount },
+        update: {},
         create: { txHash, senderPublicKey, recipientPublicKey, tokenId: token.id, amountStroops: amount },
       });
       return { xdr: xdrEnvelope, txHash };

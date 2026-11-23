@@ -79,7 +79,7 @@ type WalletData = {
   /** Undoes `holdOffline` for a voucher that provably never left the app (the messaging app failed to open). */
   releaseOfflineHold: (nonce: string) => void;
   /** Lists a move between the user's own wallets right away, until the server's history has it. */
-  addMoves: (entries: Transaction[]) => void;
+  addLocalActivity: (entries: Transaction[]) => void;
   /**
    * Pesos already committed by offline payments still waiting to settle (amount plus fee). The vault balance does not
    * drop until a voucher settles, so this is what the screens subtract to show what can still be spent.
@@ -104,6 +104,8 @@ const SYNC_ORDER_VOUCHERS = 10;
 const SYNC_ORDER_FEEDBACK = 30;
 const SYNC_ORDER_CONFIRMS = 20;
 const syncNow = () => syncService.requestSync();
+const chainActivityKey = (tx: Transaction) => [tx.ref.toLowerCase(), tx.source, tx.direction].join(':');
+
 const OFFLINE_MESSAGE = "You're offline. Connect to the internet to load your transactions.";
 
 export function WalletDataProvider({ children }: { children: React.ReactNode }) {
@@ -240,9 +242,9 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
           setVoucherReviews([]);
         }
 
-        // Moves between the user's own wallets that the server now lists no longer need this phone's copy.
-        const listedRefs = new Set(next.map((tx) => tx.ref));
-        const stillLocal = movesRef.current.filter((m) => !listedRefs.has(m.ref));
+        // Server history replaces this phone's copy of the matching wallet activity.
+        const listedRefs = new Set(next.map(chainActivityKey));
+        const stillLocal = movesRef.current.filter((m) => !listedRefs.has(chainActivityKey(m)));
         if (stillLocal.length !== movesRef.current.length) {
           movesRef.current = stillLocal;
           setMoves(stillLocal);
@@ -513,7 +515,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
     [publicKey, walletSignal, holdOffline],
   );
 
-  const addMoves = useCallback(
+  const addLocalActivity = useCallback(
     (entries: Transaction[]) => {
       if (!publicKey || !walletSignal || walletSignal.aborted || entries.length === 0) return;
       const known = new Set(movesRef.current.map((m) => m.id));
@@ -531,8 +533,8 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
   const transactions = useMemo(() => {
     const listed = new Set(serverTransactions.flatMap((tx) => (tx.nonce ? [normalizeNonce(tx.nonce)] : [])));
     const waiting = pending.filter((p) => !listed.has(normalizeNonce(p.nonce)));
-    const listedRefs = new Set(serverTransactions.map((tx) => tx.ref));
-    const localMoves = moves.filter((m) => !listedRefs.has(m.ref));
+    const listedRefs = new Set(serverTransactions.map(chainActivityKey));
+    const localMoves = moves.filter((m) => !listedRefs.has(chainActivityKey(m)));
     if (waiting.length === 0 && localMoves.length === 0) return serverTransactions;
     return [...waiting, ...localMoves, ...serverTransactions].sort((a, b) => b.timestamp - a.timestamp);
   }, [serverTransactions, pending, moves]);
@@ -563,7 +565,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       answerVoucherReview,
       holdOffline,
       releaseOfflineHold,
-      addMoves,
+      addLocalActivity,
       pendingOffline: ownsData ? pendingOffline : 0,
       outcomes: ownsData ? outcomes : NO_OUTCOMES,
       dismissOutcomes,
@@ -581,7 +583,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       answerVoucherReview,
       holdOffline,
       releaseOfflineHold,
-      addMoves,
+      addLocalActivity,
       pendingOffline,
       outcomes,
       dismissOutcomes,

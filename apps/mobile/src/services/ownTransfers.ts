@@ -8,9 +8,9 @@ import type { Transaction } from '../types/transaction';
  * The server builds the same two entries from its own record of the move (backend `getHistory`), which is what other
  * devices see. These are the phone's copy of them, shown straight away and dropped once the server's arrive.
  */
-export function buildMoveEntries(to: 'online' | 'offline', amount: number, hash: string, now: number = Date.now()): Transaction[] {
+export function buildMoveEntries(to: 'online' | 'offline', amount: number, hash: string, status: 'completed' | 'pending' = 'completed'): Transaction[] {
   const toOffline = to === 'offline';
-  const base = { timestamp: now, assetCode: 'PHPC', amount, status: 'completed', ref: hash } as const;
+  const base = { timestamp: Date.now(), assetCode: 'PHPC', amount, status, ref: hash } as const;
   return [
     {
       ...base,
