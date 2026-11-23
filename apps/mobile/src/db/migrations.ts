@@ -55,6 +55,7 @@ const STEPS: string[] = [
   `
   ALTER TABLE wallet_transactions ADD COLUMN failure_reason TEXT;
   `,
+  `ALTER TABLE wallet_transactions ADD COLUMN fee_cents INTEGER;`,
 ];
 
 /** Brings the database up to the latest step. Each step and its version bump commit together, or not at all. */

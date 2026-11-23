@@ -1,9 +1,9 @@
 import { Buffer } from 'buffer';
 
-import { OFFLINE_TOLL_STROOPS } from '../../config/limits';
 import { UserFacingError } from '../api/client';
 import { readSigningSecrets } from '../wallet/deviceWallet';
 import { loadStellar, toBase64 } from '../wallet/signer';
+import { feeStroopsToCents, offlineFeeStroops } from './fees';
 import { getOfflineSetup } from './offlineConfig';
 
 /**
@@ -42,7 +42,9 @@ export type VoucherInput = {
   nonce?: Uint8Array;
 };
 
-export async function buildOfflineVoucher(input: VoucherInput): Promise<string> {
+export type SignedOfflineVoucher = { text: string; feeCents: number; assetCode: string };
+
+export async function buildOfflineVoucher(input: VoucherInput): Promise<SignedOfflineVoucher> {
   const { Keypair, Address, nativeToScVal, xdr } = await loadStellar();
   if (input.amountStroops <= 0n || input.amountStroops > I128_MAX) throw new UserFacingError('Enter a valid amount.');
 
@@ -60,7 +62,7 @@ export async function buildOfflineVoucher(input: VoucherInput): Promise<string> 
     );
   }
   const { config } = setup;
-  const toll = config.tokenSymbol === 'PHPC' ? OFFLINE_TOLL_STROOPS : 0n;
+  const toll = offlineFeeStroops(input.amountStroops, config.tokenSymbol);
   const nonce = input.nonce ?? crypto.getRandomValues(new Uint8Array(32));
   if (nonce.length !== 32) throw new Error('Nonce must be 32 bytes');
 
@@ -126,5 +128,5 @@ export async function buildOfflineVoucher(input: VoucherInput): Promise<string> 
     );
   }
 
-  return voucher;
+  return { text: voucher, feeCents: feeStroopsToCents(toll), assetCode: config.tokenSymbol };
 }

@@ -1,6 +1,7 @@
-import { Logger } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import { SettlementsService } from '../settlements/settlements.util.js';
 import { SmsService } from '../sms/sms.service.js';
 import { normalizeSettlementFailure, isRetryableSettlementError } from './engine-retry.util.js';
@@ -54,7 +55,7 @@ export class SettlementJobRunner {
 
     let result: SettlementResult;
     try {
-      result = await this.settlements.processSettlement(job.data.smsBody);
+      result = await this.settlements.processSettlement(job.data.smsBody, job.data.senderPhone);
     } catch (error) {
       const decided = decidedElsewhere(error);
       if (decided?.status === 'SETTLED') {
@@ -65,7 +66,8 @@ export class SettlementJobRunner {
         await this.notifyFailed(job, userFailureReason(decided.reason));
         throw new UnrecoverableError('Voucher already failed');
       }
-      if (!isRetryableSettlementError(error)) {
+      if (error instanceof HttpException && error.getStatus() < 500 &&
+          ![408, 429].includes(error.getStatus()) && !isRetryableSettlementError(error)) {
         const reason = normalizeSettlementFailure(error);
         this.logger.warn(`Settlement job ${job.id} will not retry: ${reason}`);
         await this.notifyFailed(job, userFailureReason(error));
@@ -83,16 +85,29 @@ export class SettlementJobRunner {
   }
 
   private async notifySettled(job: SettlementJob): Promise<void> {
+    if (!this.sms) return;
     const notice = await this.describe(job);
     if (!notice) {
-      await this.send(job, job.data.senderPhone, 'HoneBill: Your offline payment went through.', `settlement-receipt:${job.id}:sender`);
+      await this.send(job.data.senderPhone, 'HoneBill: Your offline payment went through.', `settlement-receipt:${job.id}:sender`, job.data.traceId);
       return;
     }
-    await this.send(job, job.data.senderPhone, settledText(notice), `settlement-receipt:${notice.nonce}:sender`);
+    await this.sendSettled(notice, job.data.senderPhone, job.data.traceId);
+  }
+
+  async notifyRecovered(settlementId: number): Promise<void> {
+    if (!this.sms) return;
+    const recovered = await this.settlements.recoveredReceipt(settlementId);
+    if (!recovered) return;
+    await this.sendSettled(recovered.notice, recovered.relayPhone, undefined, 4_000);
+  }
+
+  private async sendSettled(notice: VoucherNotice, relayPhone?: string, traceId?: string, deadlineMs?: number): Promise<void> {
+    await this.send(relayPhone, settledText(notice), `settlement-receipt:${notice.nonce}:sender`, traceId, deadlineMs);
     // The receiver is told only when a different number texted the voucher, so one phone never gets both texts.
-    if (notice.receiverPhone && notice.receiverPhone !== job.data.senderPhone) {
-      await this.send(job, notice.receiverPhone, receivedText(notice), `settlement-receipt:${notice.nonce}:receiver`);
+    if (notice.receiverPhone && (!relayPhone || normalizePhoneNumber(notice.receiverPhone) !== normalizePhoneNumber(relayPhone))) {
+      await this.send(notice.receiverPhone, receivedText(notice), `settlement-receipt:${notice.nonce}:receiver`, traceId, deadlineMs);
     }
+    await this.settlements.clearReceiptRelay(notice.nonce);
   }
 
   private async notifyFailed(job: SettlementJob, reason: string): Promise<void> {
@@ -100,7 +115,7 @@ export class SettlementJobRunner {
     const message = notice
       ? failedText(notice, reason)
       : `HoneBill: Your offline payment did not go through. ${reason} No money was taken.`;
-    await this.send(job, job.data.senderPhone, message, `settlement-failed:${notice?.nonce ?? job.id}:sender`);
+    await this.send(job.data.senderPhone, message, `settlement-failed:${notice?.nonce ?? job.id}:sender`, job.data.traceId);
   }
 
   /** Voucher details for the texts. Best effort: a text with fewer details beats no text. */
@@ -113,16 +128,17 @@ export class SettlementJobRunner {
   }
 
   /** Queues one text. A text that cannot be queued is logged, never allowed to fail the settlement job. */
-  private async send(job: SettlementJob, to: string | undefined, message: string, dedupKey: string): Promise<void> {
+  private async send(to: string | undefined, message: string, dedupKey: string, traceId?: string, deadlineMs?: number): Promise<void> {
     if (!to || !this.sms) return;
+    // The durable claim also covers direct SMS delivery when BullMQ is disabled. An ambiguous provider response is not resent.
+    if (!await this.settlements.claimReceipt(dedupKey)) return;
     try {
-      const notification = await this.sms.enqueueSms(to, message, { traceId: job.data.traceId, dedupKey });
+      const notification = await this.sms.enqueueSms(to, message, { traceId, dedupKey, ...(deadlineMs ? { deadlineMs } : {}) });
       if (!notification.queued && !notification.delivered) {
-        this.logger.warn(`Settlement text could not be queued or delivered for job ${job.id}`);
+        this.logger.warn('A settlement receipt could not be queued or delivered.');
       }
-    } catch (notificationError) {
-      const reason = normalizeSettlementFailure(notificationError);
-      this.logger.warn(`Settlement text enqueue failed for job ${job.id}: ${reason}`);
+    } catch {
+      this.logger.warn('A settlement receipt could not be queued or delivered.');
     }
   }
 }

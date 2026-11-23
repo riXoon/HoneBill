@@ -86,6 +86,7 @@ function toRow(publicKey: string, origin: Origin, tx: Transaction, position: num
     counterpartyShortId: tx.counterpartyShortId ?? null,
     mirror: tx.mirror ?? false,
     failureReason: tx.failureReason ?? null,
+    feeCents: tx.feeCents ?? null,
   };
 }
 
@@ -106,6 +107,7 @@ function fromRow(row: WalletTransactionRow): Transaction {
   if (row.counterpartyShortId !== null) tx.counterpartyShortId = row.counterpartyShortId;
   if (row.mirror) tx.mirror = true;
   if (row.failureReason !== null) tx.failureReason = row.failureReason;
+  if (row.feeCents !== null) tx.feeCents = row.feeCents;
   return tx;
 }
 

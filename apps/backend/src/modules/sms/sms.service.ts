@@ -92,7 +92,7 @@ export class SmsService {
   async enqueueSms(
     to: string,
     message: string,
-    options: { traceId?: string; dedupKey?: string } = {},
+    options: { traceId?: string; dedupKey?: string; deadlineMs?: number } = {},
   ): Promise<EnqueueSmsResult> {
     if (this.smsQueue) {
       try {
@@ -111,7 +111,9 @@ export class SmsService {
       this.logger.warn('SMS queue disabled; using the legacy direct-delivery fallback');
     }
 
-    const result = await this.textbee.deliver(to, message);
+    const result = options.deadlineMs
+      ? await this.textbee.deliver(to, message, { deadlineMs: options.deadlineMs })
+      : await this.textbee.deliver(to, message);
     return result.success
       ? { queued: false, delivered: true }
       : { queued: false, delivered: false, error: result.error };

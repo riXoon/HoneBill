@@ -3,7 +3,6 @@ import { Alert, AppState } from 'react-native';
 import type { NavigationContainerRefWithCurrent } from '@react-navigation/native';
 
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { OFFLINE_TOLL_PESOS } from '../../config/limits';
 import { useAuth } from '../../context/AuthContext';
 import { useWalletData } from '../../context/WalletDataContext';
 import { useIsOnline } from '../../hooks/useIsOnline';
@@ -105,11 +104,11 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
   }, [review, receiverShortId, answerVoucherReview]);
 
   if (handoff) {
-    const { draft, nonce, openedAt, recipient, voucher } = handoff;
+    const { draft, nonce, openedAt, recipient, voucher, feeCents, assetCode } = handoff;
     const who = recipient ? (recipient.unverified ? `ID ${recipient.shortId}` : recipient.name) : draft.recipientId;
     const answer = (sent: boolean) => {
       // Either answer preserves the voucher for status checks. Only the retry dialog can authorize submission.
-      const payment = pendingPayment(nonce, draft.amount, recipient, openedAt);
+      const payment = pendingPayment(nonce, draft.amount, recipient, openedAt, feeCents, assetCode);
       if (!trackOfflineDispatch(payment, voucher)) {
         Alert.alert(t.sendMethod.reviewSaveFailed);
         return;
@@ -137,7 +136,9 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
 
   if (review && resolved && resolved.shortId === receiverShortId) {
     const answer = (approve: boolean) => {
-      const payment = approve ? pendingPayment(review.nonce, review.amount, resolved, review.dispatchedAt) : null;
+      const payment = approve
+        ? pendingPayment(review.nonce, review.amount, resolved, review.dispatchedAt, review.feeCents, review.assetCode)
+        : null;
       if (!answerVoucherReview(review, payment)) {
         Alert.alert(t.sendMethod.reviewSaveFailed);
       }
@@ -151,7 +152,7 @@ export function SmsDispatchPrompt({ navigation }: { navigation: NavigationContai
           formatPeso(review.amount),
           resolved.name,
           voucherRef(review.nonce),
-          formatPeso(review.amount + OFFLINE_TOLL_PESOS),
+          formatPeso((Math.round(review.amount * 100) + review.feeCents) / 100),
         )}
         confirmLabel={t.sendMethod.settleOnline}
         cancelLabel={t.sendMethod.recoveryLater}

@@ -1,5 +1,6 @@
 import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { rpc } from '@stellar/stellar-sdk';
+import { LEGACY_PHPC_OFFLINE_FEE_STROOPS } from 'pijin_core/offline-fee';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
@@ -182,7 +183,10 @@ export class WalletService {
 
       const settlementItems = settlements.map((item: any) => {
         const sender = item.senderShortId === shortId;
-        const amount = stroopsToDecimalString(item.amountStroops, item.token?.decimals ?? 7);
+        const decimals = item.token?.decimals ?? 7;
+        const assetCode = item.token?.symbol ?? 'PHPC';
+        const amount = stroopsToDecimalString(item.amountStroops, decimals);
+        const toll = item.protocolToll ?? (assetCode === 'PHPC' ? LEGACY_PHPC_OFFLINE_FEE_STROOPS : 0n);
         return {
           id: String(item.id),
           type: sender ? 'SEND' : 'RECEIVE',
@@ -191,7 +195,8 @@ export class WalletService {
           // The other party's short ID, so the app can offer a past recipient again under "Recent".
           counterpartyShortId: sender ? item.receiverShortId : item.senderShortId,
           amount: sender ? `-${amount}` : amount,
-          assetCode: item.token?.symbol ?? 'PHPC',
+          assetCode,
+          ...(sender ? { offlineFee: stroopsToDecimalString(toll, decimals) } : {}),
           status: item.status,
           timestamp: item.createdAt.toISOString(),
           ...(item.txHash ? { txHash: item.txHash } : {}),
@@ -381,6 +386,10 @@ export class WalletService {
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       },
       include: { token: { select: { symbol: true, decimals: true } } },
+      omit: {
+        recoveryReview: true, confirmedLedger: true, recoveryLease: true,
+        recoveryLeaseUntil: true, nextReconcileAt: true, relayReceiptPhone: true,
+      },
       orderBy: { createdAt: 'desc' },
       take: requestedLimit,
     });

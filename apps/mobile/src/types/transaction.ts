@@ -14,6 +14,8 @@ export type Transaction = {
   direction: 'in' | 'out';
   /** Always positive; `direction` carries the sign. */
   amount: number;
+  /** The fee authorized by the sender, in whole centavos, for an outgoing offline payment. */
+  feeCents?: number;
   assetCode: string;
   /** What the backend calls it, e.g. "Sent to Ana". */
   description: string;

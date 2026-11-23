@@ -2,9 +2,9 @@ import type { OutboxRow } from '../../db/schema';
 import { ApiError } from '../api/client';
 import { settleVoucher, type SettlementResult } from '../api/settlements';
 import { en } from '../../i18n/en';
-import { OFFLINE_TOLL_PESOS } from '../../config/limits';
 import type { Transaction } from '../../types/transaction';
 import { normalizeNonce } from '../walletCache';
+import { savedOfflineFeeCents, spendableCents } from '../offline/fees';
 import { parseRelayVoucher } from '../offline/voucherFormat';
 import { dueRows, enqueue, finishRow, transitionRow } from './outboxStore';
 
@@ -22,12 +22,14 @@ const GATEWAY_GRACE_MS = 2 * 60_000;
 /** Posts per sync, so a phone coming back with a backlog (or many phones at once) does not flood the relayer. */
 const MAX_POSTS_PER_DRAIN = 5;
 
-type VoucherPayload = { voucher: string; nonce: string; dispatchedAt?: number };
+type VoucherPayload = { voucher: string; nonce: string; dispatchedAt?: number; feeCents?: number; assetCode?: string };
 
 export type VoucherReview = {
   row: OutboxRow;
   nonce: string;
   amount: number;
+  feeCents: number;
+  assetCode: string;
   receiverShortId: string;
   dispatchedAt: number;
 };
@@ -38,8 +40,10 @@ export function rememberVoucherForReview(
   voucher: string,
   nonce: string,
   dispatchedAt: number,
+  feeCents?: number,
+  assetCode?: string,
 ): void {
-  const payload: VoucherPayload = { voucher, nonce, dispatchedAt };
+  const payload: VoucherPayload = { voucher, nonce, dispatchedAt, feeCents, assetCode };
   enqueue(publicKey, KIND, normalizeNonce(nonce), payload);
 }
 
@@ -69,12 +73,16 @@ export function listVoucherReviews(
     }
     const dispatchedAt = payload.dispatchedAt ?? row.createdAt;
     if (now - dispatchedAt < GATEWAY_GRACE_MS) continue;
-    const requiredCents = Math.round((voucher.amount + OFFLINE_TOLL_PESOS) * 100);
-    if (requiredCents > Math.round(offlineBalance * 100)) continue;
+    const assetCode = payload.assetCode ?? 'PHPC';
+    const feeCents = savedOfflineFeeCents(payload.feeCents, assetCode);
+    const requiredCents = Math.round(voucher.amount * 100) + feeCents;
+    if (requiredCents > spendableCents(offlineBalance)) continue;
     reviews.push({
       row,
       nonce: payload.nonce,
       amount: voucher.amount,
+      feeCents,
+      assetCode,
       receiverShortId: voucher.receiverShortId,
       dispatchedAt,
     });
@@ -98,6 +106,8 @@ function readPayload(row: OutboxRow): VoucherPayload | null {
         voucher: payload.voucher,
         nonce: payload.nonce,
         ...(Number.isFinite(payload.dispatchedAt) ? { dispatchedAt: payload.dispatchedAt } : {}),
+        feeCents: payload.feeCents,
+        ...(typeof payload.assetCode === 'string' ? { assetCode: payload.assetCode } : {}),
       };
     }
   } catch {

@@ -125,6 +125,9 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
             <DetailRow label={t.txDetail.source} value={SOURCE_LABEL[tx.source]} />
             <DetailRow label={t.txDetail.description} value={tx.description} strong={false} />
             <DetailRow label={t.txDetail.amount} value={amount} />
+            {offline && !incoming && tx.status !== 'failed' && tx.feeCents !== undefined ? (
+              <DetailRow label={t.verify.offlineFee} value={formatAmount(tx.feeCents / 100, tx.assetCode)} />
+            ) : null}
             <DetailRow label={offline ? 'Sync Status' : 'Stellar Ledger'} value={ledger} />
           </View>
           <View style={styles.divider} />

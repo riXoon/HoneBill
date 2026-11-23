@@ -16,21 +16,22 @@ import { SettlementQueueService } from '../engine/settlement-queue.service.js';
 import { SettlementProcessor } from '../engine/settlement.processor.js';
 import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 import { SettlementsService } from '../settlements/settlements.util.js';
-import { buildOfflineSignatureXdr } from '../settlements/offline-voucher.util.js';
+import type { SettlementFinalizationService } from '../settlements/settlement-finalization.service.js';
+import { buildOfflineSignatureXdr, decodeBase62 } from '../settlements/offline-voucher.util.js';
 import { SETTLEMENT_JOB_NAME, SETTLEMENT_QUEUE_NAME, type SettlementJobData } from '../settlements/settlement-queue.constants.js';
 import { SmsController } from './sms.controller.js';
 import { SmsService } from './sms.service.js';
 
 // Real application services, with in-memory queue/cache and mocked DB/RPC boundaries.
-function fixture() {
+function fixture(amount = '1', toll = 5_000_000n) {
   const device = Keypair.random();
   const gateway = Keypair.random();
   const token = 'CABQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGAYDAMBQGCK3';
   const contract = 'CACAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAINCW';
   const config = new ConfigService({ TEXTBEE_WEBHOOK_SECRET: 'webhook-secret', RELAYER_PUBLIC_KEY: gateway.publicKey(), RELAYER_SECRET_KEY: gateway.secret(), CONTRACT_ID: contract });
   const nonce = Buffer.alloc(32, 0xfb);
-  const signature = device.sign(buildOfflineSignatureXdr({ amountStroops: 1n, tollStroops: 5_000_000n, nonce, receiverShortId: 'def456', gatewayPublicKey: gateway.publicKey(), tokenContractId: token, contractAddress: contract }));
-  const voucher = `1:abc123:def456:1:${nonce.toString('base64')}:${signature.toString('base64')}`;
+  const signature = device.sign(buildOfflineSignatureXdr({ amountStroops: decodeBase62(amount), tollStroops: toll, nonce, receiverShortId: 'def456', gatewayPublicKey: gateway.publicKey(), tokenContractId: token, contractAddress: contract }));
+  const voucher = `1:abc123:def456:${amount}:${nonce.toString('base64')}:${signature.toString('base64')}`;
   const raw = Buffer.from(JSON.stringify({ event: 'MESSAGE_RECEIVED', data: { sender: '+639171234567', message: voucher } }));
   const cache = new Map<string, string>();
   const client = {
@@ -54,17 +55,26 @@ function fixture() {
   const sms = new SmsService(textbee as unknown as TextbeeService, redis as unknown as RedisService, config, undefined, producer);
   const prisma = {
     settlement: {
-      findUnique: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue(null),
+      findUnique: jest.fn(async ({ where }: any) => where.recoveryLease
+        ? { txHash: null, signedTxXdr: null, recoveryReview: null }
+        : null),
       create: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ id: 1, status: 'PENDING' }),
       update: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({}),
+      updateMany: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ count: 1 }),
     },
     account: { findUnique: jest.fn(async ({ where }: any) => where.shortId === 'abc123' ? { stellarPublicKey: device.publicKey(), offlineDeviceKey: device.publicKey() } : { stellarPublicKey: Keypair.random().publicKey() }) },
     token: { findUnique: jest.fn(async () => ({ id: 1, symbol: 'PHPC', contractId: token, isActive: true })) },
   };
   const manager = { executeTwoPhaseSettlement: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ txHash: 'confirmed', pollResult: { status: 'SUCCESS' } }) };
-  const settlements = new SettlementsService(prisma as unknown as PrismaService, config, manager as unknown as StellarTransactionManager);
+  const finalization = {
+    claim: jest.fn(async (id: number) => ({ id, token: 'fixture-lease' })),
+    check: jest.fn<(...args: any[]) => Promise<any>>().mockResolvedValue({ finalized: true, evidence: { status: 'SETTLED', txHash: 'confirmed' } }),
+    release: jest.fn(async () => undefined),
+  };
+  const settlements = new SettlementsService(prisma as unknown as PrismaService, config, manager as unknown as StellarTransactionManager,
+    finalization as unknown as SettlementFinalizationService);
   const worker = new SettlementProcessor(settlements);
-  return { config, raw, voucher, client, redis, jobs, add, producer, textbee, sms, prisma, manager, worker };
+  return { config, raw, voucher, client, redis, jobs, add, producer, textbee, sms, prisma, manager, worker, finalization };
 }
 
 describe('SMS to settlement integration', () => {
@@ -72,7 +82,7 @@ describe('SMS to settlement integration', () => {
   afterEach(async () => { await app?.close(); app = undefined; });
 
   it('routes a signed webhook through the shared module producer into the real worker and signature verification', async () => {
-    const f = fixture();
+    const f = fixture('5SNuQC', 30_000_000n); // ₱500.01, signed with the ₱3.00 tier.
     const moduleRef = await Test.createTestingModule({
       imports: [SettlementQueueModule.register('bullmq')],
       controllers: [SmsController],
@@ -91,7 +101,10 @@ describe('SMS to settlement integration', () => {
     expect(job.opts).toMatchObject({ attempts: 5, backoff: { type: 'exponential', delay: 2000 } });
     await expect(f.worker.process(job)).resolves.toEqual({ txHash: 'confirmed', status: 'SETTLED' });
     expect(f.manager.executeTwoPhaseSettlement).toHaveBeenCalledTimes(1);
-    expect(f.prisma.settlement.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'SETTLED' }) }));
+    expect(f.manager.executeTwoPhaseSettlement).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.objectContaining({ amount: 5_000_100_000n, protocol_toll: 30_000_000n }),
+    }));
+    expect(f.finalization.check).toHaveBeenCalledWith({ id: 1, token: 'fixture-lease' }, true, expect.any(Number));
   });
 
   it('allows the same voucher to retry after a failed publish', async () => {
@@ -103,6 +116,15 @@ describe('SMS to settlement integration', () => {
     await expect(f.sms.processWebhook(f.raw, 'duplicate')).resolves.toMatchObject({ status: 'Duplicate Replay' });
     expect(f.jobs.size).toBe(1);
     expect(f.add).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a voucher signed with a fee outside the accepted schedules', async () => {
+    const f = fixture('5SNuQC', 15_000_000n);
+    await f.sms.processWebhook(f.raw, 'trace');
+    const job = [...f.jobs.values()][0];
+    await expect(f.worker.process(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(f.manager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
+    expect(f.prisma.settlement.create).not.toHaveBeenCalled();
   });
 
   it('converges concurrent duplicate requests on one durable job', async () => {
@@ -152,7 +174,7 @@ describe('SMS to settlement integration', () => {
     const job = [...f.jobs.values()][0];
     const failure = new Error('network error');
     f.manager.executeTwoPhaseSettlement.mockRejectedValueOnce(failure);
-    await expect(f.worker.process(job)).rejects.toBe(failure);
+    await expect(f.worker.process(job)).rejects.toMatchObject({ status: 503 });
     expect(job.opts.attempts).toBe(5);
     await expect(f.worker.process(job)).resolves.toMatchObject({ status: 'SETTLED' });
   });
