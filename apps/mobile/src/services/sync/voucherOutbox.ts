@@ -2,56 +2,125 @@ import type { OutboxRow } from '../../db/schema';
 import { ApiError } from '../api/client';
 import { settleVoucher, type SettlementResult } from '../api/settlements';
 import { en } from '../../i18n/en';
-import { EXPIRED_REASON, normalizeNonce } from '../walletCache';
-import { dueRows, enqueue, finishRow, retryRow } from './outboxStore';
+import { OFFLINE_TOLL_PESOS } from '../../config/limits';
+import type { Transaction } from '../../types/transaction';
+import { normalizeNonce } from '../walletCache';
+import { parseRelayVoucher } from '../offline/voucherFormat';
+import { dueRows, enqueue, finishRow, transitionRow } from './outboxStore';
 
 /**
  * Offline vouchers waiting to be settled over the internet (ported from `_legacy/services/syncService.ts` and
  * `_legacy/db/services/paymentQueueDb.ts`).
  *
- * A voucher is queued once the sender says the text went out. From then on two paths race to settle it: the SMS
- * gateway, and this queue whenever the phone is online. The contract settles a nonce once, so whichever arrives second
- * gets "already settled" (409) and nothing is paid twice. The queue survives sign-out and restarts: the money is
- * committed, so it is settled the next time this wallet is signed in on this phone.
- *
- * The queue never decides balances or history. Those always come from the server's reading of the chain; the queue
- * only makes the chain hear about the payment sooner.
+ * Vouchers sent by SMS or relay are held for review. Only vouchers explicitly approved for online submission are
+ * drained. Older pending rows enter review because they have no record of that consent.
  */
 
 const KIND = 'voucher';
+/** Gives the SMS gateway time to record a voucher after handoff. */
+const GATEWAY_GRACE_MS = 2 * 60_000;
 /** Posts per sync, so a phone coming back with a backlog (or many phones at once) does not flood the relayer. */
 const MAX_POSTS_PER_DRAIN = 5;
-const BASE_BACKOFF_MS = 30_000;
-const MAX_BACKOFF_MS = 60 * 60_000;
-/**
- * Matches how long History shows a pending payment. Past this, a voucher the server answers about but still cannot
- * settle is given up; it is always posted at least once first, however old.
- */
-const MAX_AGE_MS = 14 * 24 * 60 * 60_000;
 
-type VoucherPayload = { voucher: string; nonce: string };
+type VoucherPayload = { voucher: string; nonce: string; dispatchedAt?: number };
 
-/** Queues a voucher for settlement. Queuing the same nonce again does nothing. */
-export function enqueueVoucher(publicKey: string, voucher: string, nonce: string): void {
-  const payload: VoucherPayload = { voucher, nonce };
+export type VoucherReview = {
+  row: OutboxRow;
+  nonce: string;
+  amount: number;
+  receiverShortId: string;
+  dispatchedAt: number;
+};
+
+/** Saves the signed voucher for status checks. Saving it never authorizes submission. */
+export function rememberVoucherForReview(
+  publicKey: string,
+  voucher: string,
+  nonce: string,
+  dispatchedAt: number,
+): void {
+  const payload: VoucherPayload = { voucher, nonce, dispatchedAt };
   enqueue(publicKey, KIND, normalizeNonce(nonce), payload);
 }
 
-const due = (publicKey: string, now: number) => dueRows(publicKey, KIND, now);
-const finish = finishRow;
-const retryLater = (row: OutboxRow, reason: string) => retryRow(row, reason, BASE_BACKOFF_MS, MAX_BACKOFF_MS);
+/** Called after a fresh wallet read. In-flight or decided vouchers need no retry offer. */
+export function listVoucherReviews(
+  publicKey: string,
+  history: Transaction[],
+  offlineBalance: number,
+  now = Date.now(),
+): VoucherReview[] {
+  const statuses = new Map(
+    history.flatMap((tx) => (tx.nonce ? [[normalizeNonce(tx.nonce), tx.status] as const] : [])),
+  );
+  const reviews: VoucherReview[] = [];
+  for (const row of dueRows(publicKey, KIND, now)) {
+    const status = statuses.get(row.dedupeKey);
+    if (status === 'pending') continue;
+    if (status === 'completed' || status === 'failed') {
+      finishRow(row, 'done');
+      continue;
+    }
+    const payload = readPayload(row);
+    const voucher = payload && parseRelayVoucher(payload.voucher);
+    if (!payload || !voucher) {
+      finishRow(row, 'failed', 'Unreadable queue entry');
+      continue;
+    }
+    const dispatchedAt = payload.dispatchedAt ?? row.createdAt;
+    if (now - dispatchedAt < GATEWAY_GRACE_MS) continue;
+    const requiredCents = Math.round((voucher.amount + OFFLINE_TOLL_PESOS) * 100);
+    if (requiredCents > Math.round(offlineBalance * 100)) continue;
+    reviews.push({
+      row,
+      nonce: payload.nonce,
+      amount: voucher.amount,
+      receiverShortId: voucher.receiverShortId,
+      dispatchedAt,
+    });
+  }
+  return reviews;
+}
+
+export function acceptVoucherReview(review: VoucherReview): boolean {
+  return transitionRow(review.row, 'approved');
+}
+
+export function dismissVoucherReview(review: VoucherReview): void {
+  transitionRow(review.row, 'done');
+}
+
+function readPayload(row: OutboxRow): VoucherPayload | null {
+  try {
+    const payload = JSON.parse(row.payload) as Partial<VoucherPayload> | null;
+    if (typeof payload?.voucher === 'string' && typeof payload.nonce === 'string') {
+      return {
+        voucher: payload.voucher,
+        nonce: payload.nonce,
+        ...(Number.isFinite(payload.dispatchedAt) ? { dispatchedAt: payload.dispatchedAt } : {}),
+      };
+    }
+  } catch {
+    // An old or damaged local row cannot be submitted.
+  }
+  return null;
+}
 
 /**
  * What to do with a voucher after one post:
  *  - `settled` / `failed`: the chain has decided (directly, or the gateway got there first).
  *  - `rejected`: the payload can never settle (bad signature, unknown account or token, malformed).
  *  - `later`:    the server cannot settle it right now, but another item may go through (device key not on file yet).
- *  - `stop`:     the server or the network is struggling; back off and end this drain.
+ *  - `stop`:     the server or the network is struggling; end this drain.
  */
 type Outcome = 'settled' | 'failed' | 'rejected' | 'later' | 'stop';
 
 export function classify(result: { ok: SettlementResult } | { error: unknown }): Outcome {
-  if ('ok' in result) return result.ok.status === 'FAILED' ? 'failed' : 'settled';
+  if ('ok' in result) {
+    if (result.ok.status === 'SETTLED') return 'settled';
+    if (result.ok.status === 'FAILED') return 'failed';
+    return 'later';
+  }
   const error = result.error;
   if (!(error instanceof ApiError) || error.kind !== 'http') return 'stop';
   if (error.status === 409) {
@@ -83,56 +152,40 @@ export function rejectionReason(message: string): string {
 }
 
 /**
- * Posts this wallet's due vouchers, oldest first. Returns the vouchers that can never settle (rejected, or too old to
- * try), so their pending entries can say so; settled and failed ones need nothing, the next history read lists them.
+ * Posts the vouchers this wallet has approved, oldest first. Returns rejections that may need a local History entry.
  */
 export async function drainVouchers(publicKey: string, signal: AbortSignal): Promise<{ givenUp: VoucherGivenUp[] }> {
   const givenUp: VoucherGivenUp[] = [];
   const now = Date.now();
   let posts = 0;
 
-  for (const row of due(publicKey, now)) {
+  for (const row of dueRows(publicKey, KIND, now, 'approved')) {
     if (signal.aborted || posts >= MAX_POSTS_PER_DRAIN) break;
 
-    let payload: VoucherPayload;
-    try {
-      payload = JSON.parse(row.payload) as VoucherPayload;
-    } catch {
-      finish(row, 'failed', 'Unreadable queue entry');
+    const payload = readPayload(row);
+    if (!payload) {
+      finishRow(row, 'failed', 'Unreadable queue entry');
       continue;
     }
-    // Age alone never drops a voucher: a phone back after weeks offline still posts it, since the server may never
-    // have heard of it (the text did not go out). Posting is always safe: the contract settles a nonce once.
-    const tooOld = now - row.createdAt > MAX_AGE_MS;
 
+    // Consume the approval before posting. After a timeout or restart check History before offering another attempt.
+    if (!transitionRow(row, 'pending', Date.now() + GATEWAY_GRACE_MS)) continue;
     posts += 1;
     let outcome: Outcome;
     let reason = '';
     try {
       outcome = classify({ ok: await settleVoucher(payload.voucher, signal) });
     } catch (error) {
-      // Cancelled (connection lost, sync stopped): not the voucher's fault, so it does not count as an attempt.
-      if (error instanceof ApiError && error.kind === 'aborted') break;
       outcome = classify({ error });
       reason = error instanceof Error ? error.message : String(error);
     }
 
-    if (outcome === 'settled') finish(row, 'done');
-    else if (outcome === 'failed') finish(row, 'failed', 'Failed on-chain');
+    if (outcome === 'settled') finishRow(row, 'done');
+    else if (outcome === 'failed') finishRow(row, 'failed', 'Failed on-chain');
     else if (outcome === 'rejected') {
-      finish(row, 'failed', reason);
+      finishRow(row, 'failed', reason);
       givenUp.push({ nonce: payload.nonce, reason: rejectionReason(reason) });
-    } else if (outcome === 'later') {
-      // The server answered but still cannot settle it, weeks on: stop trying and say so.
-      if (tooOld) {
-        finish(row, 'failed', 'Expired');
-        givenUp.push({ nonce: payload.nonce, reason: EXPIRED_REASON });
-      } else retryLater(row, reason);
-    } else {
-      // No answer (network or server trouble) is not the voucher's fault, however old it is: try again later.
-      retryLater(row, reason);
-      break;
-    }
+    } else if (outcome === 'stop') break;
   }
   return { givenUp };
 }

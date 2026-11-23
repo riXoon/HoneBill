@@ -62,7 +62,7 @@ export const outbox = sqliteTable(
     dedupeKey: text('dedupe_key').notNull(),
     /** JSON, shaped by `kind`. */
     payload: text('payload').notNull(),
-    status: text('status', { enum: ['pending', 'done', 'failed'] }).notNull().default('pending'),
+    status: text('status', { enum: ['pending', 'approved', 'done', 'failed'] }).notNull().default('pending'),
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error'),
     createdAt: integer('created_at').notNull(),

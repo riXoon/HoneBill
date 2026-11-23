@@ -1,0 +1,4 @@
+interface:
+  display_name: "HoneBill Security Auditor"
+  short_description: "Audit HoneBill security and protection of funds"
+  default_prompt: "Use $security-auditor to assess whether HoneBill is ready to hold real funds."

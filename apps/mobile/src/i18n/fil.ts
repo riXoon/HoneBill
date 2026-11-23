@@ -483,11 +483,16 @@ export const fil: Messages = {
     relayCancel: 'Isara',
     relayFailed: 'Nagkaproblema sa paghahanda ng QR code. Walang perang nailipat.',
     sentTitle: 'Na-send mo na ba ang text?',
-    sentBody:
-      'Matutuloy ang payment kapag na-send na ang text. Habang hindi pa ito kumpirmado ng HoneBill, nakatabi muna ang halaga para hindi ito magastos nang dalawang beses.',
-    sentFor: (amount, name) => `${amount} para kay ${name}. `,
+    sentBody: (amount, name) =>
+      `${amount} para kay ${name}. Nakatabi muna ang halaga habang sinusuri ng HoneBill ang payment.`,
     sentYes: 'Oo, na-send ko na',
     sentNo: 'Hindi pa',
+    recoveryTitle: 'Subukan ulit online ang offline transfer?',
+    recoveryBody: (amount, name, ref, total) =>
+      `Hindi makumpirma ng HoneBill ang transfer na ito. Maaaring hindi naipadala ang text o hindi pa ito nakakarating.\n\n${amount} para kay ${name} · Ref ${ref}\n${total} ang kabuuang ibabawas sa Offline Funds, kasama ang fee.\n\nPuwede mong subukan ulit nang walang bagong text. Kung makarating ang unang text, isang beses lang maaaring matuloy ang transfer.`,
+    settleOnline: 'Subukan ulit online',
+    recoveryLater: 'Huwag nang ulitin',
+    reviewSaveFailed: 'Hindi na-save ang pinili mo. Pakisubukan ulit.',
   },
 
   verify: {
@@ -520,8 +525,10 @@ export const fil: Messages = {
 
   receipt: {
     title: 'Na-send',
+    smsTitle: 'Offline payment',
     returnHome: 'Bumalik sa Home',
     heading: 'Nagawa na ang resibo',
+    smsHandoff: 'Hinihintay pa ang kumpirmasyon ng SMS payment. Kung hindi makarating ang text, hihingi muna ng pahintulot ang HoneBill bago subukan online.',
     bySms: (ref) =>
       `Na-send ang iyong payment sa pamamagitan ng SMS.\nMakakatanggap ka ng text na may Ref ${ref} kapag natuloy o hindi ito natuloy.`,
     online: 'Matagumpay ang iyong transaksyon.\nIpinadala gamit ang HoneBill',

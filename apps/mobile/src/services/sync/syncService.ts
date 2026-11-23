@@ -26,7 +26,7 @@ import { getConnectivity, online$, reconnected$ } from '../connectivity';
  *
  * Triggers: the connection coming back, the app coming back on screen, a slow interval while online and on screen,
  * and pull-to-refresh. They all feed one pipeline that runs at most one sync at a time (`exhaustMap`: a trigger that
- * arrives mid-sync is dropped, the running sync already covers it). A sync runs the registered steps in order, e.g.
+ * arrives mid-sync is dropped unless new outbox work requests another pass). A sync runs the registered steps in order, e.g.
  * send queued offline payments first, then read fresh balances and history, so the history already includes them.
  * Losing the connection mid-sync cancels it; the next reconnect starts over.
  */
@@ -54,6 +54,7 @@ class SyncService {
   private readonly manual$ = new Subject<void>();
   private readonly stateSubject = new BehaviorSubject<SyncState>({ syncing: false, lastSyncedAt: null });
   private subscription: Subscription | null = null;
+  private followUpRequested = false;
 
   readonly state$: Observable<SyncState> = this.stateSubject.asObservable();
 
@@ -80,12 +81,17 @@ class SyncService {
   }
 
   stop(): void {
+    this.followUpRequested = false;
     this.subscription?.unsubscribe();
     this.subscription = null;
   }
 
-  /** Pull-to-refresh, or any explicit "sync now". Ignored while a sync is already running. */
-  requestSync(): void {
+  /** New outbox work may need a second pass if the running sync has already drained that queue. */
+  requestSync({ afterCurrent = false } = {}): void {
+    if (afterCurrent && this.stateSubject.value.syncing) {
+      this.followUpRequested = true;
+      return;
+    }
     this.manual$.next();
   }
 
@@ -134,6 +140,12 @@ class SyncService {
         // Runs on completion and on cancellation (connection lost, service stopped).
         controller.abort();
         this.stateSubject.next({ syncing: false, lastSyncedAt: Date.now() });
+        if (this.followUpRequested) {
+          this.followUpRequested = false;
+          queueMicrotask(() => {
+            if (this.subscription && getConnectivity().online) this.requestSync({ afterCurrent: true });
+          });
+        }
       };
     });
   }
