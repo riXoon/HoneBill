@@ -4,7 +4,7 @@ import type { StellarService } from '../infra/stellar/stellar.service';
 import { buildTransactionHistory, stroopsToDecimalString, WalletService } from '../modules/wallet/wallet.util';
 
 describe('wallet history reconciliation', () => {
-  it('merges offline, online, and anchor transactions by newest timestamp', async () => {
+  it.each([[null, '0.5'], [30_000_000n, '3']])('merges wallet history with authorized fee %s as %s', async (protocolToll, offlineFee) => {
     const prisma = {
       account: {
         findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
@@ -20,6 +20,7 @@ describe('wallet history reconciliation', () => {
             senderShortId: 'sender',
             receiverShortId: 'receiver',
             amountStroops: 25000000n,
+            protocolToll,
             status: 'SETTLED',
             createdAt: new Date('2025-01-01T10:00:00.000Z'),
             token: { symbol: 'PHPC' },
@@ -76,6 +77,7 @@ describe('wallet history reconciliation', () => {
         type: 'SEND',
         tag: 'OFFLINE',
         amount: '-2.5',
+        offlineFee,
       }),
     ]);
     expect(prisma.settlement.findMany).toHaveBeenCalledTimes(1);

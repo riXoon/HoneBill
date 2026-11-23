@@ -7,10 +7,10 @@ import { SendLayout } from '../components/send/SendLayout';
 import { Notice } from '../components/ui/Notice';
 import { CheckIcon, CheckTitleIcon, OfflineFundsBadge, RecipientIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
-import { OFFLINE_TOLL_PESOS } from '../config/limits';
 import { useAuth } from '../context/AuthContext';
 import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
+import { useOfflineTokenSymbol } from '../hooks/useOfflineTokenSymbol';
 import { messages, useT } from '../i18n';
 import { useSendMode } from '../hooks/useSendMode';
 import { afterNextPaint } from '../utils/async';
@@ -18,6 +18,7 @@ import { formatPeso } from '../utils/format';
 import type { RootStackParamList } from '../navigation/types';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
+import { quoteOfflineFeeCents, spendableCents } from '../services/offline/fees';
 import { findRecipientById } from '../services/recipientDirectory';
 import { PendingTransactionError } from '../services/stellar/sorobanRpc';
 import { loadStellar } from '../services/wallet/signer';
@@ -62,15 +63,17 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   const t = useT();
   // Which funds this spends is the view the payment was started from, not whether the phone has internet.
   const online = useSendMode(mode) === 'online';
+  const tokenSymbol = useOfflineTokenSymbol(!online);
   const { activeAccount } = useAuth();
   const { balances, refresh, pendingOffline } = useWalletData();
   // The connection can change between steps, so the funds are checked again for the path taken now. Offline, money
   // committed to vouchers still waiting to settle is not spendable.
   const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
-  const fee = online ? 0 : OFFLINE_TOLL_PESOS;
-  const total = Math.round((amount + fee) * 100) / 100;
-  const enough = available !== null && total <= available;
+  const feeCents = online ? 0 : quoteOfflineFeeCents(amount, tokenSymbol);
+  const totalCents = Math.round(amount * 100) + feeCents;
+  const total = totalCents / 100;
+  const enough = available !== null && totalCents <= spendableCents(available);
 
   useEffect(() => {
     if (!recipient) navigation.goBack();
@@ -86,7 +89,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   /** Online there is nothing to choose: the transfer goes straight through. Offline, Method decides how the voucher leaves. */
   const authorize = async () => {
     if (!online) {
-      navigation.navigate('SendMethod', { recipientId, amount, note, mode: 'offline' });
+      navigation.navigate('SendMethod', { recipientId, amount, note, mode: 'offline', expectedFeeCents: feeCents });
       return;
     }
     if (!connected) {
@@ -178,8 +181,8 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
 
       <GlassCard style={styles.summary}>
         <View style={styles.breakdown}>
-          <SummaryRow label={t.verify.amountSent} value={formatPeso(amount)} />
-          {fee > 0 ? <SummaryRow label="Offline fee" value={formatPeso(fee)} /> : null}
+          <SummaryRow label={online ? t.verify.amountSent : t.verify.recipientGets} value={formatPeso(amount)} />
+          {!online ? <SummaryRow label={t.verify.offlineFee} value={formatPeso(feeCents / 100)} /> : null}
         </View>
         <View style={styles.divider} />
         <View style={styles.totalRow}>

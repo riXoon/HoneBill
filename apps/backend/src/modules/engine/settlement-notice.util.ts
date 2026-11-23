@@ -70,7 +70,7 @@ const GENERIC_FAILURE = 'The network rejected it while recording it.';
 const FRIENDLIER: Record<string, string> = {
   'Recipient was not found.': 'No account has this ID. Check the ID (capital and small letters matter).',
   'Invalid recipient ID.': 'The ID is not valid. Check it (capital and small letters matter).',
-  'Insufficient balance.': 'Your Offline balance was not enough for the amount plus the PHP 0.50 fee.',
+  'Insufficient balance.': 'Your Offline balance was not enough for the amount plus the offline fee.',
   'Voucher has already been used.': 'This payment was already used once, so it cannot be used again.',
   'Voucher has expired.': 'This payment is too old to use.',
   'Invalid transaction amount.': 'The amount is not valid.',

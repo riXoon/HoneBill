@@ -43,7 +43,7 @@ export type RootStackParamList = {
   /** `amount` pre-fills the field when a scanned payment-request QR carried one. */
   SendAmount: { recipientId: string; mode?: SendMode; amount?: number };
   SendVerification: SendDraft;
-  SendMethod: SendDraft;
+  SendMethod: SendDraft & { expectedFeeCents: number };
   /**
    * Needs the reference and time the ledger assigned, so it cannot be opened before a transfer really exists.
    * `online` is a transfer already settled on the ledger; `sms` and `relay` are offline vouchers still to dispatch.

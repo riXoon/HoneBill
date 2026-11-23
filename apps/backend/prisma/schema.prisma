@@ -168,6 +168,7 @@ model Settlement {
   relayerAddress  String?          @map("relayer_address")            // Gateway node public key
   tokenId         Int              @map("token_id")
   amountStroops   BigInt           @map("amount_stroops")             // Stellar stroops (7-decimal integer)
+  protocolToll    BigInt?          @map("protocol_toll")              // Fee authenticated by the voucher signature
   txHash          String?          @map("tx_hash")
   signedTxXdr     String?          @map("signed_tx_xdr")
   status          SettlementStatus @map("status")

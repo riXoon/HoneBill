@@ -16,12 +16,14 @@ export function toTransaction(item: HistoryItem): Transaction | null {
   if (!Number.isFinite(signed) || Number.isNaN(timestamp)) return null;
 
   const source: TransactionSource = item.tag === 'OFFLINE' ? 'offline' : 'wallet';
+  const feeCents = item.offlineFee === undefined ? undefined : Math.round(Number(item.offlineFee) * 100);
   return {
     id: item.id,
     timestamp,
     source,
     direction: item.amount.trim().startsWith('-') ? 'out' : 'in',
     amount: Math.abs(signed),
+    ...(feeCents !== undefined && Number.isSafeInteger(feeCents) && feeCents >= 0 ? { feeCents } : {}),
     assetCode: item.assetCode,
     description: item.title,
     status: statusOf(item.status),

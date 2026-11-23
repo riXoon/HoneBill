@@ -10,6 +10,8 @@ export type SmsHandoff = {
   publicKey: string;
   /** The signed voucher, exactly as texted. */
   voucher: string;
+  feeCents?: number;
+  assetCode?: string;
   nonce: string;
   draft: SendDraft;
   /** As it was when the text was opened, so History can name them after a restart. */
@@ -92,6 +94,8 @@ export function pendingPayment(
   amount: number,
   recipient: Recipient | null,
   issuedAt: number,
+  feeCents?: number,
+  assetCode = 'PHPC',
 ): PendingOffline {
   return {
     id: `pending:${nonce}`,
@@ -99,7 +103,8 @@ export function pendingPayment(
     source: 'offline',
     direction: 'out',
     amount,
-    assetCode: 'PHPC',
+    assetCode,
+    feeCents,
     description: !recipient
       ? 'Sent to recipient'
       : recipient.unverified

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LEGACY_PHPC_OFFLINE_FEE_STROOPS, offlineFeeStroops } from 'pijin_core/offline-fee';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone.util.js';
@@ -110,7 +111,8 @@ export class SettlementsService {
       throw new ConflictException('Offline device key is not enrolled. Sign in online to synchronize this device.');
     }
     const amount = decodeBase62(payload.amountBase62);
-    const toll = token.symbol === 'PHPC' ? 5_000_000n : 0n;
+    const tieredToll = offlineFeeStroops(amount, token.symbol);
+    const legacyToll = token.symbol === 'PHPC' ? LEGACY_PHPC_OFFLINE_FEE_STROOPS : 0n;
     const nonce = Buffer.from(restorePadding(payload.nonce), 'base64');
     const signature = Buffer.from(restorePadding(payload.signature), 'base64');
     const contractId = this.config.getOrThrow<string>('CONTRACT_ID');
@@ -123,29 +125,31 @@ export class SettlementsService {
       const bytes = buildOfflineSignatureXdr({ ...signatureFields, protocolToll, contractId: signedContract });
       return verifyOfflineVoucherSignature(deviceKey, bytes, signature);
     };
-    let valid = false;
+    let toll: bigint | undefined;
     try {
-      valid = verifies(toll, contractId) || verifies(toll);
+      if (verifies(tieredToll, contractId)) toll = tieredToll;
+      else if ((legacyToll !== tieredToll && verifies(legacyToll, contractId)) || verifies(legacyToll)) toll = legacyToll;
     } catch {
       // Invalid key material or signature input is handled as a rejected voucher below.
     }
-    if (!valid) {
+    if (toll === undefined) {
       if (submitted) throw settlementPending();
       this.logger.warn(`Offline voucher signature rejected for token ${token.id}`);
       throw new UnauthorizedException('Invalid voucher signature');
     }
+    if (existing?.protocolToll != null && existing.protocolToll !== toll) throw settlementPending();
 
     // The sender signed this voucher, so from here a rejection is recorded: it shows in their history with the reason,
     // and the nonce can never settle later (the sender was told no money was taken). Before the signature check nothing
     // is recorded, so a forged text cannot put entries in someone's history.
     if (!receiver) {
       if (submitted) throw settlementPending();
-      await this.recordRejection(existing, payload, token.id, amount, gateway, 'Recipient account not found');
+      await this.recordRejection(existing, payload, token.id, amount, toll, gateway, 'Recipient account not found');
       throw new NotFoundException('Recipient account not found');
     }
     if (!token.isActive) {
       if (submitted) throw settlementPending();
-      await this.recordRejection(existing, payload, token.id, amount, gateway, 'Token is inactive');
+      await this.recordRejection(existing, payload, token.id, amount, toll, gateway, 'Token is inactive');
       throw new BadRequestException('Token is inactive');
     }
 
@@ -155,7 +159,7 @@ export class SettlementsService {
         settlement = await this.prisma.settlement.create({ data: {
           qstashMessageId: `engine-${payload.nonce}`, nonce: payload.nonce, senderShortId: payload.senderShortId,
           receiverShortId: payload.receiverShortId, tokenId: token.id, amountStroops: amount,
-          relayerAddress: gateway, status: 'PENDING',
+          protocolToll: toll, relayerAddress: gateway, status: 'PENDING',
         } });
       } catch (error) {
         // A parallel worker may have claimed this voucher between the lookup and insert.
@@ -190,9 +194,18 @@ export class SettlementsService {
     try {
       const current = await this.prisma.settlement.findUnique({
         where: { id: lease.id, recoveryLease: lease.token, recoveryLeaseUntil: { gt: new Date() } },
-        select: { txHash: true, signedTxXdr: true, recoveryReview: true },
+        select: { txHash: true, signedTxXdr: true, recoveryReview: true, protocolToll: true },
       });
       if (!current || (current.recoveryReview && (current.txHash || current.signedTxXdr))) throw settlementPending();
+      if (current.protocolToll != null && current.protocolToll !== toll) throw settlementPending();
+      if (current.protocolToll === null && !current.txHash && !current.signedTxXdr) {
+        const saved = await this.prisma.settlement.updateMany({
+          where: { id: lease.id, recoveryLease: lease.token, recoveryLeaseUntil: { gt: new Date() },
+            protocolToll: null, txHash: null, signedTxXdr: null },
+          data: { protocolToll: toll },
+        });
+        if (!saved.count) throw settlementPending();
+      }
       if (typeof relayPhone === 'string' && isPlausiblePhone(relayPhone)) {
         await this.prisma.settlement.updateMany({
           where: { id: settlement.id, recoveryLease: lease.token, relayReceiptPhone: null },
@@ -304,6 +317,7 @@ export class SettlementsService {
     payload: ReturnType<typeof parseSettlementSmsBody>,
     tokenId: number,
     amount: bigint,
+    toll: bigint,
     gateway: string,
     reason: string,
   ): Promise<void> {
@@ -313,8 +327,9 @@ export class SettlementsService {
         const changed = await this.prisma.settlement.updateMany({
           where: { id: existing.id, status: 'PENDING', txHash: null, signedTxXdr: null,
             OR: [{ recoveryLeaseUntil: null }, { recoveryLeaseUntil: { lte: now } }],
+            AND: [{ OR: [{ protocolToll: null }, { protocolToll: toll }] }],
           },
-          data: { status: 'FAILED', failReason: reason },
+          data: { status: 'FAILED', failReason: reason, protocolToll: toll },
         });
         if (!changed.count) throw settlementPending();
         return;
@@ -322,7 +337,7 @@ export class SettlementsService {
       await this.prisma.settlement.create({ data: {
         qstashMessageId: `engine-${payload.nonce}`, nonce: payload.nonce, senderShortId: payload.senderShortId,
         receiverShortId: payload.receiverShortId, tokenId, amountStroops: amount,
-        relayerAddress: gateway, status: 'FAILED', failReason: reason,
+        protocolToll: toll, relayerAddress: gateway, status: 'FAILED', failReason: reason,
       } });
     } catch (error) {
       if (error instanceof ApiResponseException) throw error;

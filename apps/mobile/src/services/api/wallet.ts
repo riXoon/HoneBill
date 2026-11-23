@@ -16,6 +16,8 @@ export type HistoryItem = {
   title: string;
   /** Signed decimal string: "-12.50" is money out. */
   amount: string;
+  /** Unsigned decimal string for the authorized fee on an outgoing offline payment. */
+  offlineFee?: string;
   assetCode: string;
   status: string;
   /** ISO-8601. */

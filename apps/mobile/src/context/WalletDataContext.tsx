@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { savedOfflineFeeCents } from '../services/offline/fees';
 import { errorMessage } from '../services/api/client';
 import { getConnectivity } from '../services/connectivity';
 import { reportError } from '../services/errorReporting';
@@ -477,7 +477,7 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
       }
       holdOffline(payment);
       try {
-        rememberVoucherForReview(publicKey, voucher, payment.nonce, payment.timestamp);
+        rememberVoucherForReview(publicKey, voucher, payment.nonce, payment.timestamp, payment.feeCents, payment.assetCode);
       } catch (error) {
         reportError(error, { step: 'rememberVoucherForReview' });
         return false;
@@ -539,10 +539,10 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
   const pendingOffline = useMemo(
     () =>
-      pending.reduce(
-        (sum, p) => (p.status === 'pending' && p.direction === 'out' ? sum + p.amount + OFFLINE_TOLL_PESOS : sum),
-        0,
-      ),
+      pending.reduce((sum, p) => {
+        if (p.status !== 'pending' || p.direction !== 'out') return sum;
+        return sum + Math.round(p.amount * 100) + savedOfflineFeeCents(p.feeCents, p.assetCode);
+      }, 0) / 100,
     [pending],
   );
   const dismissOutcomes = useCallback(() => putOutcomes(NO_OUTCOMES), [putOutcomes]);

@@ -12,7 +12,7 @@ import { useWalletData } from '../context/WalletDataContext';
 import type { DispatchMethod } from '../types/send';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
-import { buildOfflineVoucher } from '../services/offline/voucher';
+import { buildOfflineVoucher, type SignedOfflineVoucher } from '../services/offline/voucher';
 import { MissingGatewayError, openVoucherSms, relayQrPayload } from '../services/offline/voucherFormat';
 import {
   clearSmsHandoff,
@@ -45,9 +45,10 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
 
   const { activeAccount } = useAuth();
   const [building, setBuilding] = useState(false);
+  const dispatchInProgress = useRef(false);
   // The signed voucher for this draft. Kept so a retry texts the same voucher (same nonce) instead of signing a
   // second one: the contract settles a nonce once, so a repeat can never pay twice.
-  const voucher = useRef<string | null>(null);
+  const voucher = useRef<SignedOfflineVoucher | null>(null);
   /** The QR shown for a partner to scan and text ("Get Help Sending"); null while it is closed. */
   const [relayQr, setRelayQr] = useState<string | null>(null);
 
@@ -60,18 +61,18 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
    * can scan the QR) it can settle at any time, whatever the person answers later, so what can be spent must already
    * exclude it. Released only by the server's answer once online, or right away if the messaging app never opened.
    */
-  const holdVoucher = (signed: string): number => {
+  const holdVoucher = (signed: SignedOfflineVoucher): number => {
     const at = heldAt.current ?? Date.now();
-    holdOffline(pendingPayment(voucherNonce(signed), draft.amount, findRecipientById(draft.recipientId) ?? null, at));
+    holdOffline(pendingPayment(voucherNonce(signed.text), draft.amount, findRecipientById(draft.recipientId) ?? null, at, signed.feeCents, signed.assetCode));
     return at;
   };
 
   // The SMS receipt opens from SmsDispatchPrompt after the user confirms sending the text.
   const finish = useCallback(
-    (signed: string, method: DispatchMethod) => {
-      const nonce = voucherNonce(signed);
+    (signed: SignedOfflineVoucher, method: DispatchMethod) => {
+      const nonce = voucherNonce(signed.text);
       const issuedAt = heldAt.current ?? Date.now();
-      trackOfflineDispatch(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt), signed);
+      trackOfflineDispatch(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt, signed.feeCents, signed.assetCode), signed.text);
       navigation.navigate('SendReceipt', { ...draft, method, reference: nonce, issuedAt });
     },
     [navigation, draft, trackOfflineDispatch],
@@ -81,7 +82,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
    * Signs the voucher once per draft. Both methods share it, so switching from one to the other (or retrying) never
    * makes a second voucher: the contract settles a nonce once, so a repeat can never pay twice.
    */
-  const prepareVoucher = async (): Promise<string | null> => {
+  const prepareVoucher = async (): Promise<SignedOfflineVoucher | null> => {
     if (!activeAccount) return null;
     const recipient = findRecipientById(draft.recipientId);
     if (!recipient) return null;
@@ -91,6 +92,9 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       receiverShortId: recipient.shortId,
       amountStroops: BigInt(pesosToStroops(draft.amount)),
     });
+    if (voucher.current.feeCents !== draft.expectedFeeCents) {
+      throw new UserFacingError(messages().verify.offlineFeeChanged);
+    }
     return voucher.current;
   };
 
@@ -100,7 +104,8 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   };
 
   const sendBySms = async () => {
-    if (building) return;
+    if (dispatchInProgress.current) return;
+    dispatchInProgress.current = true;
     setBuilding(true);
     try {
       const signed = await prepareVoucher();
@@ -109,8 +114,10 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       // Keep the handoff even if the app locks or closes while Messages is open.
       const dispatch = {
         publicKey: activeAccount.stellarPublicKey,
-        voucher: signed,
-        nonce: voucherNonce(signed),
+        voucher: signed.text,
+        nonce: voucherNonce(signed.text),
+        feeCents: signed.feeCents,
+        assetCode: signed.assetCode,
         draft,
         recipient: findRecipientById(draft.recipientId) ?? null,
         openedAt: heldAt.current ?? Date.now(),
@@ -119,7 +126,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       heldAt.current = dispatch.openedAt;
       holdVoucher(signed);
       try {
-        await openVoucherSms(signed);
+        await openVoucherSms(signed.text);
       } catch (error) {
         // The messaging app never opened: nothing to ask about. If the voucher never left the app before either
         // (an earlier text or QR), it can never settle, so its money is free again.
@@ -137,20 +144,29 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       }
       showPrepareError(error, 'sendBySms', messages().sendMethod.noMessagingApp);
     } finally {
+      dispatchInProgress.current = false;
       setBuilding(false);
     }
   };
 
   // No text load: show the signed voucher as a QR. A partner scans it in HoneBill and their phone texts it for the user.
   const relay = async () => {
-    if (building) return;
+    if (dispatchInProgress.current) return;
+    dispatchInProgress.current = true;
     setBuilding(true);
     try {
       const signed = await prepareVoucher();
       if (!signed) return;
-      const payload = relayQrPayload(signed);
+      const payload = relayQrPayload(signed.text);
+      const nonce = voucherNonce(signed.text);
+      const issuedAt = heldAt.current ?? Date.now();
+      const payment = pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt, signed.feeCents, signed.assetCode);
       // A partner can scan it as soon as it is on screen, so it is held from now on, even if the dialog is closed.
-      heldAt.current = holdVoucher(signed);
+      if (!trackOfflineDispatch(payment, signed.text)) {
+        if (heldAt.current === null) releaseOfflineHold(nonce);
+        throw new UserFacingError(messages().sendMethod.reviewSaveFailed);
+      }
+      heldAt.current = issuedAt;
       setRelayQr(payload);
     } catch (error) {
       if (error instanceof MissingGatewayError) {
@@ -159,6 +175,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       }
       showPrepareError(error, 'relayVoucher', messages().sendMethod.relayFailed);
     } finally {
+      dispatchInProgress.current = false;
       setBuilding(false);
     }
   };

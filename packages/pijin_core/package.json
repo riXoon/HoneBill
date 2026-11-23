@@ -1,7 +1,10 @@
 {
   "version": "0.0.0",
   "name": "pijin_core",
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./offline-fee": "./dist/offline-fee.js"
+  },
   "typings": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",

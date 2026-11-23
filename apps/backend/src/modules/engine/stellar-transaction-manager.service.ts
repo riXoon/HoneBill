@@ -160,6 +160,7 @@ export class StellarTransactionManager {
       } else {
         if (persisted.txHash !== null || persisted.signedTxXdr !== null) throw attemptUnavailable();
         if (persisted.amountStroops !== input.args.amount ||
+            (persisted.protocolToll != null && persisted.protocolToll !== input.args.protocol_toll) ||
             persisted.receiverShortId !== input.args.receiver_short_id.toString('ascii') ||
             !Buffer.from(persisted.nonce, 'base64').equals(input.args.nonce)) {
           throw attemptUnavailable();
@@ -261,7 +262,7 @@ export class StellarTransactionManager {
       where: { id },
       select: {
         id: true, status: true, failReason: true, txHash: true, signedTxXdr: true,
-        nonce: true, receiverShortId: true, amountStroops: true, relayerAddress: true,
+        nonce: true, receiverShortId: true, amountStroops: true, protocolToll: true, relayerAddress: true,
         recoveryLease: true, recoveryLeaseUntil: true,
       },
     }).catch(() => { throw attemptUnavailable(); });

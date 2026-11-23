@@ -90,7 +90,7 @@ describe('SettlementJobRunner texts', () => {
     const { runner, texts } = makeRunner(async () => ({
       status: 'FAILED',
       txHash: 'h',
-      reason: 'Your Offline balance was not enough for the amount plus the PHP 0.50 fee.',
+      reason: 'Your Offline balance was not enough for the amount plus the offline fee.',
     }));
     await runner.run(job);
     expect(texts()[0].message).toContain('Offline balance was not enough');

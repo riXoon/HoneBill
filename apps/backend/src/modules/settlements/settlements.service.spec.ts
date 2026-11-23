@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { Keypair } from '@stellar/stellar-sdk';
+import { offlineFeeStroops } from 'pijin_core/offline-fee';
 import { SettlementsService, buildOfflineSignatureXdr, decodeBase62 } from './settlements.util.js';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
 import type { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
@@ -41,10 +42,53 @@ function makeService() {
   return { service, prisma, transactionManager, senderKey, gateway, finalization };
 }
 
-const body = (signature = Buffer.alloc(64, 7)) =>
-  `1:abc123:def456:3v5K:${Buffer.alloc(32, 1).toString('base64')}:${signature.toString('base64')}`;
+const body = (signature = Buffer.alloc(64, 7), amount = '3v5K') =>
+  `1:abc123:def456:${amount}:${Buffer.alloc(32, 1).toString('base64')}:${signature.toString('base64')}`;
+
+describe('offline PHPC fee schedule', () => {
+  it.each([
+    [1n, 50n], [10_000n, 50n], [10_001n, 150n], [50_000n, 150n], [50_001n, 300n],
+    [100_000n, 300n], [100_001n, 750n], [500_000n, 750n], [500_001n, 1_500n], [5_000_000n, 1_500n],
+  ])('charges the correct fee on %s centavos', (amount, fee) => {
+    expect(offlineFeeStroops(amount * 100_000n, 'PHPC')).toBe(fee * 100_000n);
+  });
+
+  it('uses zero for unsupported fee assets', () => {
+    expect(offlineFeeStroops(50_000_100_000n, 'USDC')).toBe(0n);
+  });
+});
 
 describe('SettlementsService', () => {
+  it.each([5_000_000n, 30_000_000n])('settles a ₱500.01 voucher once with the signed fee %s', async (fee) => {
+    const { service, prisma, transactionManager, senderKey, gateway, finalization } = makeService();
+    const tokenContractId = Keypair.random().publicKey();
+    const amountField = '5SNuQC';
+    const amountStroops = 5_000_100_000n;
+    const signed = buildOfflineSignatureXdr({
+      amountStroops, protocolToll: fee, nonce: Buffer.alloc(32, 1), receiverShortId: 'def456',
+      gatewayPublicKey: gateway.publicKey(), tokenContractId,
+      contractId: 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX',
+    });
+    const voucher = body(Buffer.from(senderKey.sign(signed)), amountField);
+    prisma.settlement.findUnique.mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ protocolToll: fee, txHash: null, signedTxXdr: null })
+      .mockResolvedValueOnce({ txHash: 'confirmed', status: 'SETTLED' });
+    prisma.settlement.create.mockResolvedValue({ id: 1, status: 'PENDING', protocolToll: fee });
+    prisma.account.findUnique
+      .mockResolvedValueOnce({ stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
+      .mockResolvedValueOnce({ stellarPublicKey: Keypair.random().publicKey() });
+    prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
+    finalization.check.mockResolvedValue({ finalized: true, evidence: { status: 'SETTLED', txHash: 'confirmed' } });
+
+    await expect(service.processSettlement(voucher, '+639171234567')).resolves.toMatchObject({ status: 'SETTLED' });
+    expect(prisma.settlement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amountStroops, protocolToll: fee }) });
+    expect(transactionManager.executeTwoPhaseSettlement).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.objectContaining({ amount: amountStroops, protocol_toll: fee }),
+    }));
+    await expect(service.processSettlement(voucher)).rejects.toMatchObject({ status: 409 });
+    expect(transactionManager.executeTwoPhaseSettlement).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a duplicate conflict before looking up accounts or submitting a transaction', async () => {
     const { service, prisma, transactionManager } = makeService();
     prisma.settlement.findUnique.mockResolvedValue({ txHash: 'already-sent', status: 'SETTLED' });

@@ -14,13 +14,14 @@ import { MoneyOutIcon, StarIcon } from '../components/ui/smallIcons';
 import { SwipeToEnter } from '../components/ui/SwipeToEnter';
 import { NOTE_MAX } from '../config/limits';
 import { useWalletData } from '../context/WalletDataContext';
-import { OFFLINE_TOLL_PESOS } from '../config/limits';
+import { useOfflineTokenSymbol } from '../hooks/useOfflineTokenSymbol';
 import { useRecentRecipients } from '../hooks/useRecentRecipients';
 import { useSendMode } from '../hooks/useSendMode';
 import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
 import { formatPeso, formatPesoPlain } from '../utils/format';
 import { findRecipientById } from '../services/recipientDirectory';
+import { quoteOfflineFeeCents, spendableCents } from '../services/offline/fees';
 import { colors, fonts } from '../theme';
 
 // Figma: Send 2 - Amount (870:3271), 402x874.
@@ -31,6 +32,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   const t = useT();
   const { balances, pendingOffline } = useWalletData();
   const online = useSendMode(route.params.mode) === 'online';
+  const tokenSymbol = useOfflineTokenSymbol(!online);
   const [amountText, setAmountText] = useState(route.params.amount ? route.params.amount.toFixed(2) : '');
   const [note, setNote] = useState('');
   const noteFocus = useFieldFocus();
@@ -47,11 +49,14 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   // Offline, money already committed to vouchers waiting to settle cannot be spent again: a second voucher for it fails.
   const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
-  const fee = online ? 0 : OFFLINE_TOLL_PESOS;
+  const feeCents = online ? 0 : quoteOfflineFeeCents(amount, tokenSymbol);
+  const fee = feeCents / 100;
   const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
 
   // Without a balance read from the server there is nothing to check an amount against.
-  const problem = available === null ? t.amount.unavailable : amountProblem(amount, Math.max(0, available - fee));
+  const problem = available === null
+    ? t.amount.unavailable
+    : amountProblem(amount, Math.max(0, spendableCents(available) - feeCents) / 100);
   const valid = problem === null;
 
   return (
@@ -127,6 +132,7 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
 
         <View>
           <Text style={styles.hint}>{t.send.available(available === null ? '--' : formatPesoPlain(available))}</Text>
+          {feeCents > 0 ? <Text style={styles.hint}>{t.verify.offlineFee} {formatPeso(fee)}</Text> : null}
         </View>
       </GlassCard>
 
