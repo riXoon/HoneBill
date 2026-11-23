@@ -96,8 +96,8 @@ describe('wallet history ownership (e2e)', () => {
       ),
     },
     anchorTransaction: { findMany: jest.fn(async () => []) },
-    onlineTransfer: { findMany: jest.fn(async () => []) },
-    walletMove: { findMany: jest.fn(async () => []) },
+    onlineTransfer: { findMany: jest.fn(async () => []), findFirst: jest.fn(async () => null) },
+    walletMove: { findMany: jest.fn(async () => []), findFirst: jest.fn(async () => null) },
     token: {
       findUnique: jest.fn(async () => ({
         contractId: 'fixture-contract',
@@ -125,6 +125,7 @@ describe('wallet history ownership (e2e)', () => {
           SECRET_SEP10_JWT_SECRET: SECRET,
           SEP10_HOME_DOMAINS: ISSUER,
           SEP10_JWT_TIMEOUT: 3600,
+          CRON_SECRET: 'fixture-wallet-history-cron-secret',
         }),
       )
       .overrideProvider(PrismaService)
@@ -206,6 +207,7 @@ describe('wallet history ownership (e2e)', () => {
           title: 'Sent to Bob',
           counterpartyShortId: BOB.shortId,
           amount: '-2',
+          offlineFee: '0.5',
           assetCode: 'PHPC',
           status: 'SETTLED',
           timestamp: CREATED_AT.toISOString(),
@@ -238,7 +240,7 @@ describe('wallet history ownership (e2e)', () => {
       expect.objectContaining({
         where: {
           accountPublicKey: ALICE.stellarPublicKey,
-          status: 'SETTLED',
+          status: { in: ['SETTLED', 'FAILED'] },
           createdAt: { gte: CREATED_AT },
         },
       }),
@@ -296,6 +298,25 @@ describe('wallet history ownership (e2e)', () => {
       .set('Authorization', bearer(BOB.stellarPublicKey))
       .expect(200);
     expect(bob.body.data.map((row: { id: number }) => row.id)).toEqual([1, 2]);
+  });
+
+  it.each(['moves', 'transfers'])('guards the %s confirmation route with a wallet session', async (kind) => {
+    const path = `/api/v2/wallet/${kind}/confirm`;
+    const txHash = 'a'.repeat(64);
+    const lookup = kind === 'moves' ? prisma.walletMove.findFirst : prisma.onlineTransfer.findFirst;
+    await request(app!.getHttpServer()).post(path).send({ txHash }).expect(401);
+    expect(lookup).not.toHaveBeenCalled();
+    await request(app!.getHttpServer()).post(path).set('Authorization', bearer(ALICE.stellarPublicKey)).send({ txHash }).expect(404);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts the configured scheduler secret on the internal wallet recovery endpoint', async () => {
+    const path = '/api/v2/internal/wallet/history/reconcile';
+    await request(app!.getHttpServer()).post(path).expect(401);
+    await request(app!.getHttpServer()).post(path).set('Authorization', 'Bearer wrong').expect(401);
+    await request(app!.getHttpServer()).post(path)
+      .set('Authorization', 'Bearer fixture-wallet-history-cron-secret')
+      .expect(200, { mode: 'off' });
   });
 
   it('keeps both public balance reads available without a bearer', async () => {

@@ -15,7 +15,7 @@ import { dueRows, enqueue, finishRow, retryRow } from './outboxStore';
 export type ConfirmKind = 'confirm_move' | 'confirm_transfer';
 
 const KINDS: ConfirmKind[] = ['confirm_move', 'confirm_transfer'];
-const SEND: Record<ConfirmKind, (txHash: string, signal?: AbortSignal) => Promise<unknown>> = {
+const SEND: Record<ConfirmKind, (publicKey: string, txHash: string, signal?: AbortSignal) => Promise<void>> = {
   confirm_move: confirmMove,
   confirm_transfer: confirmTransfer,
 };
@@ -43,7 +43,8 @@ type Outcome = 'done' | 'failed' | 'indexing' | 'rejected' | 'stop';
 export function classify(error: unknown | null): Outcome {
   if (error === null) return 'done';
   if (!(error instanceof ApiError) || error.kind !== 'http') return 'stop';
-  if (error.status === 409) return 'indexing';
+  // A row may be missing until the chain indexer reconstructs it.
+  if (error.status === 404 || error.status === 409) return 'indexing';
   if (error.status === 422) return 'failed';
   // 401/403: the session may be renewed by the next sync, so this is not the confirm's fault.
   if (error.status === 401 || error.status === 403 || error.status === 408 || error.status === 429 || error.status >= 500) return 'stop';
@@ -83,7 +84,7 @@ export async function drainConfirms(publicKey: string, signal?: AbortSignal): Pr
       posts += 1;
       let error: unknown | null = null;
       try {
-        await SEND[kind](payload.txHash, signal);
+        await SEND[kind](publicKey, payload.txHash, signal);
       } catch (caught) {
         // Cancelled (connection lost, sync stopped): not the confirm's fault, so it does not count as an attempt.
         if (caught instanceof ApiError && caught.kind === 'aborted') break;

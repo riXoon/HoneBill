@@ -65,7 +65,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   const online = useSendMode(mode) === 'online';
   const tokenSymbol = useOfflineTokenSymbol(!online);
   const { activeAccount } = useAuth();
-  const { balances, refresh, pendingOffline } = useWalletData();
+  const { balances, refresh, pendingOffline, addLocalActivity } = useWalletData();
   // The connection can change between steps, so the funds are checked again for the path taken now. Offline, money
   // committed to vouchers still waiting to settle is not spendable.
   const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
@@ -105,7 +105,19 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
       void refresh({ force: true });
       navigation.navigate('SendReceipt', { recipientId, amount, note, mode: 'online', method: 'online', reference: hash, issuedAt: Date.now() });
     } catch (error) {
-      if (error instanceof PendingTransactionError) void refresh({ force: true });
+      if (error instanceof PendingTransactionError) {
+        addLocalActivity([{
+          id: `online:${error.hash}:out`, timestamp: Date.now(), source: 'wallet', direction: 'out',
+          amount, assetCode: 'PHPC', description: messages().verify.pendingTo(recipient.name), status: 'pending', ref: error.hash,
+        }]);
+        void refresh({ force: true });
+        const copy = messages().common;
+        Alert.alert(copy.pendingConfirmation, copy.pendingConfirmationBody, [{
+          text: copy.done,
+          onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Tabs', params: { screen: 'History' } }] }),
+        }]);
+        return;
+      }
       if (!(error instanceof UserFacingError)) reportError(error, { step: 'sendOnline' });
       Alert.alert(messages().verify.notSentTitle, errorMessage(error));
     } finally {

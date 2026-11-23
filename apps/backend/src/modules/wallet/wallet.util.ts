@@ -1,9 +1,7 @@
 import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { rpc } from '@stellar/stellar-sdk';
 import { LEGACY_PHPC_OFFLINE_FEE_STROOPS } from 'pijin_core/offline-fee';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
-import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { userFailureReason } from '../engine/settlement-notice.util.js';
 
 /**
@@ -153,12 +151,12 @@ export class WalletService {
           orderBy: { createdAt: 'desc' },
           take: limit,
         }),
-        // Moves between the user's own wallets: only the ones the ledger has confirmed.
+        // Include explicit failures so they can replace a pending move saved on the phone.
         this.prisma.walletMove?.findMany
           ? this.prisma.walletMove.findMany({
               where: {
                 accountPublicKey: publicKey,
-                status: 'SETTLED',
+                status: { in: ['SETTLED', 'FAILED'] },
                 ...(dateFilter ? { createdAt: dateFilter } : {}),
               },
               include: { token: true },
@@ -423,101 +421,5 @@ export class WalletService {
       success: true,
       data: serialized,
     };
-  }
-
-  /** Marks a move between the user's own wallets SETTLED once the ledger has applied it. Same contract as `confirmTransfer`. */
-  async confirmMove(txHash: string) {
-    const normalizedTxHash = (txHash ?? '').trim().toLowerCase();
-    if (!/^[a-f0-9]{64}$/i.test(normalizedTxHash)) {
-      throw new BadRequestException('txHash must be a 64-character hexadecimal string');
-    }
-
-    const move = await this.prisma.walletMove.findUnique({ where: { txHash: normalizedTxHash } });
-    if (!move) throw new NotFoundException('Unknown wallet move');
-    if (move.status === 'SETTLED') {
-      return { txHash: normalizedTxHash, status: move.status, confirmedAt: move.confirmedAt };
-    }
-
-    try {
-      const chainTx: any = await this.stellar.sorobanServer.getTransaction(normalizedTxHash);
-      if (chainTx.status === 'NOT_FOUND') {
-        throw new ApiResponseException(409, {
-          txHash: normalizedTxHash,
-          status: 'PENDING',
-          error: 'Transaction has not reached the RPC history window yet',
-        });
-      }
-      if (chainTx.status === 'FAILED') {
-        const failed = await this.prisma.walletMove.update({ where: { txHash: normalizedTxHash }, data: { status: 'FAILED' } });
-        throw new ApiResponseException(422, { txHash: normalizedTxHash, status: failed.status });
-      }
-      const settled = await this.prisma.walletMove.update({
-        where: { txHash: normalizedTxHash },
-        data: { status: 'SETTLED', confirmedAt: new Date() },
-      });
-      return { txHash: normalizedTxHash, status: settled.status, confirmedAt: settled.confirmedAt };
-    } catch (error: any) {
-      if (error instanceof ApiResponseException) throw error;
-      throw new BadGatewayException('Unable to verify transaction with Soroban RPC');
-    }
-  }
-
-  async confirmTransfer(txHash: string) {
-    const normalizedTxHash = (txHash ?? '').trim().toLowerCase();
-    if (!/^[a-f0-9]{64}$/i.test(normalizedTxHash)) {
-      throw new BadRequestException('txHash must be a 64-character hexadecimal string');
-    }
-
-    const transfer = await this.prisma.onlineTransfer.findUnique({
-      where: { txHash: normalizedTxHash },
-    });
-    if (!transfer) {
-      throw new NotFoundException('Unknown online transfer');
-    }
-
-    if (transfer.status === 'SETTLED') {
-      return {
-        txHash: normalizedTxHash,
-        status: transfer.status,
-        confirmedAt: transfer.confirmedAt,
-      };
-    }
-
-    try {
-      const chainTx = await this.stellar.sorobanServer.getTransaction(normalizedTxHash);
-
-      if (chainTx.status === rpc.Api.GetTransactionStatus.NOT_FOUND || (chainTx as any).status === 'NOT_FOUND') {
-        throw new ApiResponseException(409, {
-          txHash: normalizedTxHash,
-          status: 'PENDING',
-          error: 'Transaction has not reached the RPC history window yet',
-        });
-      }
-
-      if (chainTx.status === rpc.Api.GetTransactionStatus.FAILED || (chainTx as any).status === 'FAILED') {
-        const failed = await this.prisma.onlineTransfer.update({
-          where: { txHash: normalizedTxHash },
-          data: { status: 'FAILED' },
-        });
-        throw new ApiResponseException(422, {
-          txHash: normalizedTxHash,
-          status: failed.status,
-        });
-      }
-
-      const settled = await this.prisma.onlineTransfer.update({
-        where: { txHash: normalizedTxHash },
-        data: { status: 'SETTLED', confirmedAt: new Date() },
-      });
-
-      return {
-        txHash: normalizedTxHash,
-        status: settled.status,
-        confirmedAt: settled.confirmedAt,
-      };
-    } catch (error: any) {
-      if (error instanceof ApiResponseException) throw error;
-      throw new BadGatewayException('Unable to verify transaction with Soroban RPC');
-    }
   }
 }

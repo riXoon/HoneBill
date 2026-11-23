@@ -14,6 +14,8 @@ export const fil: Messages = {
     done: 'Tapos na',
     ok: 'OK',
     tryAgain: 'Subukan ulit',
+    pendingConfirmation: 'Hinihintay ang kumpirmasyon',
+    pendingConfirmationBody: 'Tingnan ang History para sa update bago subukan ulit.',
     dismiss: 'Isara',
     continue: 'Magpatuloy',
     cancel: 'Kanselahin',
@@ -501,6 +503,7 @@ export const fil: Messages = {
     noInternetBody:
       'Kailangan ng internet para sa online payment. Lumipat sa Offline view sa Home para magbayad gamit ang voucher.',
     notSentTitle: 'Hindi na-send ang payment',
+    pendingTo: (name: string) => `Bayad kay ${name}`,
     swipe: 'I-SWIPE PARA I-AUTHORIZE',
     sending: 'SINE-SEND…',
     processing: (amount, name) => `Sine-send ang ${amount} kay ${name}`,

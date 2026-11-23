@@ -12,7 +12,7 @@ const ENGINE_TIMEOUT_MS = 60_000;
  * authorised by `signature`: the wallet key's base64 signature over the intent string in the comment, which the
  * server rebuilds from the body and checks before doing any work.
  */
-type Prepared = { xdr: string };
+type Prepared = { xdr: string; txHash: string };
 
 /** Online wallet -> offline vault. Signed intent: `deposit:<sender>:<amountStroops>`. */
 export function prepareDeposit(
@@ -37,7 +37,7 @@ export function prepareTransfer(
   body: { senderPublicKey: string; recipientPublicKey: string; tokenAddress: string; amountStroops: string },
   signature: string,
   signal?: AbortSignal,
-): Promise<Prepared & { txHash: string }> {
+): Promise<Prepared> {
   return apiRequest('POST', '/engine/transfer', {
     body: { ...body, paymentMode: 'online', clientProtocol: 2 },
     bearer: signature,

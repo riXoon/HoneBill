@@ -32,7 +32,14 @@ export function TransactionsScreen() {
   const t = useT();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const openDetail = useCallback((id: string) => navigation.navigate('TransactionDetail', { id }), [navigation]);
+  const { transactions, status, error, syncedAt, refresh, syncNow } = useWalletData();
+  const openDetail = useCallback((id: string) => {
+    const tx = transactions.find((row) => row.id === id);
+    const activity = tx && /^[a-f0-9]{64}$/i.test(tx.ref) && (id.startsWith('move:') || id.startsWith('online:'))
+      ? { ref: tx.ref, source: tx.source, direction: tx.direction }
+      : undefined;
+    navigation.navigate('TransactionDetail', { id, activity });
+  }, [navigation, transactions]);
   const renderItem = useCallback(
     ({ item }: { item: HistoryRow }) => (
       <SlideRow>{item.type === 'date' ? <DateDivider label={item.label} /> : <TransactionCard tx={item.tx} onPress={openDetail} />}</SlideRow>
@@ -42,7 +49,6 @@ export function TransactionsScreen() {
   const [filter, setFilter] = useState<TransactionFilter>('All');
   const slide = useFilterSlide(TRANSACTION_FILTERS.indexOf(filter));
   const { activeAccount } = useAuth();
-  const { transactions, status, error, syncedAt, refresh, syncNow } = useWalletData();
   const online = useIsOnline();
   // The list is a saved copy when there is no connection (or the last refresh failed): say how old it is.
   const showingSaved = syncedAt !== null && (!online || status === 'error');

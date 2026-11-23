@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { WalletFundingService } from './wallet-funding.service.js';
 import { WalletService } from './wallet.util.js';
+import { WalletConfirmationService } from './wallet-confirmation.service.js';
 import { Sep10JwtGuard } from '../../common/guards/sep10-jwt.guard.js';
 import { FundWalletDto } from './dto/fund-wallet.dto.js';
 import { ConfirmTransferDto } from './dto/confirm-transfer.dto.js';
@@ -14,6 +15,7 @@ export class WalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly funding: WalletFundingService,
+    private readonly confirmation: WalletConfirmationService,
   ) {}
 
   /** Puts a registered wallet on the ledger (XLM reserve only) so SEP-10 and trustlines work. Safe to repeat. */
@@ -73,12 +75,16 @@ export class WalletController {
   }
 
   @Post('wallet/moves/confirm')
-  confirmMove(@Body() body: ConfirmTransferDto) {
-    return this.walletService.confirmMove(body.txHash);
+  @UseGuards(Sep10JwtGuard)
+  @Header('Cache-Control', 'private, no-store')
+  confirmMove(@Req() request: AuthenticatedRequest, @Body() body: ConfirmTransferDto) {
+    return this.confirmation.confirm('move', request.user.sub, body.txHash);
   }
 
   @Post('wallet/transfers/confirm')
-  confirmTransfer(@Body() body: ConfirmTransferDto) {
-    return this.walletService.confirmTransfer(body.txHash);
+  @UseGuards(Sep10JwtGuard)
+  @Header('Cache-Control', 'private, no-store')
+  confirmTransfer(@Req() request: AuthenticatedRequest, @Body() body: ConfirmTransferDto) {
+    return this.confirmation.confirm('transfer', request.user.sub, body.txHash);
   }
 }

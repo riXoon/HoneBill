@@ -36,21 +36,24 @@ function DetailRow({ label, value, strong = true }: { label: string; value: stri
 export function TransactionDetailScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'TransactionDetail'>) {
   const t = useT();
   const { transactions } = useWalletData();
-  const tx = transactions.find((t) => t.id === route.params.id);
+  const { id, activity } = route.params;
+  const tx = transactions.find((t) => t.id === id) ?? (activity && transactions.find((t) =>
+    t.ref.toLowerCase() === activity.ref.toLowerCase() && t.source === activity.source && t.direction === activity.direction));
   if (!tx) return null;
 
   const incoming = tx.direction === 'in';
   const offline = tx.source === 'offline';
+  const offlineVoucher = offline && !tx.id.startsWith('move:');
   const amount = formatAmount(tx.amount, tx.assetCode);
   const signed = `${incoming ? '+' : '-'} ${amount}`;
   const when = formatReceiptDate(new Date(tx.timestamp));
   const ref = displayRef(tx);
-  const waitingLong = offline && tx.status === 'pending' && Date.now() - tx.timestamp > LONG_WAIT_MS;
+  const waitingLong = offlineVoucher && tx.status === 'pending' && Date.now() - tx.timestamp > LONG_WAIT_MS;
   const ledger =
     tx.status === 'failed'
       ? 'Failed'
       : tx.status === 'pending'
-        ? offline
+        ? offlineVoucher
           ? t.txDetail.sentBySms
           : 'Pending'
         : offline
@@ -60,10 +63,10 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
   const note =
     tx.status === 'failed'
       ? failureText(tx)
-      : offline && tx.status === 'pending' && !incoming
-        ? waitingLong
-          ? t.txDetail.stillNotConfirmed
-          : t.txDetail.willText(ref)
+      : tx.status === 'pending'
+        ? offlineVoucher
+          ? (!incoming ? (waitingLong ? t.txDetail.stillNotConfirmed : t.txDetail.willText(ref)) : null)
+          : t.common.pendingConfirmationBody
         : null;
   // Never answered is a warning (check the balance); rejected is an error; still waiting is information.
   const unconfirmed = tx.status === 'failed' && tx.failureReason === EXPIRED_REASON;

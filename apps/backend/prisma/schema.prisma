@@ -309,6 +309,7 @@ model OnlineTransfer {
   status             SettlementStatus @default(PENDING)
   createdAt          DateTime         @default(now()) @map("created_at")
   confirmedAt        DateTime?        @map("confirmed_at")
+  confirmedLedger    BigInt?          @map("confirmed_ledger")
 
   token Token @relation(fields: [tokenId], references: [id])
 
@@ -335,9 +336,17 @@ model WalletMove {
   status           SettlementStatus @default(PENDING)
   createdAt        DateTime         @default(now()) @map("created_at")
   confirmedAt      DateTime?        @map("confirmed_at")
+  confirmedLedger  BigInt?          @map("confirmed_ledger")
 
   token Token @relation(fields: [tokenId], references: [id])
 
   @@index([accountPublicKey, createdAt])
   @@map("wallet_move")
+}
+
+model WalletHistoryCursor {
+  scope  String @id
+  cursor String
+
+  @@map("wallet_history_cursor")
 }
