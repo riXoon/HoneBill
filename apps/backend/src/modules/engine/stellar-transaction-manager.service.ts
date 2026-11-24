@@ -16,6 +16,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service.js';
 import { StellarService } from '../../infra/stellar/stellar.service.js';
 import { stellarNetworkId } from '../../infra/stellar/network-id.js';
 import { LockService } from '../../infra/lock/lock.service.js';
+import { contractErrorCode } from './engine-retry.util.js';
 import { userFailureReason } from './settlement-notice.util.js';
 
 export interface SpendOfflineArgs {
@@ -46,6 +47,12 @@ export interface PreparedRelayerTransaction {
 }
 
 const RELAYER_LOCK_KEY = 'honebill:relayer:lock';
+
+export class InsufficientOfflineBalanceError extends Error {
+  constructor() {
+    super('Insufficient balance.');
+  }
+}
 
 @Injectable()
 export class StellarTransactionManager {
@@ -83,7 +90,10 @@ export class StellarTransactionManager {
     try {
       prepared = await this.stellar.sorobanServer.prepareTransaction(base) as Transaction;
     } catch (error) {
-      throw new Error(`Soroban simulation failed during transaction preparation: ${errorMessage(error)}`);
+      const message = errorMessage(error);
+      // spend_offline returned InsufficientBalance before there was a signed envelope to submit.
+      if (contractErrorCode(message.split('\n', 1)[0]) === 6) throw new InsufficientOfflineBalanceError();
+      throw new Error(`Soroban simulation failed during transaction preparation: ${message}`);
     }
     prepared.sign(relayer);
     return {

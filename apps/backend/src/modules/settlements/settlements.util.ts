@@ -12,7 +12,7 @@ import {
   restoreBase64Padding,
   verifyOfflineVoucherSignature,
 } from './offline-voucher.util.js';
-import { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
+import { InsufficientOfflineBalanceError, StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
 import { userFailureReason, type VoucherNotice } from '../engine/settlement-notice.util.js';
 import { SettlementFinalizationService } from './settlement-finalization.service.js';
 
@@ -233,6 +233,19 @@ export class SettlementsService {
         }
       } catch (error) {
         if (error instanceof ApiResponseException && error.getStatus() === 409) throw error;
+        if (error instanceof InsufficientOfflineBalanceError) {
+          const failed = await this.prisma.settlement.updateMany({
+            where: {
+              id: lease.id, status: 'PENDING', recoveryLease: lease.token, recoveryLeaseUntil: { gt: new Date() },
+              txHash: null, signedTxXdr: null, attempts: { none: {} },
+            },
+            data: { status: 'FAILED', failReason: error.message },
+          });
+          if (failed.count === 1) {
+            return { txHash: null, status: 'FAILED', reason: userFailureReason(error) };
+          }
+          throw settlementPending();
+        }
         // The send may have reached Stellar before the request failed. Check evidence even after a submit error.
         const current = await this.prisma.settlement.findUnique({ where: { id: settlement.id }, select: { txHash: true } });
         if (!current?.txHash) throw settlementPending();

@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { Account, Contract, Keypair, Networks, rpc, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
-import { StellarTransactionManager } from './stellar-transaction-manager.service.js';
+import { InsufficientOfflineBalanceError, StellarTransactionManager } from './stellar-transaction-manager.service.js';
 
 const CONTRACT = 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX';
 
@@ -63,6 +63,14 @@ const spendArgs = (gateway: Keypair, sender: Keypair) => ({
 });
 
 describe('StellarTransactionManager', () => {
+  it('reports a rejected balance simulation before storing or broadcasting an envelope', async () => {
+    const f = managerFixture();
+    f.stellar.sorobanServer.prepareTransaction.mockRejectedValueOnce(new Error('HostError: Error(Contract, #6)\nDebugInfo not available'));
+    await expect(f.service.executeTwoPhaseSettlement(f.input)).rejects.toBeInstanceOf(InsufficientOfflineBalanceError);
+    expect(f.prisma.settlement.update).not.toHaveBeenCalled();
+    expect(f.stellar.sorobanServer.sendTransaction).not.toHaveBeenCalled();
+  });
+
   it('persists signed XDR before broadcasting and returns confirmation', async () => {
     const f = managerFixture();
     const result = await f.service.executeTwoPhaseSettlement(f.input);

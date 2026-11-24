@@ -435,6 +435,7 @@ export const fil: Messages = {
     expired:
       'Hindi ito nakumpirma sa loob ng 14 araw, kaya hindi na ito susubukan ulit. Tingnan muna ang iyong balance bago ito i-send ulit.',
     reasons: {
+      insufficientOfflineBalance: 'Kulang ang iyong Offline Balance para sa halaga at offline fee.',
       noAccount: 'Walang account na may ganitong ID.',
       notVerified: 'Hindi ma-verify ang payment.',
       notSetUp: 'Hindi naka-set up ang phone na ito para sa offline payments.',

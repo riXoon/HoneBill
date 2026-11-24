@@ -230,16 +230,12 @@ export function WalletDataProvider({ children }: { children: React.ReactNode }) 
 
         const now = Date.now();
         setSyncedAt(now);
-        if (balance.status === 'fulfilled') {
-          try {
-            const reviews = listVoucherReviews(publicKey, next, balance.value.offlineBalancePHP, now);
-            setVoucherReviews((current) => (current.length || reviews.length ? reviews : current));
-          } catch (error) {
-            setVoucherReviews([]);
-            reportError(error, { step: 'listVoucherReviews' });
-          }
-        } else {
+        try {
+          const reviews = listVoucherReviews(publicKey, next, now);
+          setVoucherReviews((current) => (current.length || reviews.length ? reviews : current));
+        } catch (error) {
           setVoucherReviews([]);
+          reportError(error, { step: 'listVoucherReviews' });
         }
 
         // Server history replaces this phone's copy of the matching wallet activity.

@@ -1,4 +1,9 @@
-const CONTRACT_ERROR_PATTERN = /Error\s*\(\s*Contract\s*,\s*\d+\s*\)/i;
+const CONTRACT_ERROR_PATTERN = /Error\s*\(\s*Contract\s*,\s*#?(\d+)\s*\)/i;
+
+export function contractErrorCode(message: string): number | undefined {
+  const match = CONTRACT_ERROR_PATTERN.exec(message);
+  return match ? Number(match[1]) : undefined;
+}
 const RETRYABLE_PATTERNS = [
   'status: 429', 'status: 502', 'status: 503', 'status: 504',
   'too many requests', 'rate limit', 'bad gateway', 'service unavailable',
@@ -28,15 +33,15 @@ export function normalizeSettlementFailure(error: unknown): string {
 export function normalizeSettlementUserFailure(error: unknown): string {
   if (!error) return '';
   const message = error instanceof Error ? error.message : String(error);
-  const contractError = message.match(/Error\s*\(\s*Contract\s*,\s*(\d+)\s*\)/i);
-  if (contractError) {
+  const contractError = contractErrorCode(message);
+  if (contractError !== undefined) {
     const labels: Record<number, string> = {
       2: 'Unauthorized transaction.', 3: 'Invalid transaction amount.',
       4: 'Voucher has expired.', 5: 'Voucher has already been used.',
       6: 'Insufficient balance.', 7: 'Recipient was not found.',
       9: 'Unauthorized relayer.', 12: 'Invalid recipient ID.',
     };
-    return labels[Number(contractError[1])] ?? 'Transaction rejected by contract.';
+    return labels[contractError] ?? 'Transaction rejected by contract.';
   }
   if (/insufficientbalance|insufficient balance/i.test(message)) return 'Insufficient balance.';
   if (/noncereplayed|nonce replayed/i.test(message)) return 'Voucher has already been used.';
