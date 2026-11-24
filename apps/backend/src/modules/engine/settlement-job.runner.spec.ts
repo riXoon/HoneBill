@@ -14,6 +14,10 @@ const notice: VoucherNotice = {
   symbol: 'PHPC',
   decimals: 7,
   receiverPhone: '+639170000002',
+  senderPhone: '639170000001',
+  senderAddress: 'sender-wallet',
+  receiverAddress: 'receiver-wallet',
+  tokenContractId: 'token',
   senderName: 'Ana',
 };
 
@@ -24,6 +28,7 @@ function makeRunner(processSettlement: () => Promise<any>) {
   const settlements = {
     processSettlement: jest.fn(processSettlement),
     describeVoucher: jest.fn(async () => notice),
+    describeSettledVoucher: jest.fn(async () => notice),
     claimReceipt: jest.fn(async (key: string) => {
       if (claimed.has(key)) return false;
       claimed.add(key);
@@ -32,7 +37,11 @@ function makeRunner(processSettlement: () => Promise<any>) {
     clearReceiptRelay: jest.fn(async () => undefined),
     recoveredReceipt: jest.fn(async () => ({ relayPhone: job.data.senderPhone, notice })),
   };
-  const sms = { enqueueSms: jest.fn(async (..._args: any[]) => ({ queued: true, messageId: '1' })) };
+  const sms = {
+    enqueueSms: jest.fn(async (..._args: any[]) => ({ queued: true, messageId: '1' })),
+    receiptBalance: jest.fn(async (_phone: string, wallet: string) =>
+      `Offline balance: PHP ${wallet === 'sender-wallet' ? '89.50' : '10.00'} as of 24 Nov 2026, 14:41 PHT.`),
+  };
   const runner = new SettlementJobRunner(settlements as any, sms as any);
   const texts = () => sms.enqueueSms.mock.calls.map(([to, message, options]) => ({ to, message, dedupKey: (options as any).dedupKey }));
   return { runner, sms, texts };
@@ -45,12 +54,12 @@ describe('SettlementJobRunner texts', () => {
     expect(texts()).toEqual([
       {
         to: '+639170000001',
-        message: 'HoneBill: Your offline payment of PHP 100.00 to ID def456 went through. Ref: QUJDRE',
+        message: 'HoneBill: Your offline payment of PHP 100.00 to ID def456 went through. Ref: QUJDRE. Offline balance: PHP 89.50 as of 24 Nov 2026, 14:41 PHT.',
         dedupKey: 'settlement-receipt:QUJDREVGRw==:sender',
       },
       {
         to: '+639170000002',
-        message: 'HoneBill: You received PHP 100.00 from Ana (ID abc123). Ref: QUJDRE',
+        message: 'HoneBill: You received PHP 100.00 from Ana (ID abc123). Ref: QUJDRE. Offline balance: PHP 10.00 as of 24 Nov 2026, 14:41 PHT.',
         dedupKey: 'settlement-receipt:QUJDREVGRw==:receiver',
       },
     ]);
@@ -125,9 +134,20 @@ describe('SettlementJobRunner texts', () => {
     ]);
   });
 
-  it('does not text the receiver when the same number sent the voucher', async () => {
+  it('sends only the recipient receipt to a recipient who relayed their own voucher', async () => {
     const { runner, texts } = makeRunner(async () => ({ status: 'SETTLED', txHash: 'h' }));
     await runner.run({ ...job, data: { ...job.data, senderPhone: notice.receiverPhone! } });
-    expect(texts()).toHaveLength(1);
+    expect(texts()).toHaveLength(2);
+    expect(texts().filter(({ to }) => to === notice.receiverPhone).map(({ message }) => message))
+      .toEqual([expect.stringContaining('Offline balance: PHP 10.00')]);
+  });
+
+  it('confirms a third-party relay without including either balance', async () => {
+    const { runner, texts } = makeRunner(async () => ({ status: 'SETTLED', txHash: 'h' }));
+    const relayPhone = '+639170000003';
+    await runner.run({ ...job, data: { ...job.data, senderPhone: relayPhone } });
+    expect(texts()).toHaveLength(3);
+    expect(texts().find(({ to }) => to === relayPhone)?.message)
+      .toBe('HoneBill: Your offline payment of PHP 100.00 to ID def456 went through. Ref: QUJDRE');
   });
 });

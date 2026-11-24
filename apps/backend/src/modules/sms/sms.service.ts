@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
+import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bullmq';
 import { RedisService } from '../../infra/redis/redis.service.js';
@@ -17,6 +18,7 @@ import {
   SMS_WEBHOOK_NONCE_TTL_SECONDS,
 } from './sms.constants.js';
 import { maskPhoneNumber } from './sms-security.util.js';
+import { BALANCE_SMS_COMMAND, BALANCE_SMS_UNAVAILABLE, SmsBalanceService } from './sms-balance.service.js';
 
 export interface SmsJob {
   to: string;
@@ -86,6 +88,7 @@ export class SmsService {
     private readonly config: ConfigService,
     @Optional() @InjectQueue(SMS_QUEUE_NAME) private readonly smsQueue?: Queue<SmsJob>,
     @Optional() private readonly settlementQueue?: SettlementPublisher,
+    @Optional() private readonly balances?: SmsBalanceService,
   ) {}
 
   /** Queues an outbound notification, falling back to direct gateway delivery if queues are unavailable. */
@@ -154,6 +157,7 @@ export class SmsService {
     }
     const legacyEvent = body.event === 'MESSAGE_RECEIVED';
     const newEvent = body.type === 'RECEIVED';
+    const textbeeEvent = body.webhookEvent === 'MESSAGE_RECEIVED';
     const otherNamedEvent = Boolean(body.event && body.event !== 'MESSAGE_RECEIVED');
     if (!legacyEvent && !newEvent && otherNamedEvent) {
       this.logger.log(`SMS webhook ignored: event "${String(body.event)}" is not a received message. traceId=${traceId}`);
@@ -164,6 +168,15 @@ export class SmsService {
     if (!sms) return { error: 'Missing sender or message field' };
     if (sms.message.length > SMS_WEBHOOK_MESSAGE_MAX_CHARS) {
       return { error: 'SMS body exceeds maximum length', traceId };
+    }
+
+    if (sms.message.toLowerCase() === BALANCE_SMS_COMMAND) {
+      if (!(textbeeEvent || legacyEvent || newEvent) ||
+        (body.webhookEvent !== undefined && !textbeeEvent) ||
+        !/^\+?[\d ().-]+$/.test(sms.senderPhone) || !isPlausiblePhone(sms.senderPhone)) {
+        return { success: true, status: 'Ignored', traceId };
+      }
+      return this.replyWithBalance(normalizePhoneNumber(sms.senderPhone), body.smsId, traceId);
     }
 
     const withinLimit = await this.allowWebhookSender(sms.senderPhone);
@@ -217,6 +230,26 @@ export class SmsService {
       this.logger.warn(`SMS nonce cache unavailable after publish. traceId=${traceId}: ${this.errorMessage(error)}`);
     }
     return { success: true, status: 'Buffered', traceId };
+  }
+
+  async receiptBalance(phone: string, publicKey: string, token: { contractId: string; symbol: string; decimals: number }) {
+    return this.balances?.receiptBalance(phone, publicKey, token).catch(() => null);
+  }
+
+  private async replyWithBalance(phone: string, smsId: unknown, traceId: string): Promise<Record<string, unknown>> {
+    if (!await this.allowWebhookSender(phone)) return { success: true, status: 'Rate Limited', traceId };
+
+    const dedupKey = typeof smsId === 'string' && smsId
+      ? `balance-sms:${createHash('sha256').update(`${phone}:${smsId}`).digest('hex')}`
+      : undefined;
+    if (dedupKey) {
+      const claimed = await this.redisService.getClient().set(`honebill:sms:${dedupKey}`, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
+      if (claimed === null) return { success: true, status: 'Duplicate Replay', traceId };
+    }
+
+    const message = await this.balances?.replyForPhone(phone).catch(() => BALANCE_SMS_UNAVAILABLE) ?? BALANCE_SMS_UNAVAILABLE;
+    const result = await this.enqueueSms(phone, message, { traceId, dedupKey, deadlineMs: 4_000 });
+    return { success: true, status: result.queued || result.delivered ? 'Balance Reply Accepted' : 'Balance Reply Unavailable', traceId };
   }
 
   /** Reports SMS webhook configuration without exposing secret values. */

@@ -16,6 +16,10 @@ export type VoucherNotice = {
   decimals: number;
   /** Where to text the receiver, when their account has a number. */
   receiverPhone: string | null;
+  senderPhone?: string | null;
+  senderAddress?: string | null;
+  receiverAddress?: string | null;
+  tokenContractId?: string | null;
   /** The sender's first name, so the receiver recognises who paid. `null` when the account has none. */
   senderName: string | null;
 };

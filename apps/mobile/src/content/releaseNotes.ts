@@ -4,8 +4,8 @@
  * On every release:
  *   1. raise `version` in app.json;
  *   2. add an entry here with that exact version, at the top;
- *   3. after the APK is published, set APP_LATEST_VERSION (and APP_DOWNLOAD_URL) on the backend, so older apps
- *      are told an update is out.
+ *   3. after the APK is published, set APP_LATEST_VERSION, APP_DOWNLOAD_URL and APP_LATEST_NOTES on the backend
+ *      to announce it in older apps. Use the release title for APP_LATEST_NOTES.
  * The first launch of the new version puts its entry in the Inbox under Updates.
  */
 export type ReleaseNoteSection = {
@@ -24,6 +24,29 @@ export type ReleaseNote = {
 };
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.1.1',
+    date: '2026-11-24',
+    title: 'Clearer payment confirmations, upfront offline fees, and stronger account security',
+    sections: [
+      {
+        heading: 'Payments and History',
+        items: [
+          'Online sends and moves between your online and offline balances show Pending confirmation if the network is slow. Check History for the result before trying again.',
+          'HoneBill checks Stellar before marking a payment settled, so the receipt in History reflects what happened to your funds.',
+          'HoneBill asks before retrying an offline payment that is still unconfirmed.',
+          'Offline payment fees now depend on the amount you send. You can see the fee and total before you confirm.',
+        ],
+      },
+      {
+        heading: 'Account security',
+        items: [
+          'HoneBill verifies that you own the wallet before showing its private transaction history.',
+          'Phone verification codes are tied to the action you requested, such as signing up or changing your account details.',
+        ],
+      },
+    ],
+  },
   {
     version: '1.1.0',
     date: '2026-11-14',

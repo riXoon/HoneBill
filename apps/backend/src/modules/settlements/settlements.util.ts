@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { ConfigService } from '@nestjs/config';
 import { LEGACY_PHPC_OFFLINE_FEE_STROOPS, offlineFeeStroops } from 'pijin_core/offline-fee';
 import { PrismaService } from '../../infra/prisma/prisma.service.js';
+import type { Prisma } from '@prisma/client';
 import { ApiResponseException } from '../../common/exceptions/api-response.exception.js';
 import { isPlausiblePhone, normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import {
@@ -283,27 +284,45 @@ export class SettlementsService {
   }
 
   async recoveredReceipt(id: number): Promise<{ relayPhone: string; notice: VoucherNotice } | null> {
+    const receipt = await this.settledReceipt({ id, relayReceiptPhone: { not: null } });
+    return receipt?.relayPhone ? { relayPhone: receipt.relayPhone, notice: receipt.notice } : null;
+  }
+
+  async describeSettledVoucher(smsBody: string): Promise<VoucherNotice | null> {
+    const { nonce } = parseSettlementSmsBody(smsBody);
+    return (await this.settledReceipt({ nonce }))?.notice ?? null;
+  }
+
+  private async settledReceipt(where: Prisma.SettlementWhereUniqueInput) {
     const row = await this.prisma.settlement.findUnique({
-      where: { id, status: 'SETTLED' },
+      where: { ...where, status: 'SETTLED' },
       select: {
         nonce: true, txHash: true, senderShortId: true, receiverShortId: true, relayReceiptPhone: true,
+        id: true,
         amountStroops: true, token: { select: { symbol: true, decimals: true } },
       },
     });
-    if (!row?.relayReceiptPhone || !row.txHash) return null;
-    const attempt = await this.prisma.settlementAttempt.findUnique({
-      where: { settlementId_txHash: { settlementId: id, txHash: row.txHash } },
-      select: { senderAddress: true, receiverAddress: true },
-    });
-    if (!attempt?.senderAddress || !attempt.receiverAddress) return null;
+    if (!row) return null;
+    const attempt = row.txHash ? await this.prisma.settlementAttempt.findUnique({
+      where: { settlementId_txHash: { settlementId: row.id, txHash: row.txHash } },
+      select: { senderAddress: true, receiverAddress: true, tokenContractId: true },
+    }) : null;
     const [sender, receiver] = await Promise.all([
-      this.prisma.account.findUnique({ where: { stellarPublicKey: attempt.senderAddress }, select: { firstName: true } }),
-      this.prisma.account.findUnique({ where: { stellarPublicKey: attempt.receiverAddress }, select: { phoneNumber: true } }),
+      this.prisma.account.findUnique({
+        where: attempt?.senderAddress ? { stellarPublicKey: attempt.senderAddress } : { shortId: row.senderShortId },
+        select: { firstName: true, phoneNumber: true },
+      }),
+      this.prisma.account.findUnique({
+        where: attempt?.receiverAddress ? { stellarPublicKey: attempt.receiverAddress } : { shortId: row.receiverShortId },
+        select: { phoneNumber: true },
+      }),
     ]);
     return { relayPhone: row.relayReceiptPhone, notice: {
       nonce: row.nonce, senderShortId: row.senderShortId, receiverShortId: row.receiverShortId,
       amountStroops: row.amountStroops, symbol: row.token.symbol, decimals: row.token.decimals,
       senderName: sender?.firstName ?? null, receiverPhone: receiver?.phoneNumber ?? null,
+      senderPhone: sender?.phoneNumber ?? null, senderAddress: attempt?.senderAddress,
+      receiverAddress: attempt?.receiverAddress, tokenContractId: attempt?.tokenContractId,
     } };
   }
 

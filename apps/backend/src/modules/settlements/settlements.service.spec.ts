@@ -19,6 +19,7 @@ function makeService() {
     },
     account: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
     token: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
+    settlementAttempt: { findUnique: jest.fn<(...args: any[]) => Promise<any>>() },
   };
   const transactionManager = {
     executeTwoPhaseSettlement: jest.fn<(...args: any[]) => Promise<any>>(),
@@ -196,5 +197,26 @@ describe('SettlementsService', () => {
       senderName: 'Ana',
     });
     await expect(service.describeVoucher('not a voucher')).resolves.toBeNull();
+  });
+
+  it('uses the recorded parties and amount for a settled receipt rather than the submitted SMS fields', async () => {
+    const { service, prisma } = makeService();
+    const nonce = Buffer.alloc(32, 1).toString('base64');
+    prisma.settlement.findUnique.mockResolvedValue({ id: 1, nonce, txHash: 'confirmed', senderShortId: 'sender',
+      receiverShortId: 'recv01', amountStroops: 200_000_000n, token: { symbol: 'PHPC', decimals: 7 } });
+    prisma.settlementAttempt.findUnique.mockResolvedValue({
+      senderAddress: 'payer-wallet', receiverAddress: 'payee-wallet', tokenContractId: 'asset',
+    });
+    prisma.account.findUnique.mockResolvedValueOnce({ phoneNumber: '639170000001' })
+      .mockResolvedValueOnce({ phoneNumber: '639170000002' });
+
+    await expect(service.describeSettledVoucher(body())).resolves.toMatchObject({
+      senderShortId: 'sender', receiverShortId: 'recv01', amountStroops: 200_000_000n,
+      senderPhone: '639170000001', receiverPhone: '639170000002', senderAddress: 'payer-wallet',
+      receiverAddress: 'payee-wallet', tokenContractId: 'asset',
+    });
+    expect(prisma.settlement.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { nonce, status: 'SETTLED' } }));
+    expect(prisma.account.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({ where: { stellarPublicKey: 'payer-wallet' } }));
+    expect(prisma.account.findUnique).toHaveBeenNthCalledWith(2, expect.objectContaining({ where: { stellarPublicKey: 'payee-wallet' } }));
   });
 });

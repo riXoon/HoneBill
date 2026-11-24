@@ -90,12 +90,9 @@ export function parseRelayVoucher(data: string): RelayVoucher | null {
 /** Thrown when the payment gateway number is missing from the build's env. */
 export class MissingGatewayError extends Error {}
 
-/**
- * Opens the phone's messaging app addressed to the payment gateway with the voucher already typed in, so the user
- * only taps Send. Used both by the sender ("Send Using My Phone") and by a partner relaying a scanned voucher.
- */
-export async function openVoucherSms(voucher: string): Promise<void> {
+/** Opens Messages with the gateway number and text filled in for the user to send. */
+export async function openGatewaySms(message: string): Promise<void> {
   if (!SMS_GATEWAY_NUMBER) throw new MissingGatewayError('EXPO_PUBLIC_SMS_GATEWAY_NUMBER is not set');
   const separator = Platform.OS === 'ios' ? '&' : '?';
-  await Linking.openURL(`sms:${SMS_GATEWAY_NUMBER}${separator}body=${encodeURIComponent(voucher)}`);
+  await Linking.openURL(`sms:${SMS_GATEWAY_NUMBER}${separator}body=${encodeURIComponent(message)}`);
 }

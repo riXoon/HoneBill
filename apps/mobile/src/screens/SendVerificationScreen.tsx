@@ -65,15 +65,13 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
   const online = useSendMode(mode) === 'online';
   const tokenSymbol = useOfflineTokenSymbol(!online);
   const { activeAccount } = useAuth();
-  const { balances, refresh, pendingOffline, addLocalActivity } = useWalletData();
-  // The connection can change between steps, so the funds are checked again for the path taken now. Offline, money
-  // committed to vouchers still waiting to settle is not spendable.
-  const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
+  const { balances, refresh, addLocalActivity } = useWalletData();
+  const available = balances?.online ?? null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
   const feeCents = online ? 0 : quoteOfflineFeeCents(amount, tokenSymbol);
   const totalCents = Math.round(amount * 100) + feeCents;
   const total = totalCents / 100;
-  const enough = available !== null && totalCents <= spendableCents(available);
+  const enough = !online || (available !== null && totalCents <= spendableCents(available));
 
   useEffect(() => {
     if (!recipient) navigation.goBack();
@@ -167,7 +165,7 @@ export function SendVerificationScreen({ navigation, route }: NativeStackScreenP
 
       {!enough ? (
         <Text style={styles.problem} accessibilityLiveRegion="polite">
-          {available === null ? t.amount.unavailable : t.verify.notEnough(online ? 'online' : 'offline')}
+          {available === null ? t.amount.unavailable : t.verify.notEnough('online')}
         </Text>
       ) : null}
 
