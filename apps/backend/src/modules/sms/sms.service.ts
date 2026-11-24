@@ -16,6 +16,7 @@ import {
   SMS_QUEUE_NAME,
   SMS_WEBHOOK_MESSAGE_MAX_CHARS,
   SMS_WEBHOOK_NONCE_TTL_SECONDS,
+  smsVoucherKey,
 } from './sms.constants.js';
 import { maskPhoneNumber } from './sms-security.util.js';
 import { BALANCE_SMS_COMMAND, BALANCE_SMS_UNAVAILABLE, SmsBalanceService } from './sms-balance.service.js';
@@ -185,18 +186,24 @@ export class SmsService {
       return { success: true, status: 'Rate Limited' };
     }
 
+    return this.bufferVoucher(sms.message, sms.senderPhone, traceId);
+  }
+
+  /** Shared ingress for authenticated webhooks and messages retrieved from the configured TextBee device. */
+  async bufferVoucher(message: string, senderPhone: string, traceId: string): Promise<Record<string, unknown>> {
+    if (message.length > SMS_WEBHOOK_MESSAGE_MAX_CHARS) return { error: 'SMS body exceeds maximum length', traceId };
     let voucher;
     try {
-      voucher = parseOfflineVoucher(sms.message);
+      voucher = parseOfflineVoucher(message);
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Malformed payload', traceId };
     }
 
     const redis = this.redisService.getClient();
-    const nonceKey = `honebill:sms:nonce:${voucher.nonce.toString('base64')}`;
+    const nonceKey = smsVoucherKey(voucher.nonce.toString('base64'));
     try {
       if (await redis.get(nonceKey)) {
-        this.logger.warn(`SMS webhook ignored: this voucher was already received (replay). sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
+        this.logger.warn(`SMS webhook ignored: this voucher was already received (replay). sender=${maskPhoneNumber(senderPhone)} traceId=${traceId}`);
         return { success: true, status: 'Duplicate Replay', traceId };
       }
     } catch (error) {
@@ -209,11 +216,11 @@ export class SmsService {
       throw new ApiResponseException(500, { error: 'Failed to buffer settlement' });
     }
     try {
-      const job = await this.settlementQueue.enqueue(sms.message, {
-        senderPhone: sms.senderPhone,
+      const job = await this.settlementQueue.enqueue(message, {
+        senderPhone,
         traceId,
       });
-      this.logger.log(`Buffered offline settlement ${job.jobId}; sender=${maskPhoneNumber(sms.senderPhone)} traceId=${traceId}`);
+      this.logger.log(`Buffered offline settlement ${job.jobId}; sender=${maskPhoneNumber(senderPhone)} traceId=${traceId}`);
     } catch (error) {
       this.logger.error(`Settlement queue publish failed. traceId=${traceId}: ${this.errorMessage(error)}`);
       throw new ApiResponseException(500, { error: 'Failed to buffer settlement' });
@@ -221,7 +228,7 @@ export class SmsService {
     // Mark only durable publishes. Concurrent requests safely converge on BullMQ's
     // atomic job-ID deduplication; an ambiguous publish failure can also be retried.
     try {
-      const marked = await redis.set(nonceKey, '1', 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
+      const marked = await redis.set(nonceKey, voucher.senderShortId, 'EX', SMS_WEBHOOK_NONCE_TTL_SECONDS, 'NX');
       if (marked === null) {
         this.logger.warn(`SMS webhook: voucher was queued but another request had already marked it. traceId=${traceId}`);
         return { success: true, status: 'Duplicate Replay', traceId };

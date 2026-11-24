@@ -3,7 +3,7 @@ import { en } from '../i18n/en';
 import { formatDayHeading, shortRef, voucherRef } from '../utils/format';
 
 export type TransactionSource = 'wallet' | 'offline';
-export type TransactionStatus = 'completed' | 'pending' | 'failed';
+export type TransactionStatus = 'completed' | 'pending' | 'processing' | 'failed';
 
 /** One ledger entry as the History screens show it. */
 export type Transaction = {
@@ -39,8 +39,7 @@ export type Transaction = {
 export function failureText(tx: Pick<Transaction, 'source' | 'failureReason'>): string {
   const t = messages().tx;
   const reason = readableReason(tx.failureReason ?? '');
-  // An expired payment was never answered, so nobody knows that no money moved; its reason says how to check.
-  if (tx.source !== 'offline' || tx.failureReason === EXPIRED_REASON) return reason;
+  if (tx.source !== 'offline' || isUnconfirmedReason(tx.failureReason)) return reason;
   return reason ? `${reason} ${t.noMoneyTaken}` : t.noMoneyTaken;
 }
 
@@ -49,6 +48,19 @@ export function failureText(tx: Pick<Transaction, 'source' | 'failureReason'>): 
  * the payment in English, so it is recognised whatever language the app was in; `failureText` shows it translated.
  */
 export const EXPIRED_REASON = en.tx.expired;
+export const RETRY_CLOSED_REASON = en.tx.retryClosed;
+
+function isUnconfirmedReason(reason: string | undefined): boolean {
+  return reason === EXPIRED_REASON || reason === RETRY_CLOSED_REASON;
+}
+
+export function isUnconfirmed(tx: Pick<Transaction, 'status' | 'failureReason'>): boolean {
+  return tx.status === 'failed' && isUnconfirmedReason(tx.failureReason);
+}
+
+export function isFinalTransaction(tx: Pick<Transaction, 'status' | 'failureReason'>): boolean {
+  return tx.status === 'completed' || (tx.status === 'failed' && !isUnconfirmed(tx));
+}
 
 type ReasonKey = keyof typeof en.tx.reasons;
 
@@ -59,6 +71,7 @@ type ReasonKey = keyof typeof en.tx.reasons;
 function readableReason(reason: string): string {
   const t = messages().tx;
   if (reason === EXPIRED_REASON) return t.expired;
+  if (reason === RETRY_CLOSED_REASON) return t.retryClosed;
   const key = (Object.keys(en.tx.reasons) as ReasonKey[]).find((k) => en.tx.reasons[k] === reason);
   return key ? t.reasons[key] : reason;
 }

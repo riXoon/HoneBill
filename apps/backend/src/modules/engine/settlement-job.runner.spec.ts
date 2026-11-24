@@ -23,7 +23,7 @@ const notice: VoucherNotice = {
 
 const job = { id: '7', name: ENGINE_SETTLEMENT_JOB, data: { smsBody: 'voucher', senderPhone: '+639170000001', traceId: 't' } };
 
-function makeRunner(processSettlement: () => Promise<any>) {
+function makeRunner(processSettlement: (body: string, phone?: string, onProcessing?: (nonce: string) => Promise<void>) => Promise<any>) {
   const claimed = new Set<string>();
   const settlements = {
     processSettlement: jest.fn(processSettlement),
@@ -44,10 +44,43 @@ function makeRunner(processSettlement: () => Promise<any>) {
   };
   const runner = new SettlementJobRunner(settlements as any, sms as any);
   const texts = () => sms.enqueueSms.mock.calls.map(([to, message, options]) => ({ to, message, dedupKey: (options as any).dedupKey }));
-  return { runner, sms, texts };
+  return { runner, sms, texts, settlements };
 }
 
 describe('SettlementJobRunner texts', () => {
+  it('sends one processing text to the submitting phone before the final text, even across retries', async () => {
+    let attempts = 0;
+    const { runner, texts } = makeRunner(async (_body, _phone, onProcessing) => {
+      await onProcessing?.(notice.nonce);
+      attempts++;
+      if (attempts === 1) throw new Error('RPC timeout');
+      return { status: 'FAILED', txHash: null, reason: 'Insufficient balance.' };
+    });
+    const relayPhone = '+639170000003';
+    const relayed = { ...job, data: { ...job.data, senderPhone: relayPhone } };
+    await expect(runner.run(relayed)).rejects.toThrow('RPC timeout');
+    expect(texts()).toEqual([{
+      to: relayPhone,
+      message: 'HoneBill: Your offline payment is being processed. Please wait for the result before sending again. Ref: QUJDRE',
+      dedupKey: 'settlement-processing:QUJDREVGRw==:sender',
+    }]);
+    await expect(runner.run(relayed)).resolves.toMatchObject({ status: 'FAILED' });
+    expect(texts()).toHaveLength(2);
+    expect(texts()[1]).toMatchObject({ to: relayPhone, message: expect.stringContaining('did not go through') });
+  });
+
+  it('continues settling if the processing SMS cannot be claimed', async () => {
+    const { runner, texts, settlements } = makeRunner(async (_body, _phone, onProcessing) => {
+      await onProcessing?.(notice.nonce);
+      return { status: 'SETTLED', txHash: 'h' };
+    });
+    settlements.claimReceipt.mockRejectedValueOnce(new Error('notification store unavailable'));
+    await expect(runner.run(job)).resolves.toMatchObject({ status: 'SETTLED' });
+    expect(texts().map(({ message }) => message)).toEqual([
+      expect.stringContaining('went through'), expect.stringContaining('You received'),
+    ]);
+  });
+
   it('tells the sender and the receiver when the payment goes through', async () => {
     const { runner, texts } = makeRunner(async () => ({ status: 'SETTLED', txHash: 'h' }));
     await expect(runner.run(job)).resolves.toEqual({ status: 'SETTLED', txHash: 'h' });
@@ -74,10 +107,8 @@ describe('SettlementJobRunner texts', () => {
   });
 
   it('tells the sender why a payment cannot settle, and that no money was taken', async () => {
-    const { runner, texts } = makeRunner(async () => {
-      throw new NotFoundException('Recipient account not found');
-    });
-    await expect(runner.run(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    const { runner, texts } = makeRunner(async () => ({ status: 'FAILED', txHash: null, reason: 'Recipient account not found' }));
+    await expect(runner.run(job)).resolves.toMatchObject({ status: 'FAILED' });
     expect(texts()).toEqual([
       {
         to: '+639170000001',
@@ -86,6 +117,12 @@ describe('SettlementJobRunner texts', () => {
         dedupKey: 'settlement-failed:QUJDREVGRw==:sender',
       },
     ]);
+  });
+
+  it('withholds a failure text when there is no terminal settlement record', async () => {
+    const { runner, texts } = makeRunner(async () => { throw new NotFoundException('Sender account not found'); });
+    await expect(runner.run(job)).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(texts()).toEqual([]);
   });
 
   it('tells the sender when the ledger rejects the payment', async () => {

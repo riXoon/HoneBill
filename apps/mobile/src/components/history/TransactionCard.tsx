@@ -1,24 +1,27 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { EXPIRED_REASON, SOURCE_LABEL, failureText, type Transaction } from '../../types/transaction';
+import { SOURCE_LABEL, failureText, isUnconfirmed, type Transaction } from '../../types/transaction';
+import { useT } from '../../i18n';
 import { formatAmount, formatClock } from '../../utils/format';
 import { colors, fonts } from '../../theme';
 import { OfflineFundsBadge } from '../ui/smallIcons';
 
 /** Figma "Content" card (870:3181): source pill and time, description, signed amount. */
 export const TransactionCard = memo(function TransactionCard({ tx, onPress }: { tx: Transaction; onPress?: (id: string) => void }) {
+  const t = useT();
   const sign = tx.direction === 'in' ? '+' : '-';
   // Cents are shown: real amounts are not whole pesos like the design's samples.
   const amount = `${sign} ${formatAmount(tx.amount, tx.assetCode)}`;
   const time = formatClock(new Date(tx.timestamp));
   const failed = tx.status === 'failed';
   // Never answered is not a known failure (money may have moved), so it gets its own label and a neutral look.
-  const unconfirmed = failed && tx.failureReason === EXPIRED_REASON;
-  const statusLabel = unconfirmed ? 'Unconfirmed' : failed ? 'Failed' : tx.status === 'pending' ? 'Pending' : null;
+  const unconfirmed = isUnconfirmed(tx);
+  const statusLabel = unconfirmed ? t.tx.unconfirmedLabel : failed ? 'Failed'
+    : tx.status === 'processing' ? t.tx.processingLabel : tx.status === 'pending' ? 'Pending' : null;
   const failureNote = failed ? failureText(tx) : null;
   // A failed payment must not read like an ordinary debit.
-  const spoken = failureNote ? `${amount}, failed. ${failureNote}` : statusLabel ? `${amount}, ${statusLabel}` : amount;
+  const spoken = failureNote ? `${amount}, ${statusLabel}. ${failureNote}` : statusLabel ? `${amount}, ${statusLabel}` : amount;
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}

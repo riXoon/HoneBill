@@ -10,17 +10,19 @@ import { useWalletData } from '../context/WalletDataContext';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts } from '../theme';
 import { Notice, type NoticeTone } from '../components/ui/Notice';
-import { EXPIRED_REASON, SOURCE_LABEL, displayRef, failureText, type TransactionStatus } from '../types/transaction';
+import { SOURCE_LABEL, displayRef, failureText, isUnconfirmed, type TransactionStatus } from '../types/transaction';
+import { normalizeNonce } from '../services/walletCache';
 import { formatAmount, formatReceiptDate } from '../utils/format';
 import { useT } from '../i18n';
 
 // Detail page for one Transactions row. Built from the Receipt voucher (870:2835) so it shares the brand look.
 /** An offline payment still unconfirmed after this gets the "connect to check" hint. */
 const LONG_WAIT_MS = 24 * 60 * 60 * 1000;
-const STATUS_LABEL: Record<TransactionStatus, string> = { completed: 'Completed', pending: 'Pending', failed: 'Failed' };
+const STATUS_LABEL: Record<Exclude<TransactionStatus, 'processing'>, string> = { completed: 'Completed', pending: 'Pending', failed: 'Failed' };
 const STATUS_COLOR: Record<TransactionStatus, string> = {
   completed: colors.success,
   pending: colors.primary,
+  processing: colors.primary,
   failed: colors.coral,
 };
 
@@ -38,7 +40,10 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
   const { transactions } = useWalletData();
   const { id, activity } = route.params;
   const tx = transactions.find((t) => t.id === id) ?? (activity && transactions.find((t) =>
-    t.ref.toLowerCase() === activity.ref.toLowerCase() && t.source === activity.source && t.direction === activity.direction));
+    t.source === activity.source && t.direction === activity.direction &&
+    (activity.nonce && t.nonce
+      ? normalizeNonce(t.nonce) === normalizeNonce(activity.nonce)
+      : t.ref.toLowerCase() === activity.ref.toLowerCase())));
   if (!tx) return null;
 
   const incoming = tx.direction === 'in';
@@ -48,11 +53,14 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
   const signed = `${incoming ? '+' : '-'} ${amount}`;
   const when = formatReceiptDate(new Date(tx.timestamp));
   const ref = displayRef(tx);
-  const waitingLong = offlineVoucher && tx.status === 'pending' && Date.now() - tx.timestamp > LONG_WAIT_MS;
+  const awaitingOutcome = tx.status === 'pending' || tx.status === 'processing';
+  const waitingLong = offlineVoucher && awaitingOutcome && Date.now() - tx.timestamp > LONG_WAIT_MS;
+  const unconfirmed = isUnconfirmed(tx);
+  const statusLabel = unconfirmed ? t.tx.unconfirmedLabel : tx.status === 'processing' ? t.tx.processingLabel : STATUS_LABEL[tx.status];
   const ledger =
-    tx.status === 'failed'
-      ? 'Failed'
-      : tx.status === 'pending'
+    tx.status === 'failed' || tx.status === 'processing'
+      ? statusLabel
+      : awaitingOutcome
         ? offlineVoucher
           ? t.txDetail.sentBySms
           : 'Pending'
@@ -63,13 +71,12 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
   const note =
     tx.status === 'failed'
       ? failureText(tx)
-      : tx.status === 'pending'
+      : awaitingOutcome
         ? offlineVoucher
           ? (!incoming ? (waitingLong ? t.txDetail.stillNotConfirmed : t.txDetail.willText(ref)) : null)
           : t.common.pendingConfirmationBody
         : null;
   // Never answered is a warning (check the balance); rejected is an error; still waiting is information.
-  const unconfirmed = tx.status === 'failed' && tx.failureReason === EXPIRED_REASON;
   const noteTone: NoticeTone = unconfirmed ? 'warning' : tx.status === 'failed' ? 'error' : 'info';
   const noteTitle = unconfirmed
     ? t.txDetail.couldNotConfirm
@@ -81,7 +88,7 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
 
   const share = () =>
     void Share.share({
-      message: t.txDetail.shareMessage(incoming ? t.txDetail.received : t.txDetail.sent, amount, tx.description, STATUS_LABEL[tx.status], ref, when),
+      message: t.txDetail.shareMessage(incoming ? t.txDetail.received : t.txDetail.sent, amount, tx.description, statusLabel, ref, when),
     });
   // Opens Help & Feedback with this payment attached, so the team can trace it without asking.
   const report = () => navigation.navigate('Feedback', { transactionId: tx.id });
@@ -104,7 +111,7 @@ export function TransactionDetailScreen({ navigation, route }: NativeStackScreen
       <GlassCard style={styles.card}>
         <View style={styles.badges}>
           <View style={[styles.status, { backgroundColor: unconfirmed ? colors.primary : STATUS_COLOR[tx.status] }]}>
-            <Text style={styles.statusText}>{unconfirmed ? 'Unconfirmed' : STATUS_LABEL[tx.status]}</Text>
+            <Text style={styles.statusText}>{statusLabel}</Text>
           </View>
           {offline ? <OfflineFundsBadge /> : null}
         </View>

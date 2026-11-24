@@ -71,7 +71,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
     (signed: SignedOfflineVoucher, method: DispatchMethod) => {
       const nonce = voucherNonce(signed.text);
       const issuedAt = heldAt.current ?? Date.now();
-      trackOfflineDispatch(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt, signed.feeCents, signed.assetCode), signed.text);
+      trackOfflineDispatch(pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt, signed.feeCents, signed.assetCode));
       navigation.navigate('SendReceipt', { ...draft, method, reference: nonce, issuedAt });
     },
     [navigation, draft, trackOfflineDispatch],
@@ -113,7 +113,6 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       // Keep the handoff even if the app locks or closes while Messages is open.
       const dispatch = {
         publicKey: activeAccount.stellarPublicKey,
-        voucher: signed.text,
         nonce: voucherNonce(signed.text),
         feeCents: signed.feeCents,
         assetCode: signed.assetCode,
@@ -161,7 +160,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       const issuedAt = heldAt.current ?? Date.now();
       const payment = pendingPayment(nonce, draft.amount, findRecipientById(draft.recipientId) ?? null, issuedAt, signed.feeCents, signed.assetCode);
       // A partner can scan it as soon as it is on screen, so it is held from now on, even if the dialog is closed.
-      if (!trackOfflineDispatch(payment, signed.text)) {
+      if (!trackOfflineDispatch(payment)) {
         if (heldAt.current === null) releaseOfflineHold(nonce);
         throw new UserFacingError(messages().sendMethod.reviewSaveFailed);
       }

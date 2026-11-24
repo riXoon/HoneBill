@@ -26,7 +26,7 @@ export function toTransaction(item: HistoryItem): Transaction | null {
     ...(feeCents !== undefined && Number.isSafeInteger(feeCents) && feeCents >= 0 ? { feeCents } : {}),
     assetCode: item.assetCode,
     description: item.title,
-    status: statusOf(item.status),
+    status: source === 'offline' && item.nonce && item.status.toLowerCase() === 'pending' ? 'processing' : statusOf(item.status),
     ref: item.txHash ?? item.nonce ?? item.id,
     ...(item.nonce ? { nonce: item.nonce } : {}),
     ...(item.counterpartyShortId ? { counterpartyShortId: item.counterpartyShortId } : {}),

@@ -11,6 +11,8 @@ import { SmsController } from './sms.controller.js';
 import { SmsService } from './sms.service.js';
 import { SmsBalanceService } from './sms-balance.service.js';
 import { StellarModule } from '../../infra/stellar/stellar.module.js';
+import { LockModule } from '../../infra/lock/lock.module.js';
+import { SmsVoucherRecoveryService } from './sms-voucher-recovery.service.js';
 
 @Module({})
 export class SmsModule {
@@ -27,6 +29,7 @@ export class SmsModule {
       imports: [
         OtpModule,
         StellarModule,
+        LockModule,
         SettlementQueueModule.register(resolveSettlementTransport()),
         ...(queueEnabled
           ? [BullModule.registerQueue({ name: SMS_QUEUE_NAME })]
@@ -36,11 +39,12 @@ export class SmsModule {
       providers: [
         SmsService,
         SmsBalanceService,
+        SmsVoucherRecoveryService,
         TextbeeSignatureGuard,
         SmsDispatchSecretGuard,
         ...(workerEnabled ? [SmsDispatchProcessor] : []),
       ],
-      exports: [SmsService],
+      exports: [SmsService, SmsVoucherRecoveryService],
     };
   }
 }
