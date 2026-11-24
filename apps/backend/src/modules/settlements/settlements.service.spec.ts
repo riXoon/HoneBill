@@ -3,8 +3,8 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { offlineFeeStroops } from 'pijin_core/offline-fee';
 import { SettlementsService, buildOfflineSignatureXdr, decodeBase62 } from './settlements.util.js';
 import type { PrismaService } from '../../infra/prisma/prisma.service.js';
-import type { StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
-import type { SettlementFinalizationService } from './settlement-finalization.service.js';
+import { InsufficientOfflineBalanceError, type StellarTransactionManager } from '../engine/stellar-transaction-manager.service.js';
+import type { SettlementFinalizationService, SettlementLease } from './settlement-finalization.service.js';
 import type { ConfigService } from '@nestjs/config';
 
 function makeService() {
@@ -32,7 +32,7 @@ function makeService() {
   const finalization = {
     claim: jest.fn(async (id: number) => ({ id, token: 'test-lease' })),
     check: jest.fn<(...args: any[]) => Promise<any>>(),
-    release: jest.fn(async () => undefined),
+    release: jest.fn(async (_lease: SettlementLease) => undefined),
   };
   const service = new SettlementsService(
     prisma as unknown as PrismaService,
@@ -60,6 +60,43 @@ describe('offline PHPC fee schedule', () => {
 });
 
 describe('SettlementsService', () => {
+  it.each(['insufficient balance', 'prepare timeout', 'lost lease'])(
+    'distinguishes an unsubmitted insufficient-balance voucher from ambiguous failures (%s)', async (failure) => {
+      const { service, prisma, transactionManager, senderKey, gateway, finalization } = makeService();
+      const tokenContractId = Keypair.random().publicKey();
+      const signed = buildOfflineSignatureXdr({
+        amountStroops: decodeBase62('3v5K'), protocolToll: 5_000_000n, nonce: Buffer.alloc(32, 1), receiverShortId: 'def456',
+        gatewayPublicKey: gateway.publicKey(), tokenContractId,
+        contractId: 'CCGXMMXAYI4EHTGSH65ML3VK6TTRBQGT3BT2NN3P6Y3LGN6XIL2HILPX',
+      });
+      prisma.settlement.findUnique.mockResolvedValue({ id: 1, status: 'PENDING', txHash: null, signedTxXdr: null, protocolToll: 5_000_000n });
+      prisma.account.findUnique.mockResolvedValueOnce({ stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
+        .mockResolvedValueOnce({ stellarPublicKey: Keypair.random().publicKey() });
+      prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
+      transactionManager.executeTwoPhaseSettlement.mockRejectedValue(failure === 'prepare timeout'
+        ? new Error('RPC request timed out') : new InsufficientOfflineBalanceError());
+      if (failure === 'lost lease') prisma.settlement.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      const result = service.processSettlement(body(Buffer.from(senderKey.sign(signed))));
+      if (failure === 'insufficient balance') {
+        await expect(result).resolves.toEqual({ txHash: null, status: 'FAILED',
+          reason: 'Your Offline balance was not enough for the amount plus the offline fee.' });
+      } else {
+        await expect(result).rejects.toMatchObject({ status: 503 });
+      }
+      if (failure === 'prepare timeout') {
+        expect(prisma.settlement.updateMany).not.toHaveBeenCalled();
+      } else {
+        expect(prisma.settlement.updateMany).toHaveBeenCalledWith({
+          where: { id: 1, status: 'PENDING', recoveryLease: 'test-lease', recoveryLeaseUntil: { gt: expect.any(Date) },
+            txHash: null, signedTxXdr: null, attempts: { none: {} } },
+          data: { status: 'FAILED', failReason: 'Insufficient balance.' },
+        });
+      }
+      expect(finalization.release).toHaveBeenCalledWith({ id: 1, token: 'test-lease' });
+    },
+  );
+
   it.each([5_000_000n, 30_000_000n])('settles a ₱500.01 voucher once with the signed fee %s', async (fee) => {
     const { service, prisma, transactionManager, senderKey, gateway, finalization } = makeService();
     const tokenContractId = Keypair.random().publicKey();

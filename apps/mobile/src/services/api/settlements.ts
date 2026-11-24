@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 
-export type SettlementResult = { status: 'SETTLED' | 'FAILED'; txHash: string | null };
+export type SettlementResult = { status: 'SETTLED' | 'FAILED'; txHash: string | null; reason?: string };
 
 /**
  * The backend submits the settlement on-chain and waits for the ledger before answering, which on a cold server or

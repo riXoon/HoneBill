@@ -4,7 +4,7 @@ import { settleVoucher, type SettlementResult } from '../api/settlements';
 import { en } from '../../i18n/en';
 import type { Transaction } from '../../types/transaction';
 import { normalizeNonce } from '../walletCache';
-import { savedOfflineFeeCents, spendableCents } from '../offline/fees';
+import { savedOfflineFeeCents } from '../offline/fees';
 import { parseRelayVoucher } from '../offline/voucherFormat';
 import { dueRows, enqueue, finishRow, transitionRow } from './outboxStore';
 
@@ -47,21 +47,21 @@ export function rememberVoucherForReview(
   enqueue(publicKey, KIND, normalizeNonce(nonce), payload);
 }
 
-/** Called after a fresh wallet read. In-flight or decided vouchers need no retry offer. */
+/** Called after a fresh history read. A recorded voucher with an envelope may still be in flight. */
 export function listVoucherReviews(
   publicKey: string,
   history: Transaction[],
-  offlineBalance: number,
   now = Date.now(),
 ): VoucherReview[] {
-  const statuses = new Map(
-    history.flatMap((tx) => (tx.nonce ? [[normalizeNonce(tx.nonce), tx.status] as const] : [])),
+  const entries = new Map(
+    history.flatMap((tx) => (tx.nonce ? [[normalizeNonce(tx.nonce), tx] as const] : [])),
   );
   const reviews: VoucherReview[] = [];
   for (const row of dueRows(publicKey, KIND, now)) {
-    const status = statuses.get(row.dedupeKey);
-    if (status === 'pending') continue;
-    if (status === 'completed' || status === 'failed') {
+    const entry = entries.get(row.dedupeKey);
+    // History uses the nonce as the reference until the backend has a transaction hash.
+    if (entry?.status === 'pending' && entry.ref !== entry.nonce) continue;
+    if (entry?.status === 'completed' || entry?.status === 'failed') {
       finishRow(row, 'done');
       continue;
     }
@@ -75,8 +75,6 @@ export function listVoucherReviews(
     if (now - dispatchedAt < GATEWAY_GRACE_MS) continue;
     const assetCode = payload.assetCode ?? 'PHPC';
     const feeCents = savedOfflineFeeCents(payload.feeCents, assetCode);
-    const requiredCents = Math.round(voucher.amount * 100) + feeCents;
-    if (requiredCents > spendableCents(offlineBalance)) continue;
     reviews.push({
       row,
       nonce: payload.nonce,
@@ -153,6 +151,7 @@ export type VoucherGivenUp = { nonce: string; reason: string };
  */
 export function rejectionReason(message: string): string {
   const r = en.tx.reasons;
+  if (/insufficient balance|offline balance was not enough/i.test(message)) return r.insufficientOfflineBalance;
   if (/recipient.*not found/i.test(message)) return r.noAccount;
   if (/signature/i.test(message)) return r.notVerified;
   if (/offline device key/i.test(message)) return r.notSetUp;
@@ -184,16 +183,19 @@ export async function drainVouchers(publicKey: string, signal: AbortSignal): Pro
     let outcome: Outcome;
     let reason = '';
     try {
-      outcome = classify({ ok: await settleVoucher(payload.voucher, signal) });
+      const result = await settleVoucher(payload.voucher, signal);
+      outcome = classify({ ok: result });
+      reason = result.reason ?? '';
     } catch (error) {
       outcome = classify({ error });
-      reason = error instanceof Error ? error.message : String(error);
+      reason = error instanceof ApiError && typeof error.data?.reason === 'string'
+        ? error.data.reason
+        : error instanceof Error ? error.message : String(error);
     }
 
     if (outcome === 'settled') finishRow(row, 'done');
-    else if (outcome === 'failed') finishRow(row, 'failed', 'Failed on-chain');
-    else if (outcome === 'rejected') {
-      finishRow(row, 'failed', reason);
+    else if (outcome === 'failed' || outcome === 'rejected') {
+      finishRow(row, 'failed', reason || 'Payment failed');
       givenUp.push({ nonce: payload.nonce, reason: rejectionReason(reason) });
     } else if (outcome === 'stop') break;
   }

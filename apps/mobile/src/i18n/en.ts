@@ -431,6 +431,7 @@ export const en = {
     expired: 'It was not confirmed within 14 days, so it will not be tried again. Check your balance before sending it again.',
     /** Why the server refused a voucher. Stored in English, shown in the reader's language. */
     reasons: {
+      insufficientOfflineBalance: 'Your Offline balance was not enough for the amount plus the offline fee.',
       noAccount: 'No account has this ID.',
       notVerified: 'The payment could not be verified.',
       notSetUp: 'This phone was not set up for offline payments.',
