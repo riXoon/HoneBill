@@ -20,7 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
 import { ApiError, errorMessage, isAborted } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
-import { MissingGatewayError, openVoucherSms, parseRelayVoucher } from '../services/offline/voucherFormat';
+import { MissingGatewayError, openGatewaySms, parseRelayVoucher } from '../services/offline/voucherFormat';
 import {
   parseRecipientQr,
   parseRecipientQrAmount,
@@ -98,7 +98,7 @@ export function QrScanScreen({ navigation, route }: NativeStackScreenProps<RootS
       if (relayed) {
         try {
           relayReturn.current = release;
-          await openVoucherSms(relayed.text);
+          await openGatewaySms(relayed.text);
         } catch (error) {
           relayReturn.current = null;
           const noGateway = error instanceof MissingGatewayError;

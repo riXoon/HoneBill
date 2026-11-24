@@ -2,7 +2,7 @@ import * as Application from 'expo-application';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 
 /**
- * This app's version, from `version` in app.json ("1.1.0"). Read from the app config rather than the native app,
+ * This app's version, from `version` in app.json. Read from the app config rather than the native app,
  * because in Expo Go the native app is Expo Go itself. Raise it in app.json for every release, and add that
  * version's notes to `content/releaseNotes.ts`.
  */

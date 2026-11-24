@@ -86,7 +86,7 @@ export class SettlementJobRunner {
 
   private async notifySettled(job: SettlementJob): Promise<void> {
     if (!this.sms) return;
-    const notice = await this.describe(job);
+    const notice = await this.settlements.describeSettledVoucher(job.data.smsBody).catch(() => null);
     if (!notice) {
       await this.send(job.data.senderPhone, 'HoneBill: Your offline payment went through.', `settlement-receipt:${job.id}:sender`, job.data.traceId);
       return;
@@ -102,10 +102,27 @@ export class SettlementJobRunner {
   }
 
   private async sendSettled(notice: VoucherNotice, relayPhone?: string, traceId?: string, deadlineMs?: number): Promise<void> {
-    await this.send(relayPhone, settledText(notice), `settlement-receipt:${notice.nonce}:sender`, traceId, deadlineMs);
-    // The receiver is told only when a different number texted the voucher, so one phone never gets both texts.
-    if (notice.receiverPhone && (!relayPhone || normalizePhoneNumber(notice.receiverPhone) !== normalizePhoneNumber(relayPhone))) {
-      await this.send(notice.receiverPhone, receivedText(notice), `settlement-receipt:${notice.nonce}:receiver`, traceId, deadlineMs);
+    const sender = notice.senderPhone ? normalizePhoneNumber(notice.senderPhone) : undefined;
+    const receiver = notice.receiverPhone ? normalizePhoneNumber(notice.receiverPhone) : undefined;
+    const relay = relayPhone ? normalizePhoneNumber(relayPhone) : undefined;
+    const receiptKey = `settlement-receipt:${notice.nonce}`;
+    const token = notice.tokenContractId
+      ? { contractId: notice.tokenContractId, symbol: notice.symbol, decimals: notice.decimals }
+      : null;
+    const [senderBalance, receiverBalance] = await Promise.all([
+      sender && notice.senderAddress && token ? this.sms?.receiptBalance(sender, notice.senderAddress, token) : null,
+      receiver && notice.receiverAddress && token ? this.sms?.receiptBalance(receiver, notice.receiverAddress, token) : null,
+    ]);
+    const outgoing = settledText(notice);
+    if (sender) {
+      await this.send(sender, senderBalance ? `${outgoing}. ${senderBalance}` : outgoing, `${receiptKey}:sender`, traceId, deadlineMs);
+    }
+    if (receiver && receiver !== sender) {
+      const incoming = receivedText(notice);
+      await this.send(receiver, receiverBalance ? `${incoming}. ${receiverBalance}` : incoming, `${receiptKey}:receiver`, traceId, deadlineMs);
+    }
+    if (relay && relay !== sender && relay !== receiver) {
+      await this.send(relay, outgoing, `${receiptKey}:${sender ? 'relay' : 'sender'}`, traceId, deadlineMs);
     }
     await this.settlements.clearReceiptRelay(notice.nonce);
   }

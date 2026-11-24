@@ -31,7 +31,7 @@ Check off a finding after its remediation meets the verification criteria in the
 - [x] F06 — Enforce wallet history ownership in the active NestJS API (`02fcc1f`). Local HTTP tests verified ownership on both routes. In production, the old app received `401` when fetching history, and the updated app loaded history in Expo Go. Legacy route exposure remains unverified.
 - [ ] F07 — Enforce phone ownership and recovery policy (`6b60a17`). The deployed OTP flow worked in user testing. Confirm strict-purpose rejection before closing the patch. Recovery when the old number is unavailable still needs a reviewed process.
 - [x] F08 — Reconcile unknown settlement outcomes (`6bd6269`). User verified the recurring QStash sweep on Stellar Testnet in `observe` mode. Local tests covered verified finalization, expired envelopes, and duplicate receipt claims. The controlled Testnet recovery test in `apply` mode was skipped.
-- [ ] F09 — Reconcile app history with confirmed on-chain activity. Owner-scoped confirmation and QStash recovery are implemented. Deployed Testnet verification is pending.
+- [x] F09 — Reconcile app history with confirmed on-chain activity (`43df4f3`). Owner-scoped confirmation and QStash recovery are implemented. User confirmed the deployed Stellar Testnet flow worked.
 - [ ] F10 — Separate and protect upgrade and recipient administration.
 - [ ] F11 — Monitor ledger storage expiry and verify restoration.
 - [ ] F12 — Make OTP consumption and account binding atomic.

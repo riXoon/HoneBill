@@ -30,7 +30,7 @@ const FADE_MS = 250;
 export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<RootStackParamList, 'SendAmount'>) {
   const recipient = findRecipientById(route.params.recipientId);
   const t = useT();
-  const { balances, pendingOffline } = useWalletData();
+  const { balances } = useWalletData();
   const online = useSendMode(route.params.mode) === 'online';
   const tokenSymbol = useOfflineTokenSymbol(!online);
   const [amountText, setAmountText] = useState(route.params.amount ? route.params.amount.toFixed(2) : '');
@@ -45,18 +45,16 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
   if (!recipient) return null;
 
   const amount = parseAmount(amountText);
-  // The view this was started from decides: Online spends the online wallet and settles now; Offline spends the vault.
-  // Offline, money already committed to vouchers waiting to settle cannot be spent again: a second voucher for it fails.
-  const available = balances ? (online ? balances.online : Math.max(0, balances.offline - pendingOffline)) : null;
+  const available = balances?.online ?? null;
   // An offline payment also costs the toll, which the vault pays on top of the amount.
   const feeCents = online ? 0 : quoteOfflineFeeCents(amount, tokenSymbol);
   const fee = feeCents / 100;
-  const balanceAfter = available === null ? null : available - (amount > 0 ? amount + fee : 0);
+  const balanceAfter = available === null ? null : available - (amount > 0 ? amount : 0);
 
-  // Without a balance read from the server there is nothing to check an amount against.
-  const problem = available === null
+  // Offline vouchers are checked against the vault balance at settlement.
+  const problem = online && available === null
     ? t.amount.unavailable
-    : amountProblem(amount, Math.max(0, spendableCents(available) - feeCents) / 100);
+    : amountProblem(amount, online && available !== null ? Math.max(0, spendableCents(available)) / 100 : undefined);
   const valid = problem === null;
 
   return (
@@ -123,17 +121,19 @@ export function SendAmountScreen({ navigation, route }: NativeStackScreenProps<R
           ) : null}
         </View>
 
-        <BalanceBar
-          caption={t.send.balanceAfter(balanceAfter === null ? '--' : formatPeso(Math.max(0, balanceAfter)))}
-          ratio={available && balanceAfter !== null ? balanceAfter / available : 0}
-        />
+        {online ? (
+          <BalanceBar
+            caption={t.send.balanceAfter(balanceAfter === null ? '--' : formatPeso(Math.max(0, balanceAfter)))}
+            ratio={available && balanceAfter !== null ? balanceAfter / available : 0}
+          />
+        ) : null}
 
         <AmountField value={amountText} onChangeText={setAmountText} />
 
-        <View>
+        {online ? (
           <Text style={styles.hint}>{t.send.available(available === null ? '--' : formatPesoPlain(available))}</Text>
-          {feeCents > 0 ? <Text style={styles.hint}>{t.verify.offlineFee} {formatPeso(fee)}</Text> : null}
-        </View>
+        ) : null}
+        {feeCents > 0 ? <Text style={styles.hint}>{t.verify.offlineFee} {formatPeso(fee)}</Text> : null}
       </GlassCard>
 
       <GlassCard style={styles.noteCard}>

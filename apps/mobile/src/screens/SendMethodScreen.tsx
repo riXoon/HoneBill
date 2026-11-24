@@ -13,7 +13,7 @@ import type { DispatchMethod } from '../types/send';
 import { errorMessage, UserFacingError } from '../services/api/client';
 import { reportError } from '../services/errorReporting';
 import { buildOfflineVoucher, type SignedOfflineVoucher } from '../services/offline/voucher';
-import { MissingGatewayError, openVoucherSms, relayQrPayload } from '../services/offline/voucherFormat';
+import { MissingGatewayError, openGatewaySms, relayQrPayload } from '../services/offline/voucherFormat';
 import {
   clearSmsHandoff,
   pendingPayment,
@@ -57,9 +57,8 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
   const heldAt = useRef<number | null>(null);
 
   /**
-   * Holds the voucher's money before it leaves the app. From the moment the messaging app holds the text (or a partner
-   * can scan the QR) it can settle at any time, whatever the person answers later, so what can be spent must already
-   * exclude it. Released only by the server's answer once online, or right away if the messaging app never opened.
+   * Records the pending amount before the voucher leaves the app. It can settle as soon as the messaging app holds
+   * the text or a partner can scan the QR. Released by the server's answer, or if the messaging app never opened.
    */
   const holdVoucher = (signed: SignedOfflineVoucher): number => {
     const at = heldAt.current ?? Date.now();
@@ -126,7 +125,7 @@ export function SendMethodScreen({ navigation, route }: NativeStackScreenProps<R
       heldAt.current = dispatch.openedAt;
       holdVoucher(signed);
       try {
-        await openVoucherSms(signed.text);
+        await openGatewaySms(signed.text);
       } catch (error) {
         // The messaging app never opened: nothing to ask about. If the voucher never left the app before either
         // (an earlier text or QR), it can never settle, so its money is free again.

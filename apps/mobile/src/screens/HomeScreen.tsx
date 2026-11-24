@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -25,6 +25,7 @@ import { useWalletData } from '../context/WalletDataContext';
 import { useIsOnline } from '../hooks/useIsOnline';
 import { useT } from '../i18n';
 import type { RootStackParamList } from '../navigation/types';
+import { openGatewaySms } from '../services/offline/voucherFormat';
 import { colors, fonts } from '../theme';
 import { useScale } from '../theme/responsive';
 import { SOURCE_LABEL, type TransactionStatus } from '../types/transaction';
@@ -178,14 +179,24 @@ export function HomeScreen() {
           status={status}
           onToggle={toggle}
         />
-        {!online && pendingOffline > 0 && balances ? (
-          <Notice tone="info" title={t.home.availableToSend(formatPeso(Math.max(0, balances.offline - pendingOffline)))} style={styles.notice}>
+        {!online && pendingOffline > 0 ? (
+          <Notice tone="info" title={t.home.offlinePaymentsPending} style={styles.notice}>
             {t.home.held(formatPeso(pendingOffline))}
           </Notice>
         ) : null}
         {/* Offline, the balance is the last one saved, possibly weeks old: say when it is from. */}
         {!connected && balances && syncedAt !== null ? (
           <Text style={styles.savedAt}>{t.home.balanceAsOf(formatRelative(new Date(syncedAt)))}</Text>
+        ) : null}
+        {!online ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint={t.home.checkBalanceSmsHint}
+            onPress={() => void openGatewaySms('/check-balance').catch(() => Alert.alert(t.home.checkBalanceSmsFailed))}
+            style={styles.smsBalanceButton}
+          >
+            <Text style={styles.smsBalanceLabel}>{t.home.checkBalanceSms}</Text>
+          </Pressable>
         ) : null}
         {error ? (
           <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
@@ -283,4 +294,6 @@ const styles = StyleSheet.create({
   error: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 13, color: colors.coral, textAlign: 'center' },
   notice: { maxWidth: 342 },
   savedAt: { width: '100%', maxWidth: 342, fontFamily: fonts.regular, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  smsBalanceButton: { minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 12 },
+  smsBalanceLabel: { fontFamily: fonts.medium, fontSize: 14, color: colors.text, textDecorationLine: 'underline' },
 });
