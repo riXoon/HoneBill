@@ -34,6 +34,28 @@ export type HistoryItem = {
 
 type AccountRef = { shortId: string; stellarPublicKey: string };
 
+export type VoucherStatus = {
+  nonce: string;
+  status: 'NOT_FOUND' | 'PENDING' | 'SETTLED' | 'FAILED';
+  txHash?: string;
+  reason?: string;
+};
+
+export async function getVoucherStatuses(publicKey: string, nonces: string[], signal?: AbortSignal): Promise<VoucherStatus[]> {
+  if (!nonces.length) return [];
+  return withWalletSession(publicKey, async (bearer) => {
+    const results: VoucherStatus[] = [];
+    for (let offset = 0; offset < nonces.length; offset += 50) {
+      const { vouchers } = await apiRequest<{ vouchers: VoucherStatus[] }>('POST', '/settlements/status', {
+        bearer, body: { nonces: nonces.slice(offset, offset + 50) }, signal, timeoutMs: 10_000,
+      });
+      if (!Array.isArray(vouchers)) throw new Error('Invalid voucher status response.');
+      results.push(...vouchers);
+    }
+    return results;
+  }, signal);
+}
+
 /** Both balances for an account, read from the chain by the backend. */
 export function getVaultBalance(account: AccountRef, signal?: AbortSignal): Promise<VaultBalance> {
   return apiRequest('GET', '/vault-balance', { query: { shortId: account.shortId }, signal });

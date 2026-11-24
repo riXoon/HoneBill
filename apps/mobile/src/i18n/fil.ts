@@ -432,8 +432,11 @@ export const fil: Messages = {
 
   tx: {
     noMoneyTaken: 'Walang perang nabawas.',
+    unconfirmedLabel: 'Hindi kumpirmado',
+    processingLabel: 'Pinoproseso',
     expired:
       'Hindi ito nakumpirma sa loob ng 14 araw, kaya hindi na ito susubukan ulit. Tingnan muna ang iyong balance bago ito i-send ulit.',
+    retryClosed: 'Hindi na ito susubukan ulit online. Posible pa ring ma-settle ang orihinal na SMS. Tingnan ang History bago mag-send ulit.',
     reasons: {
       insufficientOfflineBalance: 'Kulang ang iyong Offline Balance para sa halaga at offline fee.',
       noAccount: 'Walang account na may ganitong ID.',
@@ -493,11 +496,6 @@ export const fil: Messages = {
       `${amount} para kay ${name}. Nakatabi muna ang halaga habang sinusuri ng HoneBill ang payment.`,
     sentYes: 'Oo, na-send ko na',
     sentNo: 'Hindi pa',
-    recoveryTitle: 'Subukan ulit online ang offline transfer?',
-    recoveryBody: (amount, name, ref, total) =>
-      `Hindi makumpirma ng HoneBill ang transfer na ito. Maaaring hindi naipadala ang text o hindi pa ito nakakarating.\n\n${amount} para kay ${name} · Ref ${ref}\n${total} ang kabuuang ibabawas sa Offline Funds, kasama ang fee.\n\nPuwede mong subukan ulit nang walang bagong text. Kung makarating ang unang text, isang beses lang maaaring matuloy ang transfer.`,
-    settleOnline: 'Subukan ulit online',
-    recoveryLater: 'Huwag nang ulitin',
     reviewSaveFailed: 'Hindi na-save ang pinili mo. Pakisubukan ulit.',
   },
 
@@ -538,7 +536,7 @@ export const fil: Messages = {
     smsTitle: 'Offline payment',
     returnHome: 'Bumalik sa Home',
     heading: 'Nagawa na ang resibo',
-    smsHandoff: 'Hinihintay pa ang kumpirmasyon ng SMS payment. Kung hindi makarating ang text, hihingi muna ng pahintulot ang HoneBill bago subukan online.',
+    smsHandoff: 'Hinihintay pa ang kumpirmasyon ng SMS payment. Tingnan ang History pagbalik ng internet.',
     bySms: (ref) =>
       `Na-send ang iyong payment sa pamamagitan ng SMS.\nMakakatanggap ka ng text na may Ref ${ref} kapag natuloy o hindi ito natuloy.`,
     online: 'Matagumpay ang iyong transaksyon.\nIpinadala gamit ang HoneBill',

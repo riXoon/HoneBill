@@ -28,12 +28,12 @@ import type { RootStackParamList } from '../navigation/types';
 import { openGatewaySms } from '../services/offline/voucherFormat';
 import { colors, fonts } from '../theme';
 import { useScale } from '../theme/responsive';
-import { SOURCE_LABEL, type TransactionStatus } from '../types/transaction';
+import { SOURCE_LABEL, isUnconfirmed, type TransactionStatus } from '../types/transaction';
 import { formatAmount, formatPeso, formatRelative } from '../utils/format';
 
 /** How many entries "Recent Activity" shows; the full list is on the History tab. */
 const RECENT_COUNT = 3;
-const STATUS_SUFFIX: Record<TransactionStatus, string> = { completed: '', pending: ' · Pending', failed: ' · Failed' };
+const STATUS_SUFFIX: Record<Exclude<TransactionStatus, 'processing'>, string> = { completed: '', pending: ' · Pending', failed: ' · Failed' };
 
 // Figma: Home Page - Online (870:3102) and Home Page - Offline (870:3140), 402x874.
 const FADE_MS = 250;
@@ -238,7 +238,7 @@ export function HomeScreen() {
                     key={tx.id}
                     kind={tx.direction === 'in' ? 'received' : 'sent'}
                     title={tx.description}
-                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${STATUS_SUFFIX[tx.status]}`}
+                    body={`${tx.direction === 'in' ? '+' : '-'} ${formatAmount(tx.amount, tx.assetCode)} · ${SOURCE_LABEL[tx.source]}${tx.status === 'processing' ? ` · ${t.tx.processingLabel}` : isUnconfirmed(tx) ? ` · ${t.tx.unconfirmedLabel}` : STATUS_SUFFIX[tx.status]}`}
                     time={formatRelative(new Date(tx.timestamp))}
                   />
                 ))}

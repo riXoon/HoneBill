@@ -118,12 +118,18 @@ describe('SettlementsService', () => {
     prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
     finalization.check.mockResolvedValue({ finalized: true, evidence: { status: 'SETTLED', txHash: 'confirmed' } });
 
-    await expect(service.processSettlement(voucher, '+639171234567')).resolves.toMatchObject({ status: 'SETTLED' });
+    const onProcessing = jest.fn(async (_nonce: string) => {
+      expect(prisma.settlement.create).toHaveBeenCalled();
+      expect(transactionManager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
+    });
+    await expect(service.processSettlement(voucher, '+639171234567', onProcessing)).resolves.toMatchObject({ status: 'SETTLED' });
+    expect(onProcessing).toHaveBeenCalledWith(Buffer.alloc(32, 1).toString('base64'));
     expect(prisma.settlement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amountStroops, protocolToll: fee }) });
     expect(transactionManager.executeTwoPhaseSettlement).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.objectContaining({ amount: amountStroops, protocol_toll: fee }),
     }));
-    await expect(service.processSettlement(voucher)).rejects.toMatchObject({ status: 409 });
+    await expect(service.processSettlement(voucher, undefined, onProcessing)).rejects.toMatchObject({ status: 409 });
+    expect(onProcessing).toHaveBeenCalledTimes(1);
     expect(transactionManager.executeTwoPhaseSettlement).toHaveBeenCalledTimes(1);
   });
 
@@ -146,7 +152,9 @@ describe('SettlementsService', () => {
       .mockResolvedValueOnce({ shortId: 'abc123', stellarPublicKey: senderKey.publicKey(), offlineDeviceKey: senderKey.publicKey() })
       .mockResolvedValueOnce({ shortId: 'def456', stellarPublicKey: Keypair.random().publicKey(), offlineDeviceKey: null });
     prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: Keypair.random().publicKey(), isActive: true });
-    await expect(service.processSettlement(body())).rejects.toMatchObject({ status: 401 });
+    const onProcessing = jest.fn(async () => undefined);
+    await expect(service.processSettlement(body(), '+639171234567', onProcessing)).rejects.toMatchObject({ status: 401 });
+    expect(onProcessing).not.toHaveBeenCalled();
     expect(transactionManager.executeTwoPhaseSettlement).not.toHaveBeenCalled();
     expect(transactionManager.resumeTwoPhaseSettlement).not.toHaveBeenCalled();
     expect(prisma.settlement.create).not.toHaveBeenCalled();
@@ -170,7 +178,9 @@ describe('SettlementsService', () => {
       .mockResolvedValueOnce(null);
     prisma.token.findUnique.mockResolvedValue({ id: 1, symbol: 'PHPC', contractId: tokenContractId, isActive: true });
 
-    await expect(service.processSettlement(body(Buffer.from(senderKey.sign(signed))))).rejects.toMatchObject({ status: 404 });
+    await expect(service.processSettlement(body(Buffer.from(senderKey.sign(signed))))).resolves.toMatchObject({
+      status: 'FAILED', reason: expect.stringContaining('No account has this ID.'),
+    });
     expect(prisma.settlement.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ status: 'FAILED', failReason: 'Recipient account not found', receiverShortId: 'def456' }),
     });

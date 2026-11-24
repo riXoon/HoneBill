@@ -427,8 +427,11 @@ export const en = {
 
   tx: {
     noMoneyTaken: 'No money was taken.',
+    unconfirmedLabel: 'Unconfirmed',
+    processingLabel: 'Processing',
     /** Stored on the payment in English (see `EXPIRED_REASON`); shown in the reader's language. */
     expired: 'It was not confirmed within 14 days, so it will not be tried again. Check your balance before sending it again.',
+    retryClosed: 'HoneBill will not retry this payment online. The original SMS may still settle. Check History before sending again.',
     /** Why the server refused a voucher. Stored in English, shown in the reader's language. */
     reasons: {
       insufficientOfflineBalance: 'Your Offline balance was not enough for the amount plus the offline fee.',
@@ -489,11 +492,6 @@ export const en = {
       `${amount} to ${name}. The amount stays set aside while HoneBill checks the payment.`,
     sentYes: 'Yes, I sent it',
     sentNo: 'Not yet',
-    recoveryTitle: 'Retry this offline transfer online?',
-    recoveryBody: (amount: string, name: string, ref: string, total: string) =>
-      `HoneBill couldn’t confirm this transfer. The text may have failed to send or may still be on its way.\n\n${amount} to ${name} · Ref ${ref}\n${total} total from Offline Funds, including the fee.\n\nYou can retry without sending another text. If the original text arrives, the transfer can still settle once.`,
-    settleOnline: 'Retry online',
-    recoveryLater: 'Don’t retry',
     reviewSaveFailed: 'Could not save your choice. Please try again.',
   },
 
@@ -533,7 +531,7 @@ export const en = {
     smsTitle: 'Offline payment',
     returnHome: 'Return to Home',
     heading: 'Receipt Created',
-    smsHandoff: 'Your payment is awaiting SMS confirmation. If the text does not go through, HoneBill will ask before trying online.',
+    smsHandoff: 'Your payment is awaiting SMS confirmation. Check History for updates when you reconnect.',
     bySms: (ref: string) => `Your payment was sent by SMS.\nYou will get a text with Ref ${ref} when it goes through or fails.`,
     online: 'Your transaction is successful.\nSent via HoneBill',
     recipient: 'Recipient',

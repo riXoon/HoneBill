@@ -35,8 +35,9 @@ export function TransactionsScreen() {
   const { transactions, status, error, syncedAt, refresh, syncNow } = useWalletData();
   const openDetail = useCallback((id: string) => {
     const tx = transactions.find((row) => row.id === id);
-    const activity = tx && /^[a-f0-9]{64}$/i.test(tx.ref) && (id.startsWith('move:') || id.startsWith('online:'))
-      ? { ref: tx.ref, source: tx.source, direction: tx.direction }
+    const localWalletActivity = tx && /^[a-f0-9]{64}$/i.test(tx.ref) && (id.startsWith('move:') || id.startsWith('online:'));
+    const activity = tx && (tx.nonce || localWalletActivity)
+      ? { ref: tx.ref, source: tx.source, direction: tx.direction, nonce: tx.nonce }
       : undefined;
     navigation.navigate('TransactionDetail', { id, activity });
   }, [navigation, transactions]);

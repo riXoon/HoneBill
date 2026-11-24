@@ -5,9 +5,10 @@ import { normalizePhoneNumber } from '../../common/utils/phone.util.js';
 import { SettlementsService } from '../settlements/settlements.util.js';
 import { SmsService } from '../sms/sms.service.js';
 import { normalizeSettlementFailure, isRetryableSettlementError } from './engine-retry.util.js';
-import { failedText, receivedText, settledText, userFailureReason, type VoucherNotice } from './settlement-notice.util.js';
+import { failedText, processingText, receivedText, settledText, userFailureReason, type VoucherNotice } from './settlement-notice.util.js';
 import { ENGINE_SETTLEMENT_JOB } from './settlement-queue.service.js';
 import type { SettlementJobData } from '../settlements/settlement-queue.constants.js';
+import { withinSettlementDeadline } from '../settlements/settlement-rpc-deadline.js';
 
 /** What the runner needs from a job: BullMQ's Job has these, and the QStash route builds one from its request. */
 export type SettlementJob = { id?: string; name: string; data: SettlementJobData };
@@ -33,9 +34,8 @@ function decidedElsewhere(error: unknown): { status: 'SETTLED' | 'FAILED'; txHas
  * whether a long-lived BullMQ worker (`SettlementProcessor`), an on-demand drain (`SettlementDrainService`) or a
  * QStash delivery (`SettlementQStashController`) picked the job up.
  *
- * The person who texted the voucher is often offline, so a text is their only news: they get one when the payment
- * goes through and one when it finally cannot (never for a failure that will be retried). The receiver gets one when
- * it goes through. The app may have settled the same voucher over the internet first; that counts as going through.
+ * Notifies the person who texted the voucher when processing starts and when there is a final result.
+ * The recipient gets a confirmation when the payment settles.
  */
 export class SettlementJobRunner {
   private readonly logger = new Logger(SettlementJobRunner.name);
@@ -55,7 +55,8 @@ export class SettlementJobRunner {
 
     let result: SettlementResult;
     try {
-      result = await this.settlements.processSettlement(job.data.smsBody, job.data.senderPhone);
+      const onProcessing = this.sms && job.data.senderPhone ? (nonce: string) => this.notifyProcessing(job, nonce) : undefined;
+      result = await this.settlements.processSettlement(job.data.smsBody, job.data.senderPhone, onProcessing);
     } catch (error) {
       const decided = decidedElsewhere(error);
       if (decided?.status === 'SETTLED') {
@@ -70,7 +71,7 @@ export class SettlementJobRunner {
           ![408, 429].includes(error.getStatus()) && !isRetryableSettlementError(error)) {
         const reason = normalizeSettlementFailure(error);
         this.logger.warn(`Settlement job ${job.id} will not retry: ${reason}`);
-        await this.notifyFailed(job, userFailureReason(error));
+        // A transport or validation rejection without a recorded result is not final for this voucher.
         throw new UnrecoverableError(reason);
       }
       throw error;
@@ -82,6 +83,15 @@ export class SettlementJobRunner {
     if (result.status === 'SETTLED') await this.notifySettled(job);
     else if (result.status === 'FAILED') await this.notifyFailed(job, userFailureReason(result.reason ?? null));
     return result;
+  }
+
+  private async notifyProcessing(job: SettlementJob, nonce: string): Promise<void> {
+    const reference = Buffer.from(nonce, 'base64').toString('base64');
+    try {
+      await this.send(job.data.senderPhone, processingText(reference), `settlement-processing:${reference}:sender`, job.data.traceId, 4_000);
+    } catch {
+      this.logger.warn('Processing SMS could not be queued or delivered; continuing settlement.');
+    }
   }
 
   private async notifySettled(job: SettlementJob): Promise<void> {
@@ -146,11 +156,15 @@ export class SettlementJobRunner {
 
   /** Queues one text. A text that cannot be queued is logged, never allowed to fail the settlement job. */
   private async send(to: string | undefined, message: string, dedupKey: string, traceId?: string, deadlineMs?: number): Promise<void> {
-    if (!to || !this.sms) return;
+    const sms = this.sms;
+    if (!to || !sms) return;
+    const deadlineAt = deadlineMs === undefined ? undefined : Date.now() + deadlineMs;
     // The durable claim also covers direct SMS delivery when BullMQ is disabled. An ambiguous provider response is not resent.
-    if (!await this.settlements.claimReceipt(dedupKey)) return;
+    if (!await withinSettlementDeadline(() => this.settlements.claimReceipt(dedupKey), deadlineAt)) return;
     try {
-      const notification = await this.sms.enqueueSms(to, message, { traceId, dedupKey, ...(deadlineMs ? { deadlineMs } : {}) });
+      const notification = await withinSettlementDeadline(() => sms.enqueueSms(to, message, {
+        traceId, dedupKey, ...(deadlineAt === undefined ? {} : { deadlineMs: deadlineAt - Date.now() }),
+      }), deadlineAt);
       if (!notification.queued && !notification.delivered) {
         this.logger.warn('A settlement receipt could not be queued or delivered.');
       }

@@ -107,6 +107,10 @@ export function userFailureReason(failure: unknown): string {
   return GENERIC_FAILURE;
 }
 
+export function processingText(nonce: string): string {
+  return `HoneBill: Your offline payment is being processed. Please wait for the result before sending again. Ref: ${voucherRef(nonce)}`;
+}
+
 export function settledText(notice: VoucherNotice): string {
   const amount = formatVoucherAmount(notice.amountStroops, notice.symbol, notice.decimals);
   return `HoneBill: Your offline payment of ${amount} to ID ${notice.receiverShortId} went through. Ref: ${voucherRef(notice.nonce)}`;

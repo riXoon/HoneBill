@@ -60,7 +60,7 @@ export type RootStackParamList = {
   VaultSettings: undefined;
   /** Profile menu: current MPIN, then a new one twice. */
   ChangeMpin: undefined;
-  TransactionDetail: { id: string; activity?: Pick<Transaction, 'ref' | 'source' | 'direction'> };
+  TransactionDetail: { id: string; activity?: Pick<Transaction, 'ref' | 'source' | 'direction' | 'nonce'> };
   /** Help & Feedback. With `transactionId` (from a transaction's "Report a problem") that payment is attached. */
   Feedback: { transactionId?: string } | undefined;
   /** Release notes, newest first. `version` (from an Inbox notice) is highlighted. */

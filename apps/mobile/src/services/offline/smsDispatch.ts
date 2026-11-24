@@ -5,11 +5,9 @@ import type { SendDraft } from '../../navigation/types';
 import type { Recipient } from '../../types/recipient';
 import type { PendingOffline } from '../walletCache';
 
-/** SMS handoff saved before opening Messages so the voucher can be tracked after an auto-lock or restart. */
+/** Payment reference saved before opening Messages for tracking after an auto-lock or restart. */
 export type SmsHandoff = {
   publicKey: string;
-  /** The signed voucher, exactly as texted. */
-  voucher: string;
   feeCents?: number;
   assetCode?: string;
   nonce: string;
@@ -56,7 +54,6 @@ export async function loadSmsHandoff(publicKey: string): Promise<SmsHandoff | nu
     if (
       (typeof value.nonce === 'string' && handled.has(value.nonce)) ||
       value.publicKey !== publicKey ||
-      typeof value.voucher !== 'string' ||
       typeof value.nonce !== 'string' ||
       typeof value.openedAt !== 'number' ||
       !value.draft ||

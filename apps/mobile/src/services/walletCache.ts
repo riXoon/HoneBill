@@ -2,8 +2,10 @@ import { and, asc, eq, gte, ne } from 'drizzle-orm';
 import Storage from 'expo-sqlite/kv-store';
 
 import { getDb, type Database } from '../db/client';
-import { walletState, walletTransactions, type NewWalletTransactionRow, type WalletTransactionRow } from '../db/schema';
-import { EXPIRED_REASON, type Transaction } from '../types/transaction';
+import { outbox, walletState, walletTransactions, type NewWalletTransactionRow, type WalletTransactionRow } from '../db/schema';
+import { RETRY_CLOSED_REASON, type Transaction } from '../types/transaction';
+import type { VoucherStatus } from './api/wallet';
+import { parseRelayVoucher } from './offline/voucherFormat';
 
 /**
  * What the phone keeps of an account's activity so History and Home still have something to show with no
@@ -30,38 +32,33 @@ type Origin = WalletTransactionRow['origin'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /**
- * A payment the server still does not list after this is shown as unconfirmed with the reason, but only once the phone
- * is online and has just read the server's history: offline its money stays held, however long that lasts. It is
- * never dropped without a word.
+ * The existing withdrawal hold window for an unconfirmed SMS. This is a local policy, separate from settlement.
  */
 const PENDING_MAX_AGE_MS = 14 * DAY_MS;
-/** A failed entry stays this long, so the person sees what happened even if they open the app weeks later. */
-const FAILED_KEEP_MS = 60 * DAY_MS;
-/** Re-exported for the voucher queue, which gives up at the same age. */
-export { EXPIRED_REASON };
+const SMS_GRACE_MS = 2 * 60_000;
 
-/**
- * Ages pending entries: old pending ones become failed with the reason (`expired` counts them, so they can be
- * announced), and failed ones go after `FAILED_KEEP_MS`. The caller runs it only right after a successful history
- * read (see `WalletDataContext`), so a long time offline never releases money that may already have been paid.
- */
-export function agePending(items: PendingOffline[], now: number): { items: PendingOffline[]; expired: number; changed: boolean } {
-  let expired = 0;
-  let dropped = 0;
-  const aged = items.flatMap((item) => {
-    const age = now - item.timestamp;
-    if (item.status === 'failed') {
-      if (age <= FAILED_KEEP_MS) return [item];
-      dropped += 1;
-      return [];
-    }
-    if (item.status === 'pending' && age > PENDING_MAX_AGE_MS) {
-      expired += 1;
-      return [{ ...item, status: 'failed' as const, failureReason: item.failureReason ?? EXPIRED_REASON }];
-    }
-    return [item];
-  });
-  return { items: aged, expired, changed: expired > 0 || dropped > 0 };
+/** Updates only from a successful read of this voucher. */
+export function applyVoucherStatus(payment: PendingOffline, status: VoucherStatus, now: number): PendingOffline {
+  switch (status.status) {
+    case 'NOT_FOUND':
+      return (payment.status === 'pending' || payment.status === 'processing') && now - payment.timestamp >= SMS_GRACE_MS
+        ? { ...payment, status: 'failed', failureReason: RETRY_CLOSED_REASON } : payment;
+    case 'PENDING':
+      return payment.status === 'processing' && (!status.txHash || status.txHash === payment.ref) ? payment
+        : { ...payment, status: 'processing', ref: status.txHash ?? payment.ref, failureReason: undefined };
+    case 'SETTLED':
+      return { ...payment, status: 'completed', ref: status.txHash ?? payment.ref, failureReason: undefined };
+    case 'FAILED':
+      return { ...payment, status: 'failed', ref: status.txHash ?? payment.ref, failureReason: status.reason };
+    default:
+      return payment;
+  }
+}
+
+/** A closed retry may still settle by SMS, so transfers out of the vault keep the original hold window. */
+export function holdsOfflineFunds(payment: PendingOffline, lastSyncAt: number | null): boolean {
+  return payment.status === 'pending' || payment.status === 'processing' || (payment.failureReason === RETRY_CLOSED_REASON &&
+    (lastSyncAt === null || lastSyncAt - payment.timestamp <= PENDING_MAX_AGE_MS));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -209,7 +206,7 @@ function isTransaction(value: unknown): value is Transaction {
     typeof v.amount === 'number' &&
     typeof v.assetCode === 'string' &&
     typeof v.description === 'string' &&
-    (v.status === 'completed' || v.status === 'pending' || v.status === 'failed') &&
+    (v.status === 'completed' || v.status === 'pending' || v.status === 'processing' || v.status === 'failed') &&
     typeof v.ref === 'string'
   );
 }
@@ -334,9 +331,27 @@ export async function saveSnapshot(publicKey: string, snapshot: WalletSnapshot):
 export async function loadPending(publicKey: string): Promise<PendingOffline[]> {
   try {
     await ready(publicKey);
-    // Read without an age limit: an entry is only removed by `agePending`, after it has been shown as failed, so a
-    // payment that went unconfirmed while the app was unused for weeks is still announced, not dropped unseen.
-    return readGroup(publicKey, 'pending').filter((item): item is PendingOffline => typeof item.nonce === 'string');
+    const pending = readGroup(publicKey, 'pending').filter((item): item is PendingOffline => typeof item.nonce === 'string');
+    const where = and(eq(outbox.publicKey, publicKey), eq(outbox.kind, 'voucher'));
+    const old = getDb().select().from(outbox).where(where).all();
+    if (!old.length) return pending;
+
+    // A crash could leave an outbox row without a matching History entry. Keep its reference before deleting the body.
+    const known = new Set(pending.map((item) => normalizeNonce(item.nonce)));
+    for (const row of old) {
+      if (known.has(row.dedupeKey)) continue;
+      const payload = parseJson(row.payload) as { voucher?: unknown; dispatchedAt?: unknown; assetCode?: unknown; feeCents?: unknown } | null;
+      const voucher = typeof payload?.voucher === 'string' ? parseRelayVoucher(payload.voucher) : null;
+      if (!voucher) continue;
+      pending.push({ id: `pending:${row.dedupeKey}`, timestamp: typeof payload?.dispatchedAt === 'number' ? payload.dispatchedAt : row.createdAt,
+        source: 'offline', direction: 'out', amount: voucher.amount, assetCode: typeof payload?.assetCode === 'string' ? payload.assetCode : 'PHPC',
+        ...(typeof payload?.feeCents === 'number' ? { feeCents: payload.feeCents } : {}),
+        description: `Sent to ID ${voucher.receiverShortId}`, counterpartyShortId: voucher.receiverShortId,
+        status: 'pending', ref: row.dedupeKey, nonce: row.dedupeKey });
+      known.add(row.dedupeKey);
+    }
+    writeGroup(publicKey, 'pending', pending, (tx) => { tx.delete(outbox).where(where).run(); });
+    return pending;
   } catch {
     return [];
   }

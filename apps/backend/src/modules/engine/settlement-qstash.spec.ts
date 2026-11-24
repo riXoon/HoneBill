@@ -127,12 +127,12 @@ describe('SettlementQStashController', () => {
   const request = (body: unknown) => ({ body }) as any;
 
   it('answers processed once the voucher settles', async () => {
-    const settle = jest.fn(async (_body: string, _relayPhone?: string) => ({ status: 'SETTLED', txHash: 'h' }));
+    const settle = jest.fn(async (_body: string, _relayPhone?: string, _onProcessing?: unknown) => ({ status: 'SETTLED', txHash: 'h' }));
     await expect(controllerWith(settle).process(request({ smsBody: VOUCHER, senderPhone: '+639000000001' }), 'msg_1')).resolves.toEqual({
       status: 'processed',
       result: { status: 'SETTLED', txHash: 'h' },
     });
-    expect(settle).toHaveBeenCalledWith(VOUCHER, '+639000000001');
+    expect(settle).toHaveBeenCalledWith(VOUCHER, '+639000000001', undefined);
   });
 
   it('answers rejected (so QStash stops) when the voucher can never settle', async () => {

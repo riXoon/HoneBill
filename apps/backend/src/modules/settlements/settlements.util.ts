@@ -87,7 +87,7 @@ export class SettlementsService {
   ) {}
 
   /** Checks account/token state and signature, then sends the signed offline spend transaction. */
-  async processSettlement(smsBody: string, relayPhone?: string) {
+  async processSettlement(smsBody: string, relayPhone?: string, onProcessing?: (nonce: string) => Promise<void>) {
     const payload = parseSettlementSmsBody(smsBody);
     const existing = await this.prisma.settlement.findUnique({ where: { nonce: payload.nonce } });
     if (existing && existing.status !== 'PENDING') {
@@ -143,15 +143,11 @@ export class SettlementsService {
     // The sender signed this voucher, so from here a rejection is recorded: it shows in their history with the reason,
     // and the nonce can never settle later (the sender was told no money was taken). Before the signature check nothing
     // is recorded, so a forged text cannot put entries in someone's history.
-    if (!receiver) {
+    if (!receiver || !token.isActive) {
       if (submitted) throw settlementPending();
-      await this.recordRejection(existing, payload, token.id, amount, toll, gateway, 'Recipient account not found');
-      throw new NotFoundException('Recipient account not found');
-    }
-    if (!token.isActive) {
-      if (submitted) throw settlementPending();
-      await this.recordRejection(existing, payload, token.id, amount, toll, gateway, 'Token is inactive');
-      throw new BadRequestException('Token is inactive');
+      const reason = !receiver ? 'Recipient account not found' : 'Token is inactive';
+      await this.recordRejection(existing, payload, token.id, amount, toll, gateway, reason);
+      return { txHash: null, status: 'FAILED', reason: userFailureReason(reason) };
     }
 
     let settlement = existing;
@@ -221,6 +217,7 @@ export class SettlementsService {
         if (prior.evidence.status !== 'PENDING' || prior.evidence.attempts.some((attempt) =>
           attempt.txHash === current.txHash && attempt.status !== 'UNKNOWN')) throw settlementPending();
       }
+      await onProcessing?.(payload.nonce);
       try {
         if (current.txHash && current.signedTxXdr) {
           await this.transactionManager.resumeTwoPhaseSettlement({

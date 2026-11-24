@@ -43,11 +43,11 @@ export function TransferForm({ to, title, icon, mood, onBack, onConfirm, busy = 
   const [amountText, setAmountText] = useState('');
   const t = useT();
 
-  const { balances, pendingOffline } = useWalletData();
+  const { balances, heldOffline } = useWalletData();
 
   const amount = parseAmount(amountText);
   // Moving money out of the vault must leave what pending vouchers will take, or those vouchers fail when they settle.
-  const available = balances ? (from === 'offline' ? Math.max(0, balances.offline - pendingOffline) : balances[from]) : null;
+  const available = balances ? (from === 'offline' ? Math.max(0, balances.offline - heldOffline) : balances[from]) : null;
   // Without balances read from the server there is nothing to check an amount against.
   const problem = available === null ? t.amount.unavailable : amountProblem(amount, available);
   const valid = problem === null;

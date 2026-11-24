@@ -12,3 +12,5 @@ export const SMS_WEBHOOK_BODY_MAX_BYTES = 2048;
 export const SMS_WEBHOOK_MESSAGE_MAX_CHARS = 300;
 /** Replay-cache lifetime for a voucher nonce. */
 export const SMS_WEBHOOK_NONCE_TTL_SECONDS = 86_400;
+
+export const smsVoucherKey = (canonicalNonce: string) => `honebill:sms:nonce:${canonicalNonce}`;

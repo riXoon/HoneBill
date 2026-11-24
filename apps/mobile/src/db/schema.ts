@@ -38,7 +38,7 @@ export const walletTransactions = sqliteTable(
     amount: real('amount').notNull(),
     assetCode: text('asset_code').notNull(),
     description: text('description').notNull(),
-    status: text('status', { enum: ['completed', 'pending', 'failed'] }).notNull(),
+    status: text('status', { enum: ['completed', 'pending', 'processing', 'failed'] }).notNull(),
     ref: text('ref').notNull(),
     nonce: text('nonce'),
     counterpartyShortId: text('counterparty_short_id'),

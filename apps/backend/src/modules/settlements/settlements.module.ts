@@ -6,11 +6,13 @@ import { SettlementReconciliationService } from './reconciliation.util.js';
 import { SettlementEventIndexService } from './settlement-event-index.service.js';
 import { SettlementFinalizationService } from './settlement-finalization.service.js';
 import { TransactionManagerModule } from '../engine/transaction-manager.module.js';
+import { AuthModule } from '../auth/auth.module.js';
+import { VoucherStatusService } from './voucher-status.service.js';
 
 @Module({
-  imports: [PrismaModule, TransactionManagerModule],
+  imports: [PrismaModule, TransactionManagerModule, AuthModule],
   controllers: [SettlementsController],
-  providers: [SettlementsService, SettlementReconciliationService, SettlementEventIndexService, SettlementFinalizationService],
+  providers: [SettlementsService, SettlementReconciliationService, SettlementEventIndexService, SettlementFinalizationService, VoucherStatusService],
   exports: [SettlementsService, SettlementEventIndexService, SettlementFinalizationService],
 })
 export class SettlementsModule {}
